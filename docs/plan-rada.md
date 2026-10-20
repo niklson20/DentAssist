@@ -11,7 +11,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | ID | Zadatak | Model | Gotovo |
 | --- | --- | --- | --- |
 | 0.1 | Skela | Composer 2.5 Fast | [x] |
-| 0.2 | Dizajn | Composer 2.5 Fast | [ ] |
+| 0.2 | Dizajn | Composer 2.5 Fast | [x] |
 | 0.3 | Domen | Claude Sonnet thinking | [ ] |
 | 0.4 | Ugovori | Composer 2.5 Fast | [ ] |
 | 1.1 | Klinika | Claude Sonnet thinking | [ ] |
