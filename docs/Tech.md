@@ -15,7 +15,7 @@ koja kod mora da poštuje.
 
 | Sloj | Izbor | Verzija |
 | --- | --- | --- |
-| Framework | Next.js, App Router | 16.2.x |
+| Framework | Next.js, App Router | 16.4.x |
 | UI biblioteka | React | 19.2.x |
 | Jezik | TypeScript, `strict` | 5.x |
 | Stilovi | Tailwind CSS v4 (konfiguracija u CSS-u) | 4.x |

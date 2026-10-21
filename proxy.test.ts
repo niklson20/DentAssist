@@ -1,9 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
 
+const { createServerClient } = vi.hoisted(() => ({
+  createServerClient: vi.fn(),
+}));
+
+vi.mock("@supabase/ssr", () => ({
+  createServerClient,
+}));
+
+import { REMEMBER_COOKIE, REMEMBER_MAX_AGE_SECONDS } from "@/lib/supabase/cookies";
 import {
   hasAuthSession,
   isCronPath,
   isProtectedPath,
+  proxy,
   resolveCrossHostRedirect,
   resolveSameOriginRedirect,
   resolveSessionGate,
@@ -173,3 +184,144 @@ describe("dual-host routing", () => {
     ).toBeNull();
   });
 });
+
+const AUTH_COOKIE = "sb-aaaaaaaaaaaaaaaaaaaa-auth-token";
+const SUPABASE_URL = "https://example.supabase.co";
+const SUPABASE_KEY = "publishable-key";
+
+type CookieBag = {
+  cookies: {
+    setAll: (
+      cookiesToSet: { name: string; value: string; options: { path: string; maxAge: number } }[],
+      headers: Record<string, string>,
+    ) => void;
+  };
+};
+
+describe("session refresh", () => {
+  afterEach(() => {
+    createServerClient.mockReset();
+    vi.unstubAllEnvs();
+  });
+
+  it("writes the refreshed cookie onto the page response and a redirect when remembered", async () => {
+    stubSupabase();
+    refreshOnClaims();
+
+    const page = await proxy(
+      incoming("https://dent.dentassist.rs/danas", [
+        { name: AUTH_COOKIE, value: "expired" },
+        { name: SESSION_GATE_COOKIE, value: "staff" },
+        { name: REMEMBER_COOKIE, value: "1" },
+      ]),
+    );
+    expect(page.status).toBe(200);
+    expect(setCookie(page, AUTH_COOKIE)).toContain(`Max-Age=${REMEMBER_MAX_AGE_SECONDS}`);
+    expect(setCookie(page, AUTH_COOKIE)).toContain("Domain=dentassist.rs");
+    expect(page.headers.get("cache-control")).toContain("no-store");
+
+    const redirect = await proxy(
+      incoming("https://dentassist.rs/danas", [
+        { name: AUTH_COOKIE, value: "expired" },
+        { name: SESSION_GATE_COOKIE, value: "staff" },
+        { name: REMEMBER_COOKIE, value: "1" },
+      ]),
+    );
+    expect(redirect.headers.get("location")).toBe("https://dent.dentassist.rs/danas");
+    expect(setCookie(redirect, AUTH_COOKIE)).toContain("refreshed");
+    expect(setCookie(redirect, AUTH_COOKIE)).toContain(`Max-Age=${REMEMBER_MAX_AGE_SECONDS}`);
+    expect(setCookie(redirect, AUTH_COOKIE)).toContain("Domain=dentassist.rs");
+    expect(redirect.headers.get("cache-control")).toContain("no-store");
+    expect(redirect.headers.get("expires")).toBe("0");
+    expect(redirect.headers.get("pragma")).toBe("no-cache");
+  });
+
+  it("omits max-age when the session ends with the browser", async () => {
+    stubSupabase();
+    refreshOnClaims();
+
+    const page = await proxy(
+      incoming("https://dent.dentassist.rs/danas", [
+        { name: AUTH_COOKIE, value: "expired" },
+        { name: SESSION_GATE_COOKIE, value: "staff" },
+      ]),
+    );
+    expect(setCookie(page, AUTH_COOKIE)).not.toMatch(/Max-Age/i);
+
+    const redirect = await proxy(
+      incoming("https://dentassist.rs/danas", [
+        { name: AUTH_COOKIE, value: "expired" },
+        { name: SESSION_GATE_COOKIE, value: "staff" },
+      ]),
+    );
+    expect(redirect.headers.get("location")).toBe("https://dent.dentassist.rs/danas");
+    expect(setCookie(redirect, AUTH_COOKIE)).toContain("refreshed");
+    expect(setCookie(redirect, AUTH_COOKIE)).not.toMatch(/Max-Age/i);
+    expect(setCookie(redirect, AUTH_COOKIE)).toContain("Domain=dentassist.rs");
+  });
+
+  it("sends a protected path without a session to prijava", async () => {
+    stubSupabase();
+    createServerClient.mockImplementation(() => ({
+      auth: { getClaims: async () => ({ data: { claims: null }, error: null }) },
+    }));
+
+    const response = await proxy(incoming("https://dent.dentassist.rs/danas", []));
+    expect(response.headers.get("location")).toBe("https://dent.dentassist.rs/prijava");
+    expect(createServerClient).toHaveBeenCalledOnce();
+  });
+
+  it("does not call supabase for cron", async () => {
+    stubSupabase();
+    refreshOnClaims();
+
+    const response = await proxy(incoming("https://dent.dentassist.rs/api/cron", []));
+    expect(response.status).toBe(401);
+    expect(createServerClient).not.toHaveBeenCalled();
+  });
+
+  it("keeps routing when supabase env is missing", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "");
+
+    const response = await proxy(incoming("https://dentassist.rs/za-ordinacije", []));
+    expect(response.status).toBe(200);
+    expect(createServerClient).not.toHaveBeenCalled();
+  });
+});
+
+function stubSupabase() {
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", SUPABASE_URL);
+  vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", SUPABASE_KEY);
+  vi.stubEnv("APP_URL", APP_URL);
+  vi.stubEnv("STAFF_URL", STAFF_URL);
+}
+
+function refreshOnClaims() {
+  createServerClient.mockImplementation((_url: string, _key: string, options: CookieBag) => ({
+    auth: {
+      getClaims: async () => {
+        options.cookies.setAll(
+          [{ name: AUTH_COOKIE, value: "refreshed", options: { path: "/", maxAge: 3600 } }],
+          {
+            "cache-control": "private, no-cache, no-store, must-revalidate, max-age=0",
+            expires: "0",
+            pragma: "no-cache",
+          },
+        );
+        return { data: { claims: { sub: "user" } }, error: null };
+      },
+    },
+  }));
+}
+
+function incoming(url: string, cookies: { name: string; value: string }[]) {
+  const header = cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
+  return new NextRequest(url, { headers: header ? { cookie: header } : {} });
+}
+
+function setCookie(response: Response, name: string): string {
+  const header = response.headers.getSetCookie().find((cookie) => cookie.startsWith(`${name}=`));
+  expect(header).toBeDefined();
+  return header ?? "";
+}

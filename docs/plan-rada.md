@@ -28,6 +28,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 1.11 | Seed i fajlovi | Claude Sonnet thinking | [x] |
 | 2.A0 | Dva ulaza | Composer 2.5 Fast | [x] |
 | 2.A1 | Prijava | Claude Sonnet thinking | [x] |
+| 2.A1b | Osvežavanje sesije | Claude Sonnet thinking | [x] |
 | 2.A2 | Nova lozinka | Claude Sonnet thinking | [ ] |
 | 2.A3 | Pozivnica ordinacije | Claude Sonnet thinking | [ ] |
 | 2.A4 | Pozivnica kolege | Claude Sonnet thinking | [ ] |
@@ -268,6 +269,14 @@ Gotovo kad test pokaže prelaz `/danas` sa javnog hosta na `dent.`, prelaz prija
 Čita: [PRD.md](./PRD.md) odeljak 5, prva dva pasusa.
 
 Fajlovi: `app/prijava`, `app/actions/auth.ts`, tela `requireMember`, `requireOwner`, `requirePlatformAdmin` u `lib/auth.ts`. Mejl, lozinka, „Zapamti me“ 90 dana, inače sesija do zatvaranja. Ne dira `proxy.ts`. Forma i „Zatražite pristup“ važe samo dok niko nije prijavljen. Ako je osoblje već prijavljeno, stranica ide na `/danas`. Platforma ide na `/platforma`. Nalog koji je samo pacijent vidi formu i ne ulazi u kalendar.
+
+### 2.A1b Osvežavanje sesije
+
+Čita: [Tech.md](./Tech.md) odeljak 6, tačka 1, prva rečenica.
+
+Fajlovi: `proxy.ts`, `proxy.test.ts`, `lib/hosts.ts`, `lib/supabase/cookies.ts`. `proxy` je asinhron i pre rutiranja zove `getClaims()`. Osvežene kolačiće upisuje i na zahtev i na odgovor, uključujući svaki `redirect`. Domen i „Zapamti me“ ostaju isti kao pri prijavi. `/api/cron` se ne osvežava. Postojeći testovi preusmerenja ostaju bez mreže.
+
+Gotovo kad zahtev sa isteklim pristupnim tokenom i važećim refresh tokenom dobije nove kolačiće, a zaštićena putanja bez refresh tokena i dalje ide na `/prijava`.
 
 ### 2.A2 Nova lozinka
 
