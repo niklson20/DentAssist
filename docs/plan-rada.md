@@ -17,7 +17,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 1.1 | Klinika | Claude Sonnet thinking | [x] |
 | 1.2 | Pozivnice | Claude Sonnet thinking | [x] |
 | 1.3 | Pacijent | Claude Sonnet thinking | [x] |
-| 1.4 | Karton u bazi | Claude Sonnet thinking | [ ] |
+| 1.4 | Karton u bazi | Claude Sonnet thinking | [x] |
 | 1.5 | Termini | Claude Sonnet thinking | [ ] |
 | 1.12 | Nalozi pacijenata | Claude Sonnet thinking | [ ] |
 | 1.6 | Zahtev | Claude Sonnet thinking | [ ] |
