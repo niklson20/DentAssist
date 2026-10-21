@@ -26,7 +26,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 1.9 | Javni upis | Claude Sonnet thinking | [x] |
 | 1.10 | Token i poslovi | Claude Sonnet thinking | [x] |
 | 1.11 | Seed i fajlovi | Claude Sonnet thinking | [x] |
-| 2.A0 | Dva ulaza | Composer 2.5 Fast | [ ] |
+| 2.A0 | Dva ulaza | Composer 2.5 Fast | [x] |
 | 2.A1 | Prijava | Claude Sonnet thinking | [ ] |
 | 2.A2 | Nova lozinka | Claude Sonnet thinking | [ ] |
 | 2.A3 | Pozivnica ordinacije | Claude Sonnet thinking | [ ] |
@@ -102,19 +102,20 @@ Ako ništa ne fali, reci to u jednoj rečenici i kreni.
 Diraj samo fajlove navedene uz taj red. Tuđu migraciju ne menjaj. Ne prelazi na sledeći red.
 Kod na engleskom, interfejs na srpskom (latinica). Zod, ActionResult, stranica bez Supabase-a, komponenta bez Supabase-a, boje iz tokena teme.
 Gotovo je tek kad je „gotovo kad“ zaista ispunjeno. npm run lint i npm test moraju da prođu.
-Zatim jedan commit i push na main: https://github.com/niklson20/DentAssist
+Tada štikliraj samo taj red, iz [ ] u [x]. Druge redove ne dira.
+Zatim jedan commit i jedan push na main: https://github.com/niklson20/DentAssist
 Poruka je na engleskom, sa ID-em zadatka, na primer feat: scaffold next.js app (0.1).
-U commit idu samo fajlovi tog zadatka. Ne commituj .env.local, backups/ ni tajne.
-Ako push prođe, štikliraj samo taj red. Ako ne prođe, ne štikliraj, stani i reci.
+U isti commit idu fajlovi tog zadatka i štikl u docs/plan-rada.md. Ne commituj .env.local, backups/ ni tajne.
+Ako push ne prođe, stani i reci. Štikl nije na remote-u dok push ne prođe, jer je u istom commitu.
 ```
 
 - Čita samo odeljak naveden uz zadatak, ne cele dokumente.
 - Dira samo navedene fajlove. Tuđu migraciju ne menja. Ako šema ne pokriva slučaj, staje i prijavi.
 - Pre bilo kog koda otvori tabelu statusa. Zadatak je prvi red odozgo čija je kolona Gotovo još `[ ]`. Ako takvog reda nema, reci da je plan gotov i stani.
-- Gotov je kad piše „gotovo kad“ za taj red. Tada promeni samo taj `[ ]` u `[x]`. Druge redove ne dira. Ne prelazi na sledeći red.
+- Gotov je kad piše „gotovo kad“ za taj red. Tada promeni samo taj `[ ]` u `[x]`. Druge redove ne dira. Ne prelazi na sledeći red. Štikl ide u isti commit kao fajlovi zadatka, pre pusha.
 - Kod na engleskom, interfejs na srpskom (latinica). Zod, `ActionResult`, stranica bez Supabase-a, komponenta bez Supabase-a, boje iz tokena teme.
 - U Cursoru, pre slanja, izaberi model iz kolone Model prvog reda koji je još `[ ]`. Jedan chat u jednom trenutku: sačekaj štikl, pa pošalji isti tekst ponovo.
-- Posle štikla ide jedan commit i `git push` na `main` repozitorijuma [niklson20/DentAssist](https://github.com/niklson20/DentAssist). Poruka je engleski conventional commit sa ID-em, na primer `feat: scaffold next.js app (0.1)`. U commit ne idu `.env.local`, `backups/` ni tajne.
+- Jedan commit i jedan `git push` na `main` repozitorijuma [niklson20/DentAssist](https://github.com/niklson20/DentAssist). Poruka je engleski conventional commit sa ID-em, na primer `feat: scaffold next.js app (0.1)`. U commit idu fajlovi zadatka i štikl u `docs/plan-rada.md`. Ne idu `.env.local`, `backups/` ni tajne. Ako push ne prođe, štikl ostaje samo lokalno, u tom commitu.
 
 Napomene u zadacima da neki poslovi smeju uporedo ne važe za ovaj tekst. Chat i dalje uzima samo prvi prazan red.
 
