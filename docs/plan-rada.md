@@ -16,7 +16,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 0.4 | Ugovori | Composer 2.5 Fast | [x] |
 | 1.1 | Klinika | Claude Sonnet thinking | [x] |
 | 1.2 | Pozivnice | Claude Sonnet thinking | [x] |
-| 1.3 | Pacijent | Claude Sonnet thinking | [ ] |
+| 1.3 | Pacijent | Claude Sonnet thinking | [x] |
 | 1.4 | Karton u bazi | Claude Sonnet thinking | [ ] |
 | 1.5 | Termini | Claude Sonnet thinking | [ ] |
 | 1.12 | Nalozi pacijenata | Claude Sonnet thinking | [ ] |
@@ -26,6 +26,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 1.9 | Javni upis | Claude Sonnet thinking | [ ] |
 | 1.10 | Token i poslovi | Claude Sonnet thinking | [ ] |
 | 1.11 | Seed i fajlovi | Claude Sonnet thinking | [ ] |
+| 2.A0 | Dva ulaza | Composer 2.5 Fast | [ ] |
 | 2.A1 | Prijava | Claude Sonnet thinking | [ ] |
 | 2.A2 | Nova lozinka | Claude Sonnet thinking | [ ] |
 | 2.A3 | Pozivnica ordinacije | Claude Sonnet thinking | [ ] |
@@ -135,6 +136,8 @@ shadcn preset `b37t58d3x`, tokeni u `app/globals.css`, školjka menija bez podat
 
 Gotovo kad stranica koristi Zinc/Teal/Inter, bez heksa u komponenti.
 
+Meni iz ovog zadatka obavija sve strane. To je privremena školjka. 2.D1 je skida sa javnih strana, 2.E1 je ostavlja uz kalendar ordinacije. Ovaj red se ne ponavlja.
+
 ### 0.3 Domen
 
 Čita: [Tech.md](./Tech.md) odeljak 5, [PRD.md](./PRD.md) odeljke 6.3 i 8.2, [DB.md](./DB.md) odeljak 9.
@@ -153,7 +156,7 @@ Gotovo kad zaštićene putanje iz Tech odeljka 6 ne puštaju anonimnog korisnika
 
 ## Talas 1 — šema
 
-Svaki chat piše jednu novu migraciju `supabase/migrations/<timestamp>_<opis>.sql` i politike samo za tabele koje sam doda. Ne otvara `app`. Gotovo za svaki chat kad se ta migracija primeni na test projekat `difftjvesguxufxoinyc`. Cela šema je gotova tek posle `1.11`.
+Svaki chat piše jednu novu migraciju `supabase/migrations/<timestamp>_<opis>.sql` i politike samo za tabele koje sam doda. Ne otvara `app`. Gotovo za svaki chat kad se ta migracija primeni na test projekat `hmkxuvwpjvzekpvpmsuk`. Cela šema je gotova tek posle `1.11`.
 
 ### 1.1 Klinika
 
@@ -223,7 +226,7 @@ Gotovo kad anon poziv `create_booking` ne pravi red, a ulogovan potvrđen nalog 
 
 Čita: [DB.md](./DB.md) odeljak 8, ostatak funkcija, i odeljak 7 za `merge_patients` i `save_visit`.
 
-`choose_offer`, `decline_offers`, `reschedule_by_token`, `cancel_by_token`, `expire_booking_requests`, `purge_booking_request_pii`, `due_reminders`, `merge_patients`, `save_visit`. Prelazi su tabela u DB odeljku 5.8. Ponuda ne produžava rok i ne oslobađa traženi sat. Izbor jednog oslobađa traženi i ostale ponude. `save_visit` odbija izmenu posle 24 sata. Spajanje ostavlja anamnezu cilja.
+`choose_offer`, `decline_offers`, `reschedule_by_token`, `cancel_by_token`, `expire_booking_requests`, `purge_booking_request_pii`, `due_reminders`, `merge_patients`, `save_visit`. Prelazi su tabela u DB odeljku 5.8. `choose_offer` upisuje istu vezu naloga i kartona kao prihvat. Ponuda ne produžava rok i ne oslobađa traženi sat. Izbor jednog oslobađa traženi i ostale ponude. `save_visit` odbija izmenu posle 24 sata. Spajanje ostavlja anamnezu cilja.
 
 Gotovo kad funkcije na test projektu prate tu tabelu i anon ne bira ponudu.
 
@@ -251,23 +254,31 @@ Zajednički dodir, da se ne čeka tuđi chat:
 - Javni tok piše kroz SQL funkcije. Osoblje piše kroz `app/actions/appointments.ts`.
 - Samo Kalendar dopisuje blok `/* calendar-grid */` u `app/globals.css`. Samo Karton dopisuje `/* odontogram */`.
 
+### 2.A0 Dva ulaza
+
+Čita: [PRD.md](./PRD.md) pasus o dva ulaza u odeljku 1 i [Tech.md](./Tech.md) odeljak 6, tačku 1.
+
+Fajlovi: `proxy.ts`, `proxy.test.ts`. Javni host služi imenik, `/ordinacije` i `/zakazivanje`. Host `dent.` služi `/prijava`, `/za-ordinacije`, `/danas`, `/pacijenti`, `/podesavanja`, `/statistika`, `/platforma` i `/poziv`. `/prijava`, `/za-ordinacije` i `/poziv` ne traže nalog, ali sa javnog hosta prelaze na `dent.`. Na `dent.` putanja `/` otvara prijavu samo dok niko nije prijavljen. Prijavljeno osoblje ide na `/danas`, platforma na `/platforma`, nalog koji je samo pacijent ostaje na prijavi. Strana osoblja na javnom hostu prelazi na `dent.`. Prijavljeno osoblje ili platforma koji otvore javni `/` idu na `dent.` i `/danas`, odnosno `/platforma`. Pacijent koji nije osoblje ostaje na imeniku. `/ordinacije` i `/zakazivanje` na `dent.` prelaze na javni host. `/lozinka` se ne preusmerava. `localhost` se ne preusmerava. Kolačić sesije važi na oba imena.
+
+Gotovo kad test pokaže prelaz `/danas` sa javnog hosta na `dent.`, prelaz prijavljenog osoblja sa javnog `/` na `dent.` i `/danas`, prelaz `/ordinacije/slug` sa `dent.` na javni host, da `dent.` na `/` bez sesije nije imenik, i da `localhost` ostaje na istom originu.
+
 ### 2.A1 Prijava
 
 Čita: [PRD.md](./PRD.md) odeljak 5, prva dva pasusa.
 
-Fajlovi: `app/prijava`, `app/actions/auth.ts`, tela `requireMember`, `requireOwner`, `requirePlatformAdmin` u `lib/auth.ts`. Mejl, lozinka, „Zapamti me“ 90 dana, inače sesija do zatvaranja. Ne dira `proxy.ts`.
+Fajlovi: `app/prijava`, `app/actions/auth.ts`, tela `requireMember`, `requireOwner`, `requirePlatformAdmin` u `lib/auth.ts`. Mejl, lozinka, „Zapamti me“ 90 dana, inače sesija do zatvaranja. Ne dira `proxy.ts`. Forma i „Zatražite pristup“ važe samo dok niko nije prijavljen. Ako je osoblje već prijavljeno, stranica ide na `/danas`. Platforma ide na `/platforma`. Nalog koji je samo pacijent vidi formu i ne ulazi u kalendar.
 
 ### 2.A2 Nova lozinka
 
 Čita: [PRD.md](./PRD.md) odeljak 4.1, mejl „Nova lozinka“.
 
-Fajlovi: `app/lozinka/[token]`, `app/actions/auth.ts`. Link važi sat.
+Fajlovi: `app/lozinka/[token]`, `app/actions/auth.ts`. Link važi sat. Osoblju link ide na `STAFF_URL`, pacijentu na `APP_URL`.
 
 ### 2.A3 Pozivnica ordinacije
 
 Čita: [PRD.md](./PRD.md) odeljak 4.1, koraci 2–3.
 
-Fajlovi: `app/poziv/[token]`, `app/actions/auth.ts`. Kod od 6 cifara, 7 dana, pet pokušaja, lozinka, vlasnik. `service_role` samo da napravi `auth.users`.
+Fajlovi: `app/poziv/[token]`, `app/actions/auth.ts`. Kod od 6 cifara, 7 dana, pet pokušaja, lozinka, vlasnik. `service_role` samo da napravi `auth.users`. Link u mejlu je na `STAFF_URL`.
 
 ### 2.A4 Pozivnica kolege
 
@@ -315,7 +326,7 @@ Gotovo kad recepcija vidi samo nalog, a vlasnik vidi spisak odeljaka.
 
 Fajlovi: `app/podesavanja/ordinacija`, `app/actions/settings.ts`. Naziv, adresa, telefon, tekst, logo do 1 MB, javni link, prekidač online, korak, razmak, trajanje, najava i horizont. Nominatim jednom pri čuvanju adrese.
 
-Gotovo kad se korak i horizont sačuvaju i javni link pokazuje `/ordinacije/[slug]`.
+Gotovo kad se korak i horizont sačuvaju i javni link pokazuje `APP_URL` plus `/ordinacije/[slug]`.
 
 ### 2.C3 Osoblje
 
@@ -375,7 +386,9 @@ Gotovo kad drugi član natera vlasnika da unese PIN, a jedini vlasnik uđe bez n
 
 Čita: [PRD.md](./PRD.md) odeljke 4.3 i 11.1, bez mape.
 
-Fajlovi: `app/page.tsx`, `lib/queries/public.ts`. Grad, pretraga naziva, kartice, prazan grad.
+Fajlovi: `app/page.tsx`, `lib/queries/public.ts`, `app/layout.tsx`, `components/ui/app-menu.tsx`. Grad, pretraga naziva, kartice, prazan grad. Imenik nema prijavu, registraciju ni meni osoblja. Link „Za ordinacije“ vodi na `STAFF_URL`. Javne putanje `/`, `/ordinacije` i `/zakazivanje` nemaju meni osoblja. `/prijava` i `/za-ordinacije` takođe nemaju taj meni. Komponenta menija ostaje za `/danas`, `/pacijenti`, `/podesavanja`, `/statistika` i `/platforma`, dok 2.E1 ne stavi pravi meni ordinacije.
+
+Gotovo kad `/` nema stavke Danas, Pacijenti, Podešavanja i Statistika, a `/danas` i dalje ima školjku menija.
 
 ### 2.D2 Mapa
 
@@ -387,9 +400,9 @@ Fajlovi: `app/page.tsx`. Leaflet, OpenStreetMap, „blizu mene“, lista i mapa 
 
 Čita: [PRD.md](./PRD.md) odeljke 4.2 i 11.1, ruta `/ordinacije/[slug]`.
 
-Fajlovi: `app/ordinacije/[slug]`. Naziv, logo, adresa, telefon, tekst, stomatolozi. Nazad u imenik nema. Jedan je već izabran: poslednji na uređaju, inače prvi. Linkovi „Prijavite se“ i „Napravite nalog“.
+Fajlovi: `app/ordinacije/[slug]`. Naziv, logo, adresa, telefon, tekst, stomatolozi. Nazad u imenik nema. Jedan je već izabran: poslednji na uređaju, inače prvi. Dok pacijent nije prijavljen, „Prijava“ i „Registracija“ stoje u gornjem desnom uglu. Na imeniku tih dugmadi nema.
 
-Gotovo kad stranica nema put u imenik i pamti poslednjeg stomatologa na uređaju.
+Gotovo kad stranica nema put u imenik, pamti poslednjeg stomatologa na uređaju, i prijava je u uglu samo na ovoj strani.
 
 ### 2.D4 Slobodni počeci
 
@@ -425,17 +438,17 @@ Gotovo kad nalog vidi samo svoje termine ove ordinacije.
 
 ### 2.D5 Zakazivanje za sebe
 
-Čita: [PRD.md](./PRD.md) odeljak 7.1.
+Čita: [PRD.md](./PRD.md) odeljak 7.1 i korake 4–5 u odeljku 7.
 
-Fajlovi: `app/ordinacije/[slug]/zakazivanje`, `app/actions/booking.ts`. Stranica zove `requirePatient()` i traži potvrđen mejl. Polja redom, saglasnost, dugme „Pošalji zahtev“. Ako nema 15 godina, prelazak na put za dete. Forma je puna iz naloga gde podaci već postoje.
+Fajlovi: `app/ordinacije/[slug]/zakazivanje`, `app/actions/booking.ts`. Stranica zove `requirePatient()` i traži potvrđen mejl. Ako je nalog već vezan za karton te osobe u ovoj ordinaciji, polja identiteta se ne prikazuju. Inače polja redom, saglasnost, dugme „Pošalji zahtev“, forma puna iz naloga gde podaci već postoje. Ako nema 15 godina, prelazak na put za dete. Prvi zahtev uvek ima formu, jer karton nastaje tek kad ordinacija prihvati.
 
-Gotovo kad neprijavljen i nepotvrđen mejl ne vide formu, a ulogovan potvrđen nalog vidi svoja polja.
+Gotovo kad neprijavljen i nepotvrđen mejl ne vide formu, ulogovan nalog bez kartona u ovoj ordinaciji vidi svoja polja, a nalog sa već vezanim kartonom ne vidi unos identiteta.
 
 ### 2.D6 Zakazivanje za dete
 
 Čita: [PRD.md](./PRD.md) odeljak 7.2.
 
-Isti fajlovi. Poseban pacijent, mejl ostaje na kontaktu, izjava staratelja.
+Isti fajlovi. Poseban pacijent, mejl ostaje na kontaktu, izjava staratelja. Ako je to dete već vezano za karton u ovoj ordinaciji, unos identiteta se preskače.
 
 ### 2.D7 Zahtev
 
@@ -473,7 +486,7 @@ Gotovo kad posle zahteva pacijent dobije mejl „Zahtev je primljen“.
 
 Čita: [PRD.md](./PRD.md) odeljak 11.2, `/danas`.
 
-Fajlovi: `app/danas/**`. Meni, datum, Dan/Nedelja/Mesec, URL (`prikaz`, `datum`, `stomatolog`, `sakrijOtkazane`). Otkazani sakriveni čim se ekran otvori.
+Fajlovi: `app/danas/**`, školjka menija za `/danas`, `/pacijenti`, `/podesavanja` i `/statistika`. Meni iz PRD odeljka 11.2: Danas, Pacijenti, Podešavanja, Statistika (samo vlasnik) i odjava. Imenik, stranica ordinacije i `/platforma` nemaju ovaj meni. Datum, Dan/Nedelja/Mesec, URL (`prikaz`, `datum`, `stomatolog`, `sakrijOtkazane`). Otkazani sakriveni čim se ekran otvori.
 
 ### 2.E2 Dnevni prikaz
 
@@ -507,9 +520,9 @@ Gotovo kad otkaz zakazanog termina bez poruke ne prođe, a „nije došao“ pro
 
 Čita: [PRD.md](./PRD.md) odeljak 7.3, prva dva izlaza, odeljak 7.6, i kolona na `/danas` u 11.2.
 
-Fajlovi: `app/danas/**`, `app/actions/appointments.ts`. Kolona „Čeka potvrdu“. Vlasnik sve, stomatolog svoje, recepcija bez Prihvati, Odbij i Ponudi. Prihvati i odbij po pravilima iz 7.6, poruka do 300 znakova. „Isti karton“ i „Drugi pacijent“ kad pravilo tako kaže. Baza odbija tuđi zahtev stomatologu.
+Fajlovi: `app/danas/**`, `app/actions/appointments.ts`. Kolona „Čeka potvrdu“. Vlasnik sve, stomatolog svoje, recepcija bez Prihvati, Odbij i Ponudi. Prihvati i odbij po pravilima iz 7.6, poruka do 300 znakova. „Isti karton“ i „Drugi pacijent“ kad pravilo tako kaže. Prihvat upisuje vezu naloga i kartona u toj ordinaciji (`patient_chart_links`). Tu vezu 2.D5 čita da preskoči unos identiteta. Odbijanje vezu ne pravi. Baza odbija tuđi zahtev stomatologu.
 
-Gotovo kad prihvat bez poklapanja otvori karton, a tuđi mejl stane na izbor kartona i ne pokaže tuđe ime pacijentu.
+Gotovo kad prihvat bez poklapanja otvori karton i veže nalog, a tuđi mejl stane na izbor kartona i ne pokaže tuđe ime pacijentu.
 
 ### 2.E7 Ponuda iz kalendara
 

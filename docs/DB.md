@@ -468,7 +468,7 @@ Traženi termin ostaje zauzet kad se pošalje ponuda. Ponuda ne menja `expires_a
 | Događaj | Traženi termin | Ponude | Zahtev |
 | --- | --- | --- | --- |
 | `create_booking` | `pending_confirmation` | nema | `pending` |
-| Prihvati | `scheduled` | postojeće `cancelled` | `accepted` |
+| Prihvati | `scheduled` | postojeće `cancelled` | `accepted`; upis `patient_chart_links` za nalog i karton te osobe u toj ordinaciji |
 | Odbij | `cancelled` | `cancelled` | `rejected` |
 | Pošalji ponudu | ostaje zauzet | do tri `offered` | `pending`, isti rok |
 | `choose_offer` | `cancelled` | izabrani `scheduled`, ostali `cancelled` | `accepted` |
@@ -478,7 +478,9 @@ Traženi termin ostaje zauzet kad se pošalje ponuda. Ponuda ne menja `expires_a
 `create_booking` odbija poziv bez ulogovanog naloga, bez potvrđenog mejla, preko
 nedostupnosti i kad mejl ili vezani karton već drže dva zahteva u statusu `pending`
 u toj ordinaciji. Ako je slot uzet, ne pravi red. Pacijent zove funkciju ponovo sa
-drugim početkom.
+drugim početkom. Prihvat upisuje `patient_chart_links` za nalog zahteva i karton te
+osobe u toj ordinaciji. Isti upis radi i `choose_offer`, jer i tada karton nastaje.
+Odbijanje i istek vezu ne prave.
 
 ---
 

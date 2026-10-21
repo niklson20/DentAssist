@@ -82,6 +82,16 @@ docs/
 Javne stranice ne uvoze server klijent u klijentske komponente. Čitaju preko upita i
 javnih funkcija iz [`DB.md`](./DB.md#8-javne-funkcije).
 
+Meni osoblja nije u korenskom rasporedu. Javno ime `<domen-aplikacije>` služi pacijenta:
+`/`, `/ordinacije`, `/zakazivanje`. Ime `dent.<domen-aplikacije>` služi ordinaciju:
+`/prijava`, `/za-ordinacije`, `/danas`, `/pacijenti`, `/podesavanja`, `/statistika`,
+`/platforma`, `/poziv`. Na `dent.` adresa `/` je ulaz dok niko nije prijavljen, ne imenik.
+Prijavljeno osoblje sa te adrese ide na `/danas`, nalog platforme na `/platforma`.
+Javne strane nemaju stavke Danas, Pacijenti, Podešavanja i Statistika. `/lozinka` važi na
+oba imena; mejl bira ime. Sesija osoblja i platforme važi na oba imena. Na `localhost`
+nema preusmerenja: putanje stoje na istom originu. Imenik nema prijavu ni registraciju.
+Ta dugmad su u gornjem desnom uglu `/ordinacije/[slug]`, dok pacijent nije prijavljen.
+
 Zakazivanje drži `stomatolog` i `pocetak` u adresi. Kalendar drži `prikaz`
 (`dan`, `nedelja`, `mesec`), `datum`, `stomatolog` i `sakrijOtkazane`.
 
@@ -142,6 +152,8 @@ Pravila:
   mape je u [`PRD.md`](./PRD.md#85-zubna-mapa).
 - Javne stranice moraju da se završe na uskom ekranu. Ordinacija je složena za širok
   ekran; na telefonu prvi završen put je lista zahteva i odgovor na jedan zahtev.
+- Imenik i stranica ordinacije nemaju meni osoblja. Meni iz PRD odeljka 11.2 pripada
+  stranama `/danas`, `/pacijenti`, `/podesavanja` i `/statistika`.
 
 Kod je na engleskom, interfejs na srpskom, latinicom. Prevodi kodova su samo u
 `lib/labels.ts`.
@@ -168,9 +180,21 @@ Sve u `lib/calendar-dates.ts`.
 
 Četiri sloja.
 
-1. `proxy.ts` osvežava sesiju. Štiti `/danas`, `/pacijenti`, `/podesavanja`,
-   `/statistika`, `/platforma`. Javne putanje `/`, `/za-ordinacije`, `/ordinacije`,
-   `/zakazivanje`, `/poziv` i `/lozinka` prolaze bez naloga. `/` je imenik.
+1. `proxy.ts` osvežava sesiju i deli dva imena. Štiti `/danas`, `/pacijenti`, `/podesavanja`,
+   `/statistika`, `/platforma`. Bez naloga prolaze `/`, `/prijava`, `/za-ordinacije`,
+   `/ordinacije`, `/zakazivanje`, `/poziv` i `/lozinka`.
+   `/prijava`, `/za-ordinacije` i `/poziv` ne traže nalog, ali sa javnog imena prelaze
+   na isto putanje na `dent.`. Javni host je `<domen-aplikacije>`: `/` je imenik, bez
+   menija osoblja i bez prijave pacijenta. Prijavljeno osoblje ili platforma koji otvore
+   taj `/` idu na `dent.` i `/danas`, odnosno `/platforma`. Pacijent koji nije osoblje
+   ostaje na imeniku. Host `dent.<domen-aplikacije>` drži ulaz ordinacije i strane
+   osoblja. Na tom hostu `/` otvara prijavu dok niko nije prijavljen. Prijavljeno osoblje
+   ide na `/danas`, nalog platforme na `/platforma`. Nalog koji je samo pacijent ostaje
+   na prijavi. Strane osoblja na javnom hostu prelaze na isto putanje na `dent.`.
+   `/ordinacije` i `/zakazivanje` na `dent.` prelaze na javni host. `/lozinka` ostaje na
+   hostu iz linka. `localhost` ne preusmerava. Kolačić sesije važi na oba imena, na
+   roditeljskom domenu, da javni host vidi prijavu osoblja. Prijava pacijenta je na
+   `/ordinacije/[slug]`.
 2. Stranica sama zove `requireMember()`, `requireOwner()` ili `requirePlatformAdmin()`.
 3. RLS iz [`DB.md`](./DB.md#7-pristup).
 4. Javne funkcije su jedini ulaz bez naloga. Ne vraćaju tuđe ime, zauzet termin ni razlog blokade.
@@ -217,7 +241,9 @@ Svi mejlovi idu preko **Resenda**, iz `lib/mail.ts`: i pacijentu i osoblju (pozi
 nova lozinka, kod, potvrda, odbijanje, ponuda, otkaz, promena sata, podsetnik).
 Supabase čuva nalog i lozinku. Ne šalje mejl.
 
-Domen je jedan, domen aplikacije. Svaka ordinacija nema svoj DNS ni svoj Gmail.
+Domen mejla je jedan, domen aplikacije. Svaka ordinacija nema svoj DNS ni svoj Gmail.
+Sajt ima dva imena: javno `<domen-aplikacije>` i `dent.<domen-aplikacije>` za ordinaciju.
+Oba pokazuju na istu aplikaciju. Mejl i dalje ide sa javnog imena.
 
 | Stavka | Vrednost |
 | --- | --- |
@@ -311,7 +337,7 @@ dozvoljava dva projekta. Lozinke ne idu u git ni u ovaj dokument.
 | Uloga | Projekat | Gde stoje ključevi |
 | --- | --- | --- |
 | Produkcija | `iirzzaykgskjouzzvdrd` | Vercel Production, GitHub secret `SUPABASE_DB_URL` |
-| Test | `difftjvesguxufxoinyc` | `.env.local` |
+| Test | `hmkxuvwpjvzekpvpmsuk` | `.env.local` |
 
 | Promenljiva | Tajna |
 | --- | --- |
@@ -322,9 +348,12 @@ dozvoljava dva projekta. Lozinke ne idu u git ni u ovaj dokument.
 | `MAIL_FROM` | ne; `ne-odgovaraj@<domen-aplikacije>` |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | ne |
 | `TURNSTILE_SECRET_KEY` | da; Vercel i `.env.local` |
-| `APP_URL` | ne; pun link u mejlu, bez kose crte na kraju |
+| `APP_URL` | ne; javni origin, pun link pacijentu u mejlu, bez kose crte na kraju |
+| `STAFF_URL` | ne; `https://dent.<domen-aplikacije>`, link osoblju u mejlu, bez kose crte na kraju |
 | `CRON_SECRET` | da; Vercel i `.env.local` |
 | `TOKEN_PEPPER` | da; Vercel i `.env.local` |
+
+Dok `STAFF_URL` nije postavljen, link „Za ordinacije“ i linkovi osoblju ostaju na trenutnom originu. Tako `localhost` radi bez drugog imena.
 
 `SUPABASE_DB_URL` je Session pooler (port 5432, IPv4). `service_role` nije u
 `NEXT_PUBLIC_` promenljivoj. Javna registracija u konzoli je isključena.

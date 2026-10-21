@@ -4,7 +4,7 @@
 **Jezik interfejsa:** srpski, latinica
 **Tip proizvoda:** web aplikacija za više ordinacija, sa javnim zakazivanjem
 **Tehnologije:** Next.js i Supabase
-**Poslednja izmena:** oktobar 2026.
+**Poslednja izmena:** oktobar 2026. Pacijent ulazi na domen aplikacije, ordinacija na `dent.` tog domena.
 
 > Ovaj dokument opisuje **željeno stanje** proizvoda. Tehničku realizaciju vidi u
 > [`Tech.md`](./Tech.md), a šemu baze u [`DB.md`](./DB.md). Ako se implementacija razlikuje
@@ -25,6 +25,23 @@ i vidi svoje termine u ordinaciji kroz koju je ušao, i ne otvara karton. Ordina
 aplikaciji prihvata, odbija ili nudi druga vremena.
 
 Vlasnik platforme otvara ordinaciju pozivnicom. Ne čita kartone, termine ni dokumente.
+
+Pacijent ulazi na `<domen-aplikacije>`. Tu su imenik, stranica ordinacije i zakazivanje.
+Ordinacija ulazi na `dent.<domen-aplikacije>`. Tu su zahtev za pristup, prijava osoblja,
+kalendar, kartoni i podešavanja. Ista aplikacija i ista baza služe oba imena. Svaka
+ordinacija nema svoj poddomen.
+
+Na `dent.` adresa `/` je ulaz dok niko nije prijavljen: prijava osoblja i „Zatražite
+pristup“. Prijavljeno osoblje sa te adrese ide na `/danas`. Nalog platforme ide na
+`/platforma`. Nalog koji je samo pacijent ostaje na prijavi i ne ulazi u kalendar.
+Imenik tu ne postoji. Sesija osoblja i platforme važi i na javnom imenu, pa javni sajt
+prepoznaje tu prijavu. Ko je tako prijavljen i otvori javni `/`, ide na `dent.` i
+`/danas`, odnosno `/platforma`. Pacijent koji nije osoblje ostaje na imeniku.
+Javni link i QR su `https://<domen-aplikacije>/ordinacije/[slug]`.
+Link „Za ordinacije“ sa imenika vodi na `https://dent.<domen-aplikacije>/`.
+Mejl ostaje `ne-odgovaraj@<domen-aplikacije>`. Link u mejlu pacijentu je na javnom
+imenu, link osoblju na `dent.`. Lokalno oba ulaza stoje na istom `localhost`. Podela
+važi kad su prava imena nameštena.
 
 ---
 
@@ -77,7 +94,7 @@ medicinske podatke svojih pacijenata.
 
 ### 4.1 Otvaranje
 
-1. Na `/za-ordinacije` ordinacija ostavi mejl i grad. Grad se kuca. Dok sa tog mejla
+1. Na `dent.<domen-aplikacije>/za-ordinacije` ordinacija ostavi mejl i grad. Grad se kuca. Dok sa tog mejla
    postoji zahtev koji čeka, ili pozivnica koja nije iskorišćena ni istekla, novi zahtev
    se ne prima. Poruka je: „Zahtev sa ove adrese već čeka.“ Isti mejl sme najviše tri
    zahteva na sat. Posle 10 slanja u satu sa iste mreže traži se provera da korisnik nije robot.
@@ -134,7 +151,7 @@ Jedan prekidač gasi online zakazivanje za celu ordinaciju. Osoblje i dalje radi
 Ordinacija tada nestaje iz imenika.
 
 Jedna ordinacija ima jednu adresu i jedan grad. Javni link je
-`/ordinacije/[slug]`. Vlasnik ga vidi u podešavanjima ordinacije i može da ga stavi
+`https://<domen-aplikacije>/ordinacije/[slug]`. Vlasnik ga vidi u podešavanjima ordinacije i može da ga stavi
 na vrata kao QR. Ko uđe tim linkom vidi samo tu ordinaciju.
 
 ### 4.3 Imenik
@@ -276,14 +293,21 @@ Pacijent zakazuje na telefonu i na računaru. To mu je glavni posao u aplikaciji
 Imenik i stranica ordinacije rade bez prijave. Traka dana i slobodni početci ne.
 Zahtev ne nastaje dok pacijent nije ulogovan i dok mejl naloga nije potvrđen.
 
-1. Bira grad, pa ordinaciju na listi, mapi ili pretragom. Vidi stomatologe.
-2. Bez prijave, umesto slobodnih termina, stoji poziv da se prijavi ili registruje.
-   Posle prijave vraća se na istu ordinaciju.
+1. Bira grad, pa ordinaciju na listi, mapi ili pretragom. Vidi stomatologe. Na imeniku
+   nema prijave ni registracije.
+2. Bez prijave, umesto slobodnih termina, u gornjem desnom uglu stranice ordinacije stoje
+   „Prijava“ i „Registracija“. Posle prijave vraća se na istu ordinaciju. Ista prijava
+   važi i u sledećoj ordinaciji: lozinka se ne kuca ponovo, mejl je oznaka pacijenta.
 3. Bira stomatologa, dan i slobodan početak.
-4. Bira da li je termin za njega ili za dete koje još nema 15 godina. Nepotvrđen mejl
-   ostaje na unosu koda i ne pušta ovu formu.
-5. Popuni podatke i prihvati: „Slažem se da ordinacija {naziv} obradi ime, prezime, datum
-   rođenja, telefon i mejl radi zakazivanja termina.“ Dugme je „Pošalji zahtev“.
+4. Ako je ovaj nalog već vezan za karton te osobe u ovoj ordinaciji, unos identiteta se
+   preskače. Vezu upisuje prihvat, ne sam zahtev. Pacijent bira termin i, ako na nalogu ima dete, za koga je termin. Ako veze
+   nema, bira da li je termin za njega ili za dete koje još nema 15 godina. Nepotvrđen mejl
+   ostaje na unosu koda i ne pušta ovu formu. Prvi zahtev uvek ima formu: karton nastaje
+   tek kad ordinacija prihvati. Druga ordinacija i dalje traži formu, popunjenu sa naloga.
+   Tuđi karton i tuđe ime se ovim ne otkrivaju.
+5. Kad forma postoji, popuni podatke i prihvati: „Slažem se da ordinacija {naziv} obradi ime, prezime, datum
+   rođenja, telefon i mejl radi zakazivanja termina.“ Polja koja nalog već drži dolaze
+   popunjena. Dugme je „Pošalji zahtev“.
 6. Sistem ponovo proveri slot. Ako je zauzet, bira se drugi početak. Novi kod se ne traži.
 7. Nastaje zahtev **Čeka potvrdu**. Javna poruka je uvek ista: zahtev je primljen i
    ordinacija treba da ga potvrdi. Ne piše da li karton već postoji.
@@ -325,7 +349,8 @@ Zatvoren dan stomatologa ne troši rok. Ponuda tri termina ne produžava rok.
 
 Tri izlaza, samo za vlasnika i stomatologa kome je termin tražen:
 
-- **Prihvati** — termin postaje Zakazan.
+- **Prihvati** — termin postaje Zakazan. Nalog se veže za karton te osobe u ovoj
+  ordinaciji, pa sledeći zahtev nema unos identiteta.
 - **Odbij** — stomatolog ne prima tog pacijenta. Poruka nije obavezna i ima najviše
   300 znakova. Slot se oslobađa.
 - **Ponudi** — do tri slobodna termina, koliko ih ima, uvek kod istog stomatologa.
@@ -446,7 +471,9 @@ tri puta na sat. Posle 10 slanja u satu sa iste mreže traži se provera da kori
 robot.
 
 Prijava i registracija su na stranici ordinacije: `/ordinacije/[slug]/prijava` i
-`/ordinacije/[slug]/registracija`. Posle prijave pacijent ostaje u toj ordinaciji.
+`/ordinacije/[slug]/registracija`. Na imeniku tih dugmadi nema. Posle prijave pacijent ostaje u toj ordinaciji.
+Ista prijava otvara slobodne termine u svakoj sledećoj ordinaciji. Lozinka se ne kuca
+ponovo. Mejl je oznaka pacijenta. Karton svake ordinacije ostaje njen.
 Isti nalog ne otvara `/danas`, `/pacijenti`, `/podesavanja`, `/statistika` ni
 `/platforma`.
 
@@ -616,18 +643,18 @@ pristupa javite se platformi.“
 
 ## 11. Ekrani
 
-Raspored je dogovoren. Prijavljeno osoblje koje otvori `/` odlazi na `/danas`. Nalog
-platforme odlazi na `/platforma`.
+Raspored je dogovoren. Javno ime drži imenik i stranicu ordinacije, bez menija osoblja. `dent.` drži ulaz i rad ordinacije. Prijavljeno osoblje koje na javnom imenu otvori `/` odlazi na `dent.` i `/danas`. Nalog
+platforme odlazi na `dent.` i `/platforma`. Pacijent koji nije osoblje ostaje na imeniku.
 
 ### 11.1 Pacijent
 
-`/` je imenik. Prvo se bira grad. Iznad je pretraga naziva. „Blizu mene“ traži lokaciju
+`/` je imenik. Nema menija ordinacije, prijave ni registracije. Prvo se bira grad. Iznad je pretraga naziva. „Blizu mene“ traži lokaciju
 i ređa po udaljenosti. Zatim Lista / Mapa i kartice: naziv, adresa, telefon. Dodir
-kartice otvara ordinaciju. Na dnu je link „Za ordinacije“. Prazan grad piše: „U ovom
+kartice otvara ordinaciju. Na dnu je link „Za ordinacije“, ka `https://dent.<domen-aplikacije>/`. Prazan grad piše: „U ovom
 gradu nema ordinacija sa online zakazivanjem.“ Na širokom ekranu lista i mapa stoje
 jedna pored druge.
 
-`/ordinacije/[slug]` drži naziv, logo, adresu, telefon, kratak tekst i stomatologe u jednom redu. Nazad u imenik nema. Bez prijave ispod toga stoji „Prijavite se da vidite slobodne termine“, uz „Prijavite se“ i „Napravite nalog“. Trake dana nema.
+`/ordinacije/[slug]` drži naziv, logo, adresu, telefon, kratak tekst i stomatologe u jednom redu. Nazad u imenik nema. U gornjem desnom uglu, dok pacijent nije prijavljen, stoje „Prijava“ i „Registracija“. Bez prijave ispod toga stoji „Prijavite se da vidite slobodne termine“. Trake dana nema.
 
 Ulogovanom pacijentu jedan stomatolog je već izabran: poslednji na tom uređaju, inače prvi sa javne strane. Ispod je traka dana od danas do horizonta, pa samo slobodni početci, sa krajem po podrazumevanom trajanju. „Nastavi“ stoji pri dnu i radi kad su stomatolog i početak izabrani. Dan bez termina piše: „Nema slobodnih termina ovog dana.“
 
@@ -635,7 +662,7 @@ Ulogovanom pacijentu jedan stomatolog je već izabran: poslednji na tom uređaju
 
 `/ordinacije/[slug]/zakazivanje` drži stomatologa i početak u adresi, kao `stomatolog` i `pocetak`. Na vrhu je sažetak:
 ordinacija, stomatolog, dan i sat. Zatim „Za mene“ ili „Za dete mlađe od 15 godina“.
-Prijavljen pacijent bira sebe ili sačuvano dete, a prazna polja dopisuje. Redosled polja je u 7.1 i 7.2. Bez prijave forma se ne otvara: „Nastavi“ vodi na prijavu ili registraciju i vraća na isti `stomatolog` i `pocetak`. Dugme je „Pošalji zahtev“. Posle slanja ekran je samo potvrda iz odeljka 7. Ako je sat zauzet, pacijent se vraća na slobodne početke. Kod se na ovom ekranu ne traži.
+Ako je nalog već vezan za karton te osobe u ovoj ordinaciji, polja identiteta se ne prikazuju: bira se termin i, ako na nalogu ima dete, za koga je. Inače prijavljen pacijent bira sebe ili sačuvano dete, a polja koja nalog već drži dolaze popunjena. Redosled polja je u 7.1 i 7.2. Bez prijave forma se ne otvara: „Nastavi“ vodi na prijavu ili registraciju i vraća na isti `stomatolog` i `pocetak`. Dugme je „Pošalji zahtev“. Posle slanja ekran je samo potvrda iz odeljka 7. Ako je sat zauzet, pacijent se vraća na slobodne početke. Kod se na ovom ekranu ne traži.
 
 `/zakazivanje/[token]` traži ulogovan nalog sa mejlom tog zahteva. Ponuda nudi do tri sata, „Potvrdi“ i „Nijedan ne
 odgovara“. Pomeranje pokazuje trenutni sat i slobodne početke istog stomatologa. Otkaz
@@ -646,9 +673,11 @@ je primljen. Kad ga odobrimo, stiže mejl sa linkom.“
 
 ### 11.2 Ordinacija
 
-`/prijava` traži mejl, lozinku i „Zapamti me“. Na povezanom računaru umesto toga ide
+Ovi ekrani su na `dent.<domen-aplikacije>`. Adresa `/` dok niko nije prijavljen je ulaz: prijava i
+„Zatražite pristup“. Prijavljeno osoblje sa `/` ide na `/danas`, nalog platforme na `/platforma`. Nalog koji je samo pacijent vidi prijavu i ne ulazi u kalendar. `/prijava` traži mejl, lozinku i „Zapamti me“. Na povezanom računaru umesto toga ide
 ekran iz odeljka 5. `/poziv/[token]` traži kod i lozinku. `/lozinka/[token]` traži novu
-lozinku i važi i za osoblje i za pacijenta. Pacijent se posle vraća na prijavu svoje
+lozinku i važi i za osoblje i za pacijenta. Link u mejlu osoblju otvara `dent.`. Link
+pacijentu otvara javno ime. Pacijent se posle vraća na prijavu svoje
 ordinacije.
 
 `/danas` na širokom ekranu ima levo meni: Danas, Pacijenti, Podešavanja, Statistika
