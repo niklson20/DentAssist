@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { PRODUCTION_REF, envProjectRefs, planReset, projectRefFromUrl } from "./db.mjs";
+import {
+  PRODUCTION_REF,
+  RESET_ARGS,
+  envProjectRefs,
+  planReset,
+  projectRefFromUrl,
+} from "./db.mjs";
 
 describe("db:reset", () => {
   it("uses the protected project ref from the task", () => {
@@ -40,6 +46,10 @@ describe("db:reset", () => {
         envRefs: ["aaaaaaaaaaaaaaaaaaaa"],
       }),
     ).toEqual({ ok: true, ref: "aaaaaaaaaaaaaaaaaaaa" });
+  });
+
+  it("applies the test seed only as part of reset", () => {
+    expect(RESET_ARGS).toEqual(["db", "reset", "--linked", "--sql-paths", "seed.sql"]);
   });
 });
 

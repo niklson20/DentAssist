@@ -5,6 +5,10 @@ import { fileURLToPath } from "node:url";
 
 export const PRODUCTION_REF = "iirzzaykgskjouzzvdrd";
 
+// Seed runs only after planReset accepts the linked project.
+// The path is relative to the supabase directory.
+export const RESET_ARGS = ["db", "reset", "--linked", "--sql-paths", "seed.sql"];
+
 const PROJECT_REF = /^[a-z0-9]{20}$/;
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -185,7 +189,7 @@ function main() {
       console.error(decision.error);
       process.exit(1);
     }
-    process.exit(runSupabase(["db", "reset", "--linked"]));
+    process.exit(runSupabase(RESET_ARGS));
   }
 
   console.error("Usage: node scripts/db.mjs <migrate|backup|reset>");

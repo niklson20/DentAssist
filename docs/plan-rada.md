@@ -25,7 +25,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 1.8 | Slotovi | Claude Sonnet thinking | [x] |
 | 1.9 | Javni upis | Claude Sonnet thinking | [x] |
 | 1.10 | Token i poslovi | Claude Sonnet thinking | [x] |
-| 1.11 | Seed i fajlovi | Claude Sonnet thinking | [ ] |
+| 1.11 | Seed i fajlovi | Claude Sonnet thinking | [x] |
 | 2.A0 | Dva ulaza | Composer 2.5 Fast | [ ] |
 | 2.A1 | Prijava | Claude Sonnet thinking | [ ] |
 | 2.A2 | Nova lozinka | Claude Sonnet thinking | [ ] |
