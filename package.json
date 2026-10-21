@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:migrate": "node scripts/db.mjs migrate",
+    "db:backup": "node scripts/db.mjs backup",
+    "db:reset": "node scripts/db.mjs reset"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
