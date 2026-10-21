@@ -24,7 +24,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 1.7 | Javno čitanje | Claude Sonnet thinking | [x] |
 | 1.8 | Slotovi | Claude Sonnet thinking | [x] |
 | 1.9 | Javni upis | Claude Sonnet thinking | [x] |
-| 1.10 | Token i poslovi | Claude Sonnet thinking | [ ] |
+| 1.10 | Token i poslovi | Claude Sonnet thinking | [x] |
 | 1.11 | Seed i fajlovi | Claude Sonnet thinking | [ ] |
 | 2.A0 | Dva ulaza | Composer 2.5 Fast | [ ] |
 | 2.A1 | Prijava | Claude Sonnet thinking | [ ] |
@@ -94,18 +94,18 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 Tekst koji se lepi u svaki novi chat:
 
 ```
-Uradi prvi neštikliran zadatak iz docs/plan-rada.md.
-Otvori tabelu statusa i uzmi prvi red odozgo čija je kolona Gotovo još [ ].
+Uradi prvi neštikliran zadatak iz docs/plan-rada.md: prvi red odozgo čija je kolona Gotovo još [ ].
 Ako takvog reda nema, reci da je plan gotov i stani.
-Pre nego što pišeš kod, pregledaj zadatak i napiši šta ti treba od naloga, ključeva, fajlova i odluka.
-Ako nešto fali, stani i sačekaj. Ne izmišljaj ključeve i ne traži da se tajna lepi u chat: traži da stoji u .env.local.
-Ako ti za ovaj zadatak ništa od toga ne treba, reci to u jednoj rečenici i kreni.
-Otvori samo odeljke navedene uz taj zadatak.
-Ne prelazi na sledeći red. Stani kad je „gotovo kad“ ispunjeno.
-Na kraju u tabeli štikliraj samo taj red.
-Kad lint prolazi, napravi jedan commit i push na main: https://github.com/niklson20/DentAssist
+Otvori samo odeljke navedene uz taj zadatak. Ako odgovor već piše u njima, ne pitaj.
+Pre koda napiši šta fali od naloga, ključeva, fajlova i odluka. Ako fali, stani. Ne izmišljaj ključeve i ne traži da se tajna lepi u chat: traži da stoji u .env.local.
+Ako ništa ne fali, reci to u jednoj rečenici i kreni.
+Diraj samo fajlove navedene uz taj red. Tuđu migraciju ne menjaj. Ne prelazi na sledeći red.
+Kod na engleskom, interfejs na srpskom (latinica). Zod, ActionResult, stranica bez Supabase-a, komponenta bez Supabase-a, boje iz tokena teme.
+Gotovo je tek kad je „gotovo kad“ zaista ispunjeno. npm run lint i npm test moraju da prođu.
+Zatim jedan commit i push na main: https://github.com/niklson20/DentAssist
 Poruka je na engleskom, sa ID-em zadatka, na primer feat: scaffold next.js app (0.1).
-Ne commituj .env.local, backups/ ni tajne. Ako push ne prođe, stani i reci.
+U commit idu samo fajlovi tog zadatka. Ne commituj .env.local, backups/ ni tajne.
+Ako push prođe, štikliraj samo taj red. Ako ne prođe, ne štikliraj, stani i reci.
 ```
 
 - Čita samo odeljak naveden uz zadatak, ne cele dokumente.
