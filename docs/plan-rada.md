@@ -15,7 +15,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 0.3 | Domen | Claude Sonnet thinking | [x] |
 | 0.4 | Ugovori | Composer 2.5 Fast | [x] |
 | 1.1 | Klinika | Claude Sonnet thinking | [x] |
-| 1.2 | Pozivnice | Claude Sonnet thinking | [ ] |
+| 1.2 | Pozivnice | Claude Sonnet thinking | [x] |
 | 1.3 | Pacijent | Claude Sonnet thinking | [ ] |
 | 1.4 | Karton u bazi | Claude Sonnet thinking | [ ] |
 | 1.5 | Termini | Claude Sonnet thinking | [ ] |
