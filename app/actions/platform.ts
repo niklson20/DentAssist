@@ -10,6 +10,8 @@ import { z } from "zod";
 
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requirePlatformAdmin } from "@/lib/auth";
+import type { ClinicStatus, MemberRole } from "@/lib/labels";
+import { clinicStatusLabels, memberRoleLabels } from "@/lib/labels";
 import {
   CLINIC_INVITE_SUBJECT,
   clinicInviteLink,
@@ -35,6 +37,24 @@ const REQUEST_GONE = "Zahtev više nije na čekanju.";
 const accessRequestIdSchema = z.object({
   requestId: z.string().uuid("Neispravan zahtev."),
 });
+
+const clinicIdSchema = z.object({
+  clinicId: z.string().uuid("Neispravna ordinacija."),
+});
+
+export type PlatformClinicMember = {
+  firstName: string;
+  lastName: string;
+  role: MemberRole;
+};
+
+export type PlatformClinicRow = {
+  id: string;
+  name: string;
+  city: string;
+  status: ClinicStatus;
+  members: PlatformClinicMember[];
+};
 
 const emailSchema = z
   .string({ error: "Unesite mejl." })
@@ -244,6 +264,105 @@ export async function sendClinicAccessInvite(
 
   revalidatePath("/platforma");
   return ok({ sent: true });
+}
+
+export async function listPlatformClinics(): Promise<PlatformClinicRow[]> {
+  await requirePlatformAdmin();
+
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return [];
+  }
+
+  const { data: clinics, error: clinicsError } = await supabase
+    .from("clinics")
+    .select("id, name, city, status")
+    .order("name", { ascending: true });
+
+  if (clinicsError) {
+    console.error("listPlatformClinics clinics failed:", clinicsError.message);
+    return [];
+  }
+
+  const clinicRows = clinics ?? [];
+  if (clinicRows.length === 0) {
+    return [];
+  }
+
+  const clinicIds = clinicRows.map((row) => row.id);
+  const { data: members, error: membersError } = await supabase
+    .from("clinic_members")
+    .select("clinic_id, first_name, last_name, role")
+    .in("clinic_id", clinicIds)
+    .order("last_name", { ascending: true });
+
+  if (membersError) {
+    console.error("listPlatformClinics members failed:", membersError.message);
+  }
+
+  const membersByClinic = new Map<string, PlatformClinicMember[]>();
+  for (const member of members ?? []) {
+    const role = member.role;
+    if (role !== "owner" && role !== "dentist" && role !== "reception") {
+      continue;
+    }
+    const bucket = membersByClinic.get(member.clinic_id) ?? [];
+    bucket.push({
+      firstName: member.first_name,
+      lastName: member.last_name,
+      role,
+    });
+    membersByClinic.set(member.clinic_id, bucket);
+  }
+
+  return clinicRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    city: row.city,
+    status: row.status === "disabled" ? "disabled" : "active",
+    members: membersByClinic.get(row.id) ?? [],
+  }));
+}
+
+export function formatPlatformClinicMember(member: PlatformClinicMember): string {
+  return `${member.firstName} ${member.lastName} (${memberRoleLabels[member.role]})`;
+}
+
+export function formatPlatformClinicStatus(status: ClinicStatus): string {
+  return clinicStatusLabels[status];
+}
+
+export async function disableClinicAccess(
+  _previous: ActionResult<{ disabled: true }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ disabled: true }>> {
+  const parsed = clinicIdSchema.safeParse({ clinicId: formData.get("clinicId") });
+  if (!parsed.success) {
+    return fail("Proverite unete podatke.", fieldErrorsFrom(parsed.error));
+  }
+
+  await requirePlatformAdmin();
+
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  const { error } = await supabase.rpc("disable_clinic_access", {
+    p_clinic_id: parsed.data.clinicId,
+  });
+
+  if (error) {
+    console.error("disableClinicAccess failed:", error.message);
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  revalidatePath("/platforma");
+  return ok({ disabled: true });
 }
 
 export async function dismissClinicAccessRequest(

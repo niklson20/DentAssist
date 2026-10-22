@@ -66,6 +66,8 @@ const WRONG_CODE = "Pogrešan kod.";
 const EMAIL_TAKEN = "Ovaj mejl već ima nalog.";
 const OPENED = "Nalog je otvoren. Prijavite se.";
 const RESEND_LIMIT = "Kod može da se pošalje najviše tri puta na sat.";
+const CLINIC_ACCESS_DISABLED =
+  "Pristup ovoj ordinaciji je ugašen. Kartoni su sačuvani. Za povratak pristupa javite se platformi.";
 
 export async function signIn(
   _previous: ActionResult | null,
@@ -90,6 +92,20 @@ export async function signIn(
     }
 
     const kind = await getSessionKind(supabase);
+    if (kind === "staff") {
+      const disabled = await staffClinicDisabled(supabase);
+      if (disabled === "failed") {
+        await supabase.auth.signOut({ scope: "local" });
+        return fail(UNAVAILABLE);
+      }
+      if (disabled) {
+        const store = await cookies();
+        await supabase.auth.signOut({ scope: "local" });
+        store.set(SESSION_GATE_COOKIE, "", sessionCookieOptions({ maxAge: 0 }, false));
+        return fail(CLINIC_ACCESS_DISABLED);
+      }
+    }
+
     const home = homePathFor(kind);
     const store = await cookies();
     if (!home) {
@@ -108,6 +124,17 @@ export async function signIn(
   }
 
   redirect(destination);
+}
+
+async function staffClinicDisabled(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+): Promise<boolean | "failed"> {
+  const { data, error } = await supabase.rpc("is_staff_clinic_disabled");
+  if (error) {
+    console.error("is_staff_clinic_disabled failed:", error.message);
+    return "failed";
+  }
+  return data === true;
 }
 
 function signInErrorMessage(error: { code?: string; status?: number }): string {

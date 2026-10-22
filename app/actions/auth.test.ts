@@ -123,7 +123,9 @@ beforeEach(() => {
   Object.values(mocks).forEach((mock) => mock.mockClear());
   mocks.createClient.mockResolvedValue({
     auth: { signInWithPassword: mocks.signInWithPassword, signOut: mocks.signOut },
+    rpc: mocks.rpc,
   });
+  mocks.rpc.mockResolvedValue({ data: false, error: null });
   mocks.signInWithPassword.mockResolvedValue({ error: null });
   mocks.signOut.mockResolvedValue({ error: null });
   vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -178,6 +180,20 @@ describe("signIn", () => {
     mocks.getSessionKind.mockResolvedValue("platform");
     await expect(signIn(null, form(valid))).rejects.toThrow("REDIRECT:/platforma");
     expect(cookieCall(SESSION_GATE_COOKIE)?.[1]).toBe("platform");
+  });
+
+  it("blocks staff when the clinic access was disabled", async () => {
+    mocks.getSessionKind.mockResolvedValue("staff");
+    mocks.rpc.mockResolvedValue({ data: true, error: null });
+    const result = await signIn(null, form(valid));
+    expect(result).toEqual({
+      ok: false,
+      error:
+        "Pristup ovoj ordinaciji je ugašen. Kartoni su sačuvani. Za povratak pristupa javite se platformi.",
+    });
+    expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(mocks.redirect).not.toHaveBeenCalled();
+    expect(cookieCall(SESSION_GATE_COOKIE)?.[1]).toBe("");
   });
 
   it("does not let a patient-only account into the calendar", async () => {

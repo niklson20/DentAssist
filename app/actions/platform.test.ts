@@ -45,7 +45,9 @@ vi.mock("next/cache", () => ({
 }));
 
 import {
+  disableClinicAccess,
   dismissClinicAccessRequest,
+  listPlatformClinics,
   loadClinicAccessFormContext,
   requestClinicAccess,
   sendClinicAccessInvite,
@@ -327,6 +329,94 @@ describe("sendClinicAccessInvite", () => {
 
     expect(result.ok).toBe(false);
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+const CLINIC_ID = "33333333-3333-4333-8333-333333333333";
+
+describe("listPlatformClinics", () => {
+  beforeEach(() => {
+    mocks.requirePlatformAdmin.mockResolvedValue({ userId: "admin-user" });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns clinics with member accounts", async () => {
+    const from = vi.fn((table: string) => {
+      if (table === "clinics") {
+        return {
+          select: vi.fn(() => ({
+            order: vi.fn(async () => ({
+              data: [
+                {
+                  id: CLINIC_ID,
+                  name: "Ordinacija Centar",
+                  city: "Novi Sad",
+                  status: "active",
+                },
+              ],
+              error: null,
+            })),
+          })),
+        };
+      }
+      if (table === "clinic_members") {
+        return {
+          select: vi.fn(() => ({
+            in: vi.fn(() => ({
+              order: vi.fn(async () => ({
+                data: [
+                  {
+                    clinic_id: CLINIC_ID,
+                    first_name: "Ana",
+                    last_name: "Petrović",
+                    role: "owner",
+                  },
+                ],
+                error: null,
+              })),
+            })),
+          })),
+        };
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+    mocks.createSupabaseServerClient.mockResolvedValue({ from });
+
+    const rows = await listPlatformClinics();
+
+    expect(rows).toEqual([
+      {
+        id: CLINIC_ID,
+        name: "Ordinacija Centar",
+        city: "Novi Sad",
+        status: "active",
+        members: [{ firstName: "Ana", lastName: "Petrović", role: "owner" }],
+      },
+    ]);
+  });
+});
+
+describe("disableClinicAccess", () => {
+  beforeEach(() => {
+    mocks.requirePlatformAdmin.mockResolvedValue({ userId: "admin-user" });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calls disable_clinic_access and revalidates", async () => {
+    mocks.createSupabaseServerClient.mockResolvedValue({
+      rpc: vi.fn(async () => ({ error: null })),
+    });
+
+    const result = await disableClinicAccess(null, form({ clinicId: CLINIC_ID }));
+
+    expect(result).toEqual({ ok: true, data: { disabled: true } });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/platforma");
   });
 });
 
