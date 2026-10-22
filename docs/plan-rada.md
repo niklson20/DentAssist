@@ -50,6 +50,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.D2 | Mapa | Composer 2.5 Fast | [x] |
 | 2.D3 | Profil ordinacije | Composer 2.5 Fast | [x] |
 | 2.D4 | Slobodni počeci | Composer 2.5 Fast | [x] |
+| 2.D11a | Potvrda mejla u bazi | Claude Sonnet thinking | [x] |
 | 2.D11 | Prijava pacijenta | Claude Sonnet thinking | [ ] |
 | 2.D12 | Deca i povezivanje | Claude Sonnet thinking | [ ] |
 | 2.D13 | Termini pacijenta | Composer 2.5 Fast | [ ] |
@@ -421,6 +422,25 @@ Gotovo kad stranica nema put u imenik, pamti poslednjeg stomatologa na uređaju,
 Fajlovi: `app/ordinacije/[slug]`. Traka dana do horizonta, samo slobodni počeci, „Nastavi“, samo za ulogovanog pacijenta. Dan bez termina: „Nema slobodnih termina ovog dana.“ Bez prijave umesto trake stoji „Prijavite se da vidite slobodne termine“.
 
 Gotovo kad neprijavljen posetilac ne vidi nijedan početak, a ulogovan vidi traku dana.
+
+### 2.D11a Potvrda mejla u bazi
+
+Čita: [DB.md](./DB.md) odeljke 4.8 i 7, [Tech.md](./Tech.md) odeljak 7 (kod, Argon2id, Turnstile, `ip_hash`).
+
+Nova migracija `supabase/migrations/<timestamp>_patient_email_confirmation.sql`. Tuđu migraciju ne menjaj. `service_role` se ne širi: i dalje samo pravi `auth.users`, pa staje. `patient_email_challenges` i dalje nema `SELECT` za `authenticated`.
+
+Zameni `private.protect_patient_account`. Dosadašnje zabrane ostaju. `email_confirmed_at` sme iz null u vreme samo ako je u toj transakciji `dentassist.patient_email_confirm` jednak `id` naloga. To podešava samo potvrda, preko `set_config(..., true)`. Promena mejla i dalje briše potvrdu. Unos ne sme da krene sa već popunjenom potvrdom.
+
+Četiri `security definer` funkcije, `search_path = public`. Grant kao `set_own_pin`: oduzmi `public`, `anon`, `authenticated` i `service_role`, pa `execute` samo `authenticated`. Nijedna ne vraća `code_hash`. Rade nad nalogom za `auth.uid()` i nad najnovijim redom tog mejla. Zaključavanje je po mejlu.
+
+- `patient_email_challenge_quota(ip_hash)` vraća broj slanja tog mejla i te mreže u poslednjem satu.
+- `start_patient_email_challenge(code_hash, ip_hash)` upisuje izazov ako je mejl slao manje od tri puta u satu. Inače `rate_limit`. Već potvrđen mejl daje `already_confirmed`. Turnstile ne proverava: posle 10 slanja sa mreže captcha ostaje u server akciji, kao `request_clinic_access`.
+- `abandon_patient_email_challenge(code_hash)` briše svež nepotrošen red ako mejl nije otišao.
+- `confirm_patient_email(code)` prima šest cifara. Heš se proverava u bazi, ne u odgovoru. Pogrešan kod poveća `attempt_count`; peti gasi red. Tačan postavi `consumed_at`, pa tek onda `email_confirmed_at`. Stariji kod ne oživljava.
+
+Heš i dalje pravi aplikacija, Argon2id kao kod pozivnice (`m=19456`, `t=2`, `p=1`). Provera je `pgsodium.crypto_pwhash_str_verify`, samo ako je ekstenzija već na test projektu. Prvo jedna proba: heš iz `hashInviteCode` i tačan kod moraju da prođu, pogrešan ne. Ako proba ne prođe, stani. Ne uvodi bcrypt.
+
+Gotovo kad je migracija na test projektu `hmkxuvwpjvzekpvpmsuk`: nepotvrđen nalog ima prazan `email_confirmed_at`, peti pogrešan kod gasi izazov, tačan kod postavlja potvrdu, a `anon` i `service_role` ne zovu funkcije.
 
 ### 2.D11 Prijava pacijenta
 
