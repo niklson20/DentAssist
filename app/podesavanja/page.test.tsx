@@ -1,11 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireMember } = vi.hoisted(() => ({
+const { requireMember, loadGuide } = vi.hoisted(() => ({
   requireMember: vi.fn(),
+  loadGuide: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ requireMember }));
+vi.mock("./vodic/load-guide", () => ({ loadGuide }));
+vi.mock("./vodic/guide-wizard", () => ({
+  GuideWizard: () => <div data-testid="guide-wizard">Vodič</div>,
+}));
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -28,6 +33,8 @@ const member = { userId: "u1", clinicId: "c1" };
 
 beforeEach(() => {
   requireMember.mockReset();
+  loadGuide.mockReset();
+  loadGuide.mockResolvedValue({ status: "complete" });
 });
 
 describe("settings page", () => {
@@ -42,6 +49,34 @@ describe("settings page", () => {
     expect(html).toContain('href="/podesavanja/uredjaji"');
     expect(html).toContain('href="/podesavanja/pravni-podaci"');
     expect(html).toContain('href="/podesavanja/nalog"');
+  });
+
+  it("shows the guide for an owner while setup is incomplete", async () => {
+    requireMember.mockResolvedValue({ ...member, role: "owner" });
+    loadGuide.mockResolvedValue({
+      status: "ready",
+      step: "terms",
+      ownerMemberId: "m1",
+      ownerSeesPatients: false,
+      ownerPinSet: false,
+      someoneSeesPatients: false,
+      pendingDentistInvite: false,
+      clinic: {
+        name: "Test",
+        city: "Beograd",
+        address: "",
+        phone: "",
+        slotMinutes: 30,
+        bufferMinutes: 0,
+        defaultDurationMin: 30,
+        minNoticeMinutes: 120,
+        maxAheadDays: 30,
+        defaultTypeName: "Pregled",
+      },
+    });
+    const html = renderToStaticMarkup(await Page());
+    expect(html).toContain("Vodič");
+    expect(html).not.toContain("Odeljci ordinacije.");
   });
 
   it("lists only the account section for reception", async () => {
