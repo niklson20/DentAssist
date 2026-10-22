@@ -31,6 +31,33 @@ export const newPasswordSchema = z.object({
   clinicSlug: optionalClinicSlug,
 });
 
+const inviteToken = z
+  .string({ error: "Ovaj link više ne važi." })
+  .trim()
+  .min(1, "Ovaj link više ne važi.");
+
+function requiredName(empty: string, max: number) {
+  return z.string({ error: empty }).trim().min(1, empty).max(max, empty);
+}
+
+export const clinicInviteSchema = z.object({
+  token: inviteToken,
+  clinicName: requiredName("Unesite naziv ordinacije.", 120),
+  firstName: requiredName("Unesite ime.", 80),
+  lastName: requiredName("Unesite prezime.", 80),
+  code: z
+    .string({ error: "Unesite kod od 6 cifara." })
+    .trim()
+    .regex(/^\d{6}$/, "Unesite kod od 6 cifara."),
+  password: z.string({ error: "Unesite lozinku." }).min(1, "Unesite lozinku."),
+});
+
+export const clinicInviteResendSchema = z.object({
+  token: inviteToken,
+});
+
 export type SignInInput = z.infer<typeof signInSchema>;
 export type PasswordResetRequestInput = z.infer<typeof passwordResetRequestSchema>;
 export type NewPasswordInput = z.infer<typeof newPasswordSchema>;
+export type ClinicInviteInput = z.infer<typeof clinicInviteSchema>;
+export type ClinicInviteResendInput = z.infer<typeof clinicInviteResendSchema>;

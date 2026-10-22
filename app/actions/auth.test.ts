@@ -14,6 +14,13 @@ const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
   getSessionKind: vi.fn(),
   createRecoveryToken: vi.fn(),
+  createConfirmedUser: vi.fn(),
+  deleteAuthUser: vi.fn(),
+  readClinicInvite: vi.fn(),
+  recordClinicInviteFailure: vi.fn(),
+  storeClinicInviteResend: vi.fn(),
+  revertClinicInviteResend: vi.fn(),
+  acceptClinicInviteMembership: vi.fn(),
   sendMail: vi.fn(),
 }));
 
@@ -22,7 +29,16 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ set: mocks.cookieSet }),
   headers: async () => ({ get: (name: string) => mocks.headerGet(name) }),
 }));
-vi.mock("@/lib/supabase/admin", () => ({ createRecoveryToken: mocks.createRecoveryToken }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createRecoveryToken: mocks.createRecoveryToken,
+  createConfirmedUser: mocks.createConfirmedUser,
+  deleteAuthUser: mocks.deleteAuthUser,
+  readClinicInvite: mocks.readClinicInvite,
+  recordClinicInviteFailure: mocks.recordClinicInviteFailure,
+  storeClinicInviteResend: mocks.storeClinicInviteResend,
+  revertClinicInviteResend: mocks.revertClinicInviteResend,
+  acceptClinicInviteMembership: mocks.acceptClinicInviteMembership,
+}));
 vi.mock("@/lib/mail", () => ({
   sendMail: mocks.sendMail,
   MailError: class MailError extends Error {
@@ -43,7 +59,9 @@ vi.mock("@/lib/auth", async (importOriginal) => ({
   getSessionKind: mocks.getSessionKind,
 }));
 
-import { requestPasswordReset, setNewPassword, signIn } from "@/app/actions/auth";
+import { acceptClinicInvite, requestPasswordReset, resendClinicInvite, setNewPassword, signIn } from "@/app/actions/auth";
+import { clinicInviteText, hashInviteCode, hashInviteToken, verifyInviteCode } from "@/lib/clinic-invite";
+import { MailError } from "@/lib/mail";
 import { passwordResetText, PASSWORD_RESET_SUBJECT } from "@/lib/password-reset";
 import { REMEMBER_COOKIE, REMEMBER_MAX_AGE_SECONDS } from "@/lib/supabase/server";
 import { SESSION_GATE_COOKIE } from "@/proxy";
@@ -328,5 +346,205 @@ describe("setNewPassword", () => {
       "REDIRECT:/prijava",
     );
     expect(mocks.updateUser).toHaveBeenCalledWith({ password: "nova-lozinka" });
+  });
+});
+
+describe("clinic invite", () => {
+  const pepper = "test-pepper";
+  const token = "invite-token";
+  const tokenHash = hashInviteToken(token, pepper);
+  const inviteForm = {
+    token,
+    clinicName: "Ordinacija Jovanović",
+    firstName: "Ana",
+    lastName: "Jović",
+    code: "123456",
+    password: "lozinka-1",
+  };
+  let codeHash = "";
+
+  beforeEach(async () => {
+    vi.stubEnv("TOKEN_PEPPER", pepper);
+    vi.stubEnv("STAFF_URL", "https://dent.dentassist.rs");
+    mocks.headerGet.mockImplementation((name: string) => (name === "origin" ? "http://localhost:3000" : null));
+    if (!codeHash) {
+      codeHash = await hashInviteCode("123456");
+    }
+    mocks.readClinicInvite.mockResolvedValue({
+      status: "ready",
+      email: "Vlasnik@Example.com",
+      codeHash,
+    });
+    mocks.recordClinicInviteFailure.mockResolvedValue({ status: "wrong" });
+    mocks.createConfirmedUser.mockResolvedValue({ status: "ok", userId: "user-1" });
+    mocks.deleteAuthUser.mockResolvedValue(undefined);
+    mocks.acceptClinicInviteMembership.mockResolvedValue({ status: "ok" });
+    mocks.storeClinicInviteResend.mockResolvedValue({
+      status: "ok",
+      email: "vlasnik@example.com",
+      previousCodeHash: codeHash,
+      previousSendCount: 1,
+      previousLastSentAt: null,
+    });
+    mocks.revertClinicInviteResend.mockResolvedValue(true);
+    mocks.sendMail.mockResolvedValue(undefined);
+    mocks.getSessionKind.mockResolvedValue("staff");
+    mocks.signInWithPassword.mockResolvedValue({ error: null });
+    mocks.signOut.mockResolvedValue({ error: null });
+    mocks.createClient.mockResolvedValue({
+      auth: { signInWithPassword: mocks.signInWithPassword, signOut: mocks.signOut },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("rejects a short code without reading the invite", async () => {
+    const result = await acceptClinicInvite(null, form({ ...inviteForm, code: "12" }));
+    expect(result.ok).toBe(false);
+    expect(mocks.readClinicInvite).not.toHaveBeenCalled();
+    expect(mocks.createConfirmedUser).not.toHaveBeenCalled();
+  });
+
+  it("does not call the database when the pepper is missing", async () => {
+    vi.stubEnv("TOKEN_PEPPER", "");
+    const result = await acceptClinicInvite(null, form(inviteForm));
+    expect(result).toEqual({
+      ok: false,
+      error: "Pozivnica trenutno ne može da se otvori. Pokušajte ponovo.",
+    });
+    expect(mocks.readClinicInvite).not.toHaveBeenCalled();
+  });
+
+  it("counts a wrong code and does not create a user", async () => {
+    const result = await acceptClinicInvite(null, form({ ...inviteForm, code: "000000" }));
+    expect(result).toEqual({
+      ok: false,
+      error: "Pogrešan kod.",
+      fieldErrors: { code: ["Pogrešan kod."] },
+    });
+    expect(mocks.recordClinicInviteFailure).toHaveBeenCalledWith(tokenHash);
+    expect(mocks.createConfirmedUser).not.toHaveBeenCalled();
+  });
+
+  it("retires the link after the fifth wrong code", async () => {
+    mocks.recordClinicInviteFailure.mockResolvedValue({ status: "invalid" });
+    const result = await acceptClinicInvite(null, form({ ...inviteForm, code: "000000" }));
+    expect(result).toEqual({ ok: false, error: "Ovaj link više ne važi." });
+    expect(mocks.createConfirmedUser).not.toHaveBeenCalled();
+  });
+
+  it("opens the clinic, signs the owner in for this browser session, and goes to /danas", async () => {
+    await expect(acceptClinicInvite(null, form(inviteForm))).rejects.toThrow("REDIRECT:/danas");
+    expect(mocks.readClinicInvite).toHaveBeenCalledWith(tokenHash);
+    expect(mocks.createConfirmedUser).toHaveBeenCalledWith("vlasnik@example.com", "lozinka-1");
+    expect(mocks.acceptClinicInviteMembership).toHaveBeenCalledWith({
+      tokenHash,
+      codeHash,
+      userId: "user-1",
+      firstName: "Ana",
+      lastName: "Jović",
+      clinicName: "Ordinacija Jovanović",
+    });
+    expect(mocks.createClient).toHaveBeenCalledWith({ remember: false });
+    expect(mocks.signInWithPassword).toHaveBeenCalledWith({
+      email: "vlasnik@example.com",
+      password: "lozinka-1",
+    });
+    expect(cookieCall(SESSION_GATE_COOKIE)?.[1]).toBe("staff");
+    expect(cookieCall(SESSION_GATE_COOKIE)?.[2].maxAge).toBeUndefined();
+    expect(cookieCall(REMEMBER_COOKIE)?.[1]).toBe("0");
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+  });
+
+  it("deletes the new auth user when the clinic cannot be opened", async () => {
+    mocks.acceptClinicInviteMembership.mockResolvedValue({ status: "invalid" });
+    const result = await acceptClinicInvite(null, form(inviteForm));
+    expect(result).toEqual({ ok: false, error: "Ovaj link više ne važi." });
+    expect(mocks.deleteAuthUser).toHaveBeenCalledWith("user-1");
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
+
+  it("keeps an account that is already a member", async () => {
+    mocks.acceptClinicInviteMembership.mockResolvedValue({ status: "already_member" });
+    const result = await acceptClinicInvite(null, form(inviteForm));
+    expect(result).toEqual({ ok: false, error: "Ovaj mejl već ima nalog." });
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+  });
+
+  it("asks for another password without opening the clinic", async () => {
+    mocks.createConfirmedUser.mockResolvedValue({ status: "weak_password" });
+    const result = await acceptClinicInvite(null, form(inviteForm));
+    expect(result).toEqual({
+      ok: false,
+      error: "Izaberite drugu lozinku.",
+      fieldErrors: { password: ["Izaberite drugu lozinku."] },
+    });
+    expect(mocks.acceptClinicInviteMembership).not.toHaveBeenCalled();
+  });
+
+  it("tells the owner to sign in when the session cannot be stored", async () => {
+    mocks.signInWithPassword.mockResolvedValue({ error: { code: "unexpected", status: 500 } });
+    const result = await acceptClinicInvite(null, form(inviteForm));
+    expect(result).toEqual({ ok: false, error: "Nalog je otvoren. Prijavite se." });
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+  });
+
+  it("mails a new code on STAFF_URL and stores the matching hash", async () => {
+    const result = await resendClinicInvite(null, form({ token }));
+    expect(result).toEqual({ ok: true, data: { sent: true } });
+    const mail = mocks.sendMail.mock.calls[0]?.[0] as { to: string; subject: string; text: string };
+    const code = mail.text.match(/Kod: (\d{6})/)?.[1] ?? "";
+    const storedHash = mocks.storeClinicInviteResend.mock.calls[0]?.[1] as string;
+    expect(mail.to).toBe("vlasnik@example.com");
+    expect(mail.subject).toBe("Otvorite ordinaciju");
+    expect(mail.text).toBe(clinicInviteText("https://dent.dentassist.rs/poziv/invite-token", code));
+    expect(mocks.storeClinicInviteResend).toHaveBeenCalledWith(tokenHash, storedHash);
+    expect(await verifyInviteCode(storedHash, code)).toBe(true);
+    expect(mocks.revertClinicInviteResend).not.toHaveBeenCalled();
+  });
+
+  it("does not mint a new code when the link is dead", async () => {
+    mocks.readClinicInvite.mockResolvedValue({ status: "invalid" });
+    const result = await resendClinicInvite(null, form({ token }));
+    expect(result).toEqual({ ok: false, error: "Ovaj link više ne važi." });
+    expect(mocks.storeClinicInviteResend).not.toHaveBeenCalled();
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+  });
+
+  it("stops at three resends an hour", async () => {
+    mocks.storeClinicInviteResend.mockResolvedValue({ status: "rate_limit" });
+    const result = await resendClinicInvite(null, form({ token }));
+    expect(result).toEqual({
+      ok: false,
+      error: "Kod može da se pošalje najviše tri puta na sat.",
+    });
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+  });
+
+  it("restores the previous code when the mail fails", async () => {
+    mocks.sendMail.mockRejectedValue(new MailError("rate_limit_exceeded"));
+    const result = await resendClinicInvite(null, form({ token }));
+    expect(result).toEqual({
+      ok: false,
+      error: "Previše pokušaja. Pokušajte ponovo za nekoliko minuta.",
+    });
+    expect(mocks.revertClinicInviteResend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokenHash,
+        previousCodeHash: codeHash,
+        previousSendCount: 1,
+        previousLastSentAt: null,
+      }),
+    );
+  });
+
+  it("uses the current origin when STAFF_URL is unset", async () => {
+    vi.stubEnv("STAFF_URL", "");
+    const result = await resendClinicInvite(null, form({ token }));
+    expect(result.ok).toBe(true);
+    const mail = mocks.sendMail.mock.calls[0]?.[0] as { text: string };
+    expect(mail.text.startsWith("Link važi 7 dana: http://localhost:3000/poziv/invite-token.")).toBe(true);
   });
 });

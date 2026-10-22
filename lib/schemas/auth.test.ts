@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { newPasswordSchema, passwordResetRequestSchema, signInSchema } from "@/lib/schemas/auth";
+import {
+  clinicInviteResendSchema,
+  clinicInviteSchema,
+  newPasswordSchema,
+  passwordResetRequestSchema,
+  signInSchema,
+} from "@/lib/schemas/auth";
 
 describe("signInSchema", () => {
   it("trims and lowercases the email", () => {
@@ -69,6 +75,52 @@ describe("passwordResetRequestSchema", () => {
     if (result.success) {
       expect(result.data.clinicSlug).toBeUndefined();
     }
+  });
+});
+
+describe("clinicInviteSchema", () => {
+  it("keeps a six-digit code and trims the names", () => {
+    const result = clinicInviteSchema.safeParse({
+      token: " token ",
+      clinicName: " Ordinacija ",
+      firstName: " Ana ",
+      lastName: " Jović ",
+      code: " 123456 ",
+      password: " lozinka ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({
+        token: "token",
+        clinicName: "Ordinacija",
+        firstName: "Ana",
+        lastName: "Jović",
+        code: "123456",
+        password: " lozinka ",
+      });
+    }
+  });
+
+  it("rejects a code that is not six digits", () => {
+    const result = clinicInviteSchema.safeParse({
+      token: "token",
+      clinicName: "Ordinacija",
+      firstName: "Ana",
+      lastName: "Jović",
+      code: "12345",
+      password: "lozinka",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message)).toEqual(["Unesite kod od 6 cifara."]);
+    }
+  });
+});
+
+describe("clinicInviteResendSchema", () => {
+  it("rejects an empty token", () => {
+    const result = clinicInviteResendSchema.safeParse({ token: "  " });
+    expect(result.success).toBe(false);
   });
 });
 
