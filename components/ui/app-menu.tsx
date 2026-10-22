@@ -45,6 +45,37 @@ const items: MenuItem[] = [
   { href: "/platforma", label: "Platforma", icon: ShieldCheck },
 ];
 
+export function usesStaffShellMenu(pathname: string): boolean {
+  if (pathname === "/") {
+    return false;
+  }
+  if (pathname === "/prijava" || pathname.startsWith("/prijava/")) {
+    return false;
+  }
+  if (pathname === "/za-ordinacije" || pathname.startsWith("/za-ordinacije/")) {
+    return false;
+  }
+  if (pathname === "/ordinacije" || pathname.startsWith("/ordinacije/")) {
+    return false;
+  }
+  if (pathname === "/zakazivanje" || pathname.startsWith("/zakazivanje/")) {
+    return false;
+  }
+
+  return (
+    pathname === "/danas" ||
+    pathname.startsWith("/danas/") ||
+    pathname === "/pacijenti" ||
+    pathname.startsWith("/pacijenti/") ||
+    pathname === "/podesavanja" ||
+    pathname.startsWith("/podesavanja/") ||
+    pathname === "/statistika" ||
+    pathname.startsWith("/statistika/") ||
+    pathname === "/platforma" ||
+    pathname.startsWith("/platforma/")
+  );
+}
+
 function isCurrent(pathname: string, href: string) {
   if (href === "/") {
     return pathname === "/";
@@ -55,6 +86,10 @@ function isCurrent(pathname: string, href: string) {
 
 export function AppMenu({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  if (!usesStaffShellMenu(pathname)) {
+    return <>{children}</>;
+  }
 
   return (
     <SidebarProvider>
