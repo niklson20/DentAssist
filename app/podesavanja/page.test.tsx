@@ -1,13 +1,18 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireMember, loadGuide } = vi.hoisted(() => ({
+const { requireMember, loadGuide, loadSettingsPinGate } = vi.hoisted(() => ({
   requireMember: vi.fn(),
   loadGuide: vi.fn(),
+  loadSettingsPinGate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ requireMember }));
+vi.mock("./load-pin-gate", () => ({ loadSettingsPinGate }));
 vi.mock("./vodic/load-guide", () => ({ loadGuide }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 vi.mock("./vodic/guide-wizard", () => ({
   GuideWizard: () => <div data-testid="guide-wizard">Vodič</div>,
 }));
@@ -34,7 +39,9 @@ const member = { userId: "u1", clinicId: "c1" };
 beforeEach(() => {
   requireMember.mockReset();
   loadGuide.mockReset();
+  loadSettingsPinGate.mockReset();
   loadGuide.mockResolvedValue({ status: "complete" });
+  loadSettingsPinGate.mockResolvedValue({ status: "open" });
 });
 
 describe("settings page", () => {
@@ -77,6 +84,16 @@ describe("settings page", () => {
     const html = renderToStaticMarkup(await Page());
     expect(html).toContain("Vodič");
     expect(html).not.toContain("Odeljci ordinacije.");
+  });
+
+  it("asks the owner for a PIN when the gate is locked", async () => {
+    requireMember.mockResolvedValue({ ...member, role: "owner" });
+    loadSettingsPinGate.mockResolvedValue({ status: "locked", pinSet: true });
+    const html = renderToStaticMarkup(await Page());
+    expect(html).toContain("PIN vlasnika");
+    expect(html).toContain('name="pin"');
+    expect(html).not.toContain('href="/podesavanja/ordinacija"');
+    expect(loadGuide).not.toHaveBeenCalled();
   });
 
   it("lists only the account section for reception", async () => {

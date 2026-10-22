@@ -3,12 +3,14 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireOwner, loadStaffPage } = vi.hoisted(() => ({
+const { requireOwner, loadStaffPage, loadSettingsPinGate } = vi.hoisted(() => ({
   requireOwner: vi.fn(),
   loadStaffPage: vi.fn(),
+  loadSettingsPinGate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ requireOwner }));
+vi.mock("../load-pin-gate", () => ({ loadSettingsPinGate }));
 vi.mock("./load-staff", () => ({ loadStaffPage }));
 vi.mock("./staff-page", () => ({
   StaffPage: () => <div data-testid="staff-page" />,
@@ -22,6 +24,8 @@ const clientSource = readFileSync(path.join(process.cwd(), "app/podesavanja/osob
 beforeEach(() => {
   requireOwner.mockReset();
   loadStaffPage.mockReset();
+  loadSettingsPinGate.mockReset();
+  loadSettingsPinGate.mockResolvedValue({ status: "open" });
   requireOwner.mockResolvedValue({
     userId: "10000000-0000-4000-8000-000000000002",
     clinicId: "11111111-1111-4111-8111-111111111111",

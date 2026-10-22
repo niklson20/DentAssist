@@ -3,13 +3,19 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireMember, loadWorkingHoursPage } = vi.hoisted(() => ({
+const { requireMember, loadWorkingHoursPage, loadSettingsPinGate } = vi.hoisted(() => ({
   requireMember: vi.fn(),
   loadWorkingHoursPage: vi.fn(),
+  loadSettingsPinGate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ requireMember }));
+vi.mock("../load-pin-gate", () => ({ loadSettingsPinGate }));
 vi.mock("./load-working-hours", () => ({ loadWorkingHoursPage }));
+vi.mock("next/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/navigation")>();
+  return { ...actual, useRouter: () => ({ refresh: vi.fn() }) };
+});
 vi.mock("./working-hours-form", () => ({
   WorkingHoursForm: ({
     canPickDentist,
@@ -38,6 +44,8 @@ const clinicId = "11111111-1111-4111-8111-111111111111";
 beforeEach(() => {
   requireMember.mockReset();
   loadWorkingHoursPage.mockReset();
+  loadSettingsPinGate.mockReset();
+  loadSettingsPinGate.mockResolvedValue({ status: "open" });
   requireMember.mockResolvedValue({
     userId: "10000000-0000-4000-8000-000000000002",
     clinicId,
@@ -83,5 +91,15 @@ describe("working hours page", () => {
     });
     const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('data-can-pick="no"');
+    expect(html).not.toContain("PIN vlasnika");
+    expect(loadSettingsPinGate).toHaveBeenCalled();
+  });
+
+  it("asks the owner for a PIN before loading hours", async () => {
+    loadSettingsPinGate.mockResolvedValue({ status: "locked", pinSet: true });
+    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
+    expect(html).toContain("PIN vlasnika");
+    expect(html).not.toContain("data-can-pick");
+    expect(loadWorkingHoursPage).not.toHaveBeenCalled();
   });
 });

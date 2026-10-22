@@ -3,12 +3,14 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireOwner, loadLegalDataPage } = vi.hoisted(() => ({
+const { requireOwner, loadLegalDataPage, loadSettingsPinGate } = vi.hoisted(() => ({
   requireOwner: vi.fn(),
   loadLegalDataPage: vi.fn(),
+  loadSettingsPinGate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ requireOwner }));
+vi.mock("../load-pin-gate", () => ({ loadSettingsPinGate }));
 vi.mock("./load-legal-data", () => ({ loadLegalDataPage }));
 vi.mock("./legal-data-form", () => ({
   LegalDataForm: ({ fields }: { fields: { taxId: string } }) => (
@@ -32,6 +34,8 @@ const clinicId = "11111111-1111-4111-8111-111111111111";
 beforeEach(() => {
   requireOwner.mockReset();
   loadLegalDataPage.mockReset();
+  loadSettingsPinGate.mockReset();
+  loadSettingsPinGate.mockResolvedValue({ status: "open" });
   requireOwner.mockResolvedValue({ userId: "u1", clinicId, role: "owner" });
 });
 

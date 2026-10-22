@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { requireMember } from "@/lib/auth";
 
+import { loadSettingsPinGate } from "../load-pin-gate";
+import { SettingsPinView } from "../pin-gate-screen";
 import { loadWorkingHoursPage } from "./load-working-hours";
 import { WorkingHoursForm } from "./working-hours-form";
 
@@ -18,6 +20,11 @@ export default async function Page({ searchParams }: PageProps) {
   const member = await requireMember();
   if (member.role === "reception") {
     redirect("/podesavanja/nalog");
+  }
+
+  const gate = await loadSettingsPinGate(member);
+  if (gate.status !== "open") {
+    return <SettingsPinView gate={gate} />;
   }
 
   const params = await searchParams;

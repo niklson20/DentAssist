@@ -3,13 +3,18 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireOwner, loadClinicProfile } = vi.hoisted(() => ({
+const { requireOwner, loadClinicProfile, loadSettingsPinGate } = vi.hoisted(() => ({
   requireOwner: vi.fn(),
   loadClinicProfile: vi.fn(),
+  loadSettingsPinGate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ requireOwner }));
+vi.mock("../load-pin-gate", () => ({ loadSettingsPinGate }));
 vi.mock("./load-clinic", () => ({ loadClinicProfile }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 import Page from "./page";
 
@@ -38,6 +43,8 @@ const clinic = {
 beforeEach(() => {
   requireOwner.mockReset();
   loadClinicProfile.mockReset();
+  loadSettingsPinGate.mockReset();
+  loadSettingsPinGate.mockResolvedValue({ status: "open" });
   requireOwner.mockResolvedValue({
     userId: "10000000-0000-4000-8000-000000000002",
     clinicId: "11111111-1111-4111-8111-111111111111",
@@ -64,5 +71,13 @@ describe("clinic profile page", () => {
     expect(html).toContain('name="maxAheadDays"');
     expect(html).toContain('name="slotMinutes"');
     expect(html).toContain('value="45"');
+  });
+
+  it("asks for a PIN before loading the clinic", async () => {
+    loadSettingsPinGate.mockResolvedValue({ status: "locked", pinSet: true });
+    const html = renderToStaticMarkup(await Page());
+    expect(html).toContain("PIN vlasnika");
+    expect(html).not.toContain('name="maxAheadDays"');
+    expect(loadClinicProfile).not.toHaveBeenCalled();
   });
 });

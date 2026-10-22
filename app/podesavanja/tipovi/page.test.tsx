@@ -3,12 +3,14 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireOwner, loadAppointmentTypesPage } = vi.hoisted(() => ({
+const { requireOwner, loadAppointmentTypesPage, loadSettingsPinGate } = vi.hoisted(() => ({
   requireOwner: vi.fn(),
   loadAppointmentTypesPage: vi.fn(),
+  loadSettingsPinGate: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ requireOwner }));
+vi.mock("../load-pin-gate", () => ({ loadSettingsPinGate }));
 vi.mock("./load-appointment-types", () => ({ loadAppointmentTypesPage }));
 vi.mock("./appointment-types-page", () => ({
   AppointmentTypesPage: ({ types }: { types: { id: string }[] }) => (
@@ -30,6 +32,8 @@ const typeId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 beforeEach(() => {
   requireOwner.mockReset();
   loadAppointmentTypesPage.mockReset();
+  loadSettingsPinGate.mockReset();
+  loadSettingsPinGate.mockResolvedValue({ status: "open" });
   requireOwner.mockResolvedValue({ userId: "u1", clinicId, role: "owner" });
 });
 
