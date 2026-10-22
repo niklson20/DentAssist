@@ -43,7 +43,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.C4 | Radno vreme | Composer 2.5 Fast | [x] |
 | 2.C5 | Tipovi | Composer 2.5 Fast | [x] |
 | 2.C6 | Uređaji | Composer 2.5 Fast | [x] |
-| 2.C7 | Pravni podaci | Composer 2.5 Fast | [ ] |
+| 2.C7 | Pravni podaci | Composer 2.5 Fast | [x] |
 | 2.C8 | Vodič | Composer 2.5 Fast | [ ] |
 | 2.C10 | PIN kapija | Claude Sonnet thinking | [ ] |
 | 2.D1 | Imenik | Composer 2.5 Fast | [ ] |
