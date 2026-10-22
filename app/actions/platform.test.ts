@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   rpc: vi.fn(),
   fetch: vi.fn(),
+  requirePlatformAdmin: vi.fn(),
+  sendMail: vi.fn(),
+  revalidatePath: vi.fn(),
 }));
 
 vi.mock("next/headers", () => ({
@@ -22,7 +25,31 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: mocks.createSupabaseServerClient,
 }));
 
-import { loadClinicAccessFormContext, requestClinicAccess } from "./platform";
+vi.mock("@/lib/auth", () => ({
+  requirePlatformAdmin: mocks.requirePlatformAdmin,
+}));
+
+vi.mock("@/lib/mail", () => ({
+  sendMail: mocks.sendMail,
+  MailError: class MailError extends Error {
+    readonly code: string;
+    constructor(code: string) {
+      super("sendMail failed");
+      this.code = code;
+    }
+  },
+}));
+
+vi.mock("next/cache", () => ({
+  revalidatePath: mocks.revalidatePath,
+}));
+
+import {
+  dismissClinicAccessRequest,
+  loadClinicAccessFormContext,
+  requestClinicAccess,
+  sendClinicAccessInvite,
+} from "./platform";
 
 const PEPPER = "test-pepper";
 const IP = "203.0.113.10";
@@ -185,5 +212,151 @@ describe("requestClinicAccess", () => {
       expect(result.fieldErrors?.turnstile?.[0]).toBe("Potvrdite da niste robot.");
     }
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+});
+
+const REQUEST_ID = "11111111-1111-4111-8111-111111111111";
+const INVITE_ID = "22222222-2222-4222-8222-222222222222";
+
+describe("sendClinicAccessInvite", () => {
+  beforeEach(() => {
+    vi.stubEnv("TOKEN_PEPPER", PEPPER);
+    vi.stubEnv("STAFF_URL", "https://dent.example.com");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    mocks.requirePlatformAdmin.mockResolvedValue({ userId: "admin-user" });
+    mocks.sendMail.mockResolvedValue(undefined);
+    mocks.headerGet.mockImplementation((name: string) => {
+      if (name === "host") {
+        return "localhost:3000";
+      }
+      return null;
+    });
+    mocks.createClient.mockReturnValue({
+      from: vi.fn(() => ({
+        delete: vi.fn(() => ({
+          eq: vi.fn(async () => ({ error: null })),
+        })),
+      })),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
+  });
+
+  it("sends mail and links the request to the invite", async () => {
+    const insert = vi.fn(() => ({
+      select: vi.fn(() => ({
+        single: vi.fn(async () => ({ data: { id: INVITE_ID }, error: null })),
+      })),
+    }));
+    const update = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          select: vi.fn(() => ({
+            maybeSingle: vi.fn(async () => ({ data: { id: REQUEST_ID }, error: null })),
+          })),
+        })),
+      })),
+    }));
+    const from = vi.fn((table: string) => {
+      if (table === "clinic_access_requests") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn(async () => ({
+                data: { id: REQUEST_ID, email: "nova@example.com", status: "pending" },
+                error: null,
+              })),
+            })),
+          })),
+          update,
+        };
+      }
+      if (table === "clinic_invites") {
+        return { insert };
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+    mocks.createSupabaseServerClient.mockResolvedValue({ from });
+
+    const result = await sendClinicAccessInvite(null, form({ requestId: REQUEST_ID }));
+
+    expect(result).toEqual({ ok: true, data: { sent: true } });
+    expect(mocks.sendMail).toHaveBeenCalledWith({
+      to: "nova@example.com",
+      subject: "Otvorite ordinaciju",
+      text: expect.stringContaining("https://dent.example.com/poziv/"),
+    });
+    expect(update).toHaveBeenCalled();
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/platforma");
+  });
+
+  it("does not link the request when mail fails", async () => {
+    mocks.sendMail.mockRejectedValue(new Error("mail down"));
+    const insert = vi.fn(() => ({
+      select: vi.fn(() => ({
+        single: vi.fn(async () => ({ data: { id: INVITE_ID }, error: null })),
+      })),
+    }));
+    const update = vi.fn();
+    const from = vi.fn((table: string) => {
+      if (table === "clinic_access_requests") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn(async () => ({
+                data: { id: REQUEST_ID, email: "nova@example.com", status: "pending" },
+                error: null,
+              })),
+            })),
+          })),
+          update,
+        };
+      }
+      if (table === "clinic_invites") {
+        return { insert };
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+    mocks.createSupabaseServerClient.mockResolvedValue({ from });
+
+    const result = await sendClinicAccessInvite(null, form({ requestId: REQUEST_ID }));
+
+    expect(result.ok).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("dismissClinicAccessRequest", () => {
+  beforeEach(() => {
+    mocks.requirePlatformAdmin.mockResolvedValue({ userId: "admin-user" });
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("marks a pending request dismissed without sending mail", async () => {
+    const update = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          select: vi.fn(() => ({
+            maybeSingle: vi.fn(async () => ({ data: { id: REQUEST_ID }, error: null })),
+          })),
+        })),
+      })),
+    }));
+    mocks.createSupabaseServerClient.mockResolvedValue({
+      from: vi.fn(() => ({ update })),
+    });
+
+    const result = await dismissClinicAccessRequest(null, form({ requestId: REQUEST_ID }));
+
+    expect(result).toEqual({ ok: true, data: { dismissed: true } });
+    expect(mocks.sendMail).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/platforma");
   });
 });
