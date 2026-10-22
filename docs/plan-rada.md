@@ -36,7 +36,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.B1 | Zahtev za pristup | Composer 2.5 Fast | [x] |
 | 2.B2 | Pozivnica platforme | Composer 2.5 Fast | [x] |
 | 2.B3 | Gašenje | Composer 2.5 Fast | [x] |
-| 2.C1 | Školjka podešavanja | Composer 2.5 Fast | [ ] |
+| 2.C1 | Školjka podešavanja | Composer 2.5 Fast | [x] |
 | 2.C9 | Nalog osoblja | Composer 2.5 Fast | [ ] |
 | 2.C2 | Profil ordinacije | Composer 2.5 Fast | [ ] |
 | 2.C3 | Osoblje | Composer 2.5 Fast | [ ] |
