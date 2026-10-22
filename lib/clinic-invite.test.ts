@@ -4,6 +4,7 @@ import {
   CLINIC_INVITE_SUBJECT,
   clinicInviteLink,
   clinicInviteText,
+  hashDeviceSecret,
   hashInviteCode,
   hashInviteToken,
   isInviteCodeHash,
@@ -23,6 +24,7 @@ describe("clinic invite tokens", () => {
     expect(hashInviteToken("invite-token", "other")).not.toBe(first);
     expect(hashInviteToken("invite-token", "  ")).toBeNull();
     expect(hashInviteToken("  ", "pepper")).toBeNull();
+    expect(hashDeviceSecret(" device-secret ", "pepper")).toBe(hashInviteToken("device-secret", "pepper"));
   });
 
   it("builds the staff link and falls back to the current origin", () => {

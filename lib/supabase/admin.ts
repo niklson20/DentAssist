@@ -1,9 +1,25 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { isInviteCodeHash, type StaffInviteRole } from "@/lib/clinic-invite";
+import {
+  parseReceptionDeviceList,
+  parseReceptionPin,
+  parseReceptionPinCleared,
+  parseReceptionPinFailure,
+  type ReceptionDeviceList,
+  type ReceptionPinCleared,
+  type ReceptionPinFailure,
+  type ReceptionPinRecord,
+} from "@/lib/reception-pin";
 
 export type RecoveryTokenResult =
   | { status: "ok"; token: string }
+  | { status: "missing" }
+  | { status: "rate_limit" }
+  | { status: "failed" };
+
+export type MagicLinkTokenResult =
+  | { status: "ok"; token: string; userId: string; otpType: "email" | "magiclink" }
   | { status: "missing" }
   | { status: "rate_limit" }
   | { status: "failed" };
@@ -108,6 +124,46 @@ export async function createRecoveryToken(email: string): Promise<RecoveryTokenR
     return { status: "ok", token };
   } catch (error) {
     console.error("Recovery link failed:", error instanceof Error ? error.name : "unknown error");
+    return { status: "failed" };
+  }
+}
+
+/**
+ * Service role mints a magic-link token after a reception PIN has been verified.
+ * No mail is sent, tables are not read, and the caller must match userId to the member.
+ */
+export async function createMagicLinkToken(email: string): Promise<MagicLinkTokenResult> {
+  const admin = createAdminClient();
+  if (!admin) {
+    console.error("PIN session failed: admin environment is not set");
+    return { status: "failed" };
+  }
+
+  try {
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+    });
+    if (error) {
+      if (error.status === 404 || error.code === "user_not_found") {
+        return { status: "missing" };
+      }
+      if (error.status === 429 || error.code === "over_request_rate_limit") {
+        return { status: "rate_limit" };
+      }
+      console.error("PIN session rejected:", error.code ?? error.status ?? "unknown");
+      return { status: "failed" };
+    }
+    const token = data.properties?.hashed_token?.trim();
+    const userId = data.user?.id?.trim();
+    const otpType = magicLinkOtpType(data.properties?.verification_type);
+    if (!token || !userId || !otpType) {
+      console.error("PIN session rejected: empty token");
+      return { status: "failed" };
+    }
+    return { status: "ok", token, userId, otpType };
+  } catch (error) {
+    console.error("PIN session failed:", error instanceof Error ? error.name : "unknown error");
     return { status: "failed" };
   }
 }
@@ -477,6 +533,53 @@ function staffInviteReady(record: Record<string, unknown>): Extract<StaffInviteR
   return { status: "ready", email, codeHash, role, clinicName, inviterName };
 }
 
+export async function listReceptionDevice(secretHash: string): Promise<ReceptionDeviceList> {
+  const record = await inviteRpc("list_reception_device", { p_secret_hash: secretHash });
+  if (!record) {
+    return { status: "failed" };
+  }
+  return parseReceptionDeviceList(record);
+}
+
+export async function readReceptionPin(secretHash: string, memberId: string): Promise<ReceptionPinRecord> {
+  const record = await inviteRpc("read_reception_pin", {
+    p_secret_hash: secretHash,
+    p_member_id: memberId,
+  });
+  if (!record) {
+    return { status: "failed" };
+  }
+  return parseReceptionPin(record);
+}
+
+export async function recordReceptionPinFailure(
+  secretHash: string,
+  memberId: string,
+): Promise<ReceptionPinFailure> {
+  const record = await inviteRpc("record_reception_pin_failure", {
+    p_secret_hash: secretHash,
+    p_member_id: memberId,
+  });
+  if (!record) {
+    return { status: "failed" };
+  }
+  return parseReceptionPinFailure(record);
+}
+
+export async function clearReceptionPinFailures(
+  secretHash: string,
+  memberId: string,
+): Promise<ReceptionPinCleared> {
+  const record = await inviteRpc("clear_reception_pin_failures", {
+    p_secret_hash: secretHash,
+    p_member_id: memberId,
+  });
+  if (!record) {
+    return { status: "failed" };
+  }
+  return parseReceptionPinCleared(record);
+}
+
 /** Service role reaches the Auth admin API only. Tables and RPC stay out of its reach. */
 function createAdminClient(): SupabaseClient | null {
   return keyedClient(process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -495,6 +598,13 @@ function keyedClient(key: string | undefined): SupabaseClient | null {
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+function magicLinkOtpType(value: string | undefined): "email" | "magiclink" | null {
+  if (value === "email" || value === "magiclink") {
+    return value;
+  }
+  return null;
 }
 
 function classifyCreateUserError(error: { code?: string; status?: number }): ConfirmedUserResult {

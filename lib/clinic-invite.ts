@@ -27,6 +27,11 @@ export function hashInviteToken(token: string, pepper: string | undefined): stri
   return createHmac("sha256", secret).update(value).digest("hex");
 }
 
+/** HMAC of the clinic_device cookie. Same pepper and algorithm as an invite link. */
+export function hashDeviceSecret(secret: string, pepper: string | undefined): string | null {
+  return hashInviteToken(secret, pepper);
+}
+
 export function clinicInviteText(link: string, code: string): string {
   return `Link važi 7 dana: ${link}. Kod: ${code}. Na stranici potvrdite mejl i postavite lozinku.`;
 }
