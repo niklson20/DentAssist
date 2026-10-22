@@ -8,6 +8,9 @@ import {
   hashInviteToken,
   isInviteCodeHash,
   randomInviteCode,
+  staffInviteRoleLabel,
+  staffInviteSubject,
+  staffInviteText,
   verifyInviteCode,
 } from "@/lib/clinic-invite";
 
@@ -35,6 +38,22 @@ describe("clinic invite tokens", () => {
     expect(CLINIC_INVITE_SUBJECT).toBe("Otvorite ordinaciju");
     expect(clinicInviteText("https://dent.example/poziv/token", "123456")).toBe(
       "Link važi 7 dana: https://dent.example/poziv/token. Kod: 123456. Na stranici potvrdite mejl i postavite lozinku.",
+    );
+  });
+
+  it("uses the colleague invite mail text", () => {
+    expect(staffInviteRoleLabel("dentist")).toBe("stomatolog");
+    expect(staffInviteRoleLabel("reception")).toBe("recepcija");
+    expect(staffInviteSubject("Ordinacija\nJovanović")).toBe("Poziv u Ordinacija Jovanović");
+    expect(
+      staffInviteText({
+        inviterName: "Ana Jović",
+        roleLabel: "stomatolog",
+        link: "https://dent.example/poziv/token",
+        code: "123456",
+      }),
+    ).toBe(
+      "Ana Jović vas poziva kao stomatolog. Link važi 7 dana: https://dent.example/poziv/token. Kod: 123456.",
     );
   });
 

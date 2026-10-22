@@ -2,7 +2,11 @@ import { createHmac, randomBytes, randomInt } from "node:crypto";
 
 import { argon2Verify, argon2id } from "hash-wasm";
 
+import { memberRoleLabel } from "@/lib/labels";
+
 export const CLINIC_INVITE_SUBJECT = "Otvorite ordinaciju";
+
+export type StaffInviteRole = "dentist" | "reception";
 
 const CODE_HASH =
   /^\$argon2id\$v=19\$m=[0-9]+,t=[0-9]+,p=[0-9]+\$[A-Za-z0-9+/_-]+={0,2}\$[A-Za-z0-9+/_-]+={0,2}$/;
@@ -25,6 +29,31 @@ export function hashInviteToken(token: string, pepper: string | undefined): stri
 
 export function clinicInviteText(link: string, code: string): string {
   return `Link važi 7 dana: ${link}. Kod: ${code}. Na stranici potvrdite mejl i postavite lozinku.`;
+}
+
+/** Lowercase role, as it sits in the sentence „poziva kao {uloga}“. */
+export function staffInviteRoleLabel(role: StaffInviteRole): string {
+  return memberRoleLabel(role).toLowerCase();
+}
+
+/** Subject is „Poziv u {ordinacija}“. Line breaks cannot ride into the header. */
+export function staffInviteSubject(clinicName: string): string {
+  return `Poziv u ${oneLine(clinicName)}`;
+}
+
+/**
+ * „{ime} vas poziva kao {uloga}. Link važi 7 dana: {link}. Kod: {kod}.“
+ * {ime} is the inviter's first and last name.
+ */
+export function staffInviteText(input: {
+  inviterName: string;
+  roleLabel: string;
+  link: string;
+  code: string;
+}): string {
+  const inviterName = oneLine(input.inviterName);
+  const roleLabel = oneLine(input.roleLabel);
+  return `${inviterName} vas poziva kao ${roleLabel}. Link važi 7 dana: ${input.link}. Kod: ${input.code}.`;
 }
 
 export function clinicInviteLink(
@@ -69,6 +98,10 @@ export async function verifyInviteCode(codeHash: string, code: string): Promise<
   } catch {
     return false;
   }
+}
+
+function oneLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").trim();
 }
 
 function absoluteOrigin(value: string | null | undefined): string | null {

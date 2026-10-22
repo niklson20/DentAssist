@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import { isInviteCodeHash } from "@/lib/clinic-invite";
+import { isInviteCodeHash, type StaffInviteRole } from "@/lib/clinic-invite";
 
 export type RecoveryTokenResult =
   | { status: "ok"; token: string }
@@ -20,6 +20,15 @@ export type ClinicInviteRecord =
   | { status: "invalid" }
   | { status: "failed" };
 
+export type ClinicInviteUser =
+  | { status: "ok"; userId: string }
+  | { status: "missing" }
+  | { status: "failed" };
+
+export type PasswordWriteResult = {
+  status: "ok" | "weak_password" | "rate_limit" | "failed";
+};
+
 export type ClinicInviteFailure = { status: "wrong" | "invalid" | "failed" };
 
 export type ClinicInviteResendStored =
@@ -34,6 +43,35 @@ export type ClinicInviteResendStored =
 
 export type ClinicInviteAccepted = {
   status: "ok" | "invalid" | "invalid_name" | "email_mismatch" | "already_member" | "not_ready" | "failed";
+};
+
+export type StaffInviteRecord =
+  | {
+      status: "ready";
+      email: string;
+      codeHash: string;
+      role: StaffInviteRole;
+      clinicName: string;
+      inviterName: string;
+    }
+  | { status: "invalid" }
+  | { status: "failed" };
+
+export type StaffInviteResendStored =
+  | {
+      status: "ok";
+      email: string;
+      role: StaffInviteRole;
+      clinicName: string;
+      inviterName: string;
+      previousCodeHash: string;
+      previousSendCount: number;
+      previousLastSentAt: string | null;
+    }
+  | { status: "invalid" | "rate_limit" | "failed" };
+
+export type StaffInviteAccepted = {
+  status: "ok" | "invalid" | "email_mismatch" | "already_member" | "failed";
 };
 
 /**
@@ -103,6 +141,40 @@ export async function createConfirmedUser(email: string, password: string): Prom
   }
 }
 
+/**
+ * Service role writes the form password to an account the invited email already had.
+ * The code proved the mailbox, and a patient and a staff member share one auth user,
+ * so this form owns that password. Called only after the clinic is open.
+ */
+export async function setUserPassword(userId: string, password: string): Promise<PasswordWriteResult> {
+  const admin = createAdminClient();
+  if (!admin) {
+    console.error("Invite password failed: admin environment is not set");
+    return { status: "failed" };
+  }
+
+  try {
+    const { error } = await admin.auth.admin.updateUserById(userId, {
+      password,
+      email_confirm: true,
+    });
+    if (error) {
+      if (error.code === "weak_password") {
+        return { status: "weak_password" };
+      }
+      if (error.code === "over_request_rate_limit" || error.status === 429) {
+        return { status: "rate_limit" };
+      }
+      console.error("Invite password rejected:", error.code ?? error.status ?? "unknown");
+      return { status: "failed" };
+    }
+    return { status: "ok" };
+  } catch (error) {
+    console.error("Invite password failed:", error instanceof Error ? error.name : "unknown error");
+    return { status: "failed" };
+  }
+}
+
 /** Removes an auth user when the clinic row could not be opened. */
 export async function deleteAuthUser(userId: string): Promise<void> {
   const admin = createAdminClient();
@@ -117,6 +189,36 @@ export async function deleteAuthUser(userId: string): Promise<void> {
     }
   } catch (error) {
     console.error("Invite user cleanup failed:", error instanceof Error ? error.name : "unknown error");
+  }
+}
+
+/**
+ * Finds the auth user an invited email already has. The database answers only while
+ * the invite is open, and takes the token HMAC, so no user list is read here.
+ */
+export async function findClinicInviteUser(tokenHash: string): Promise<ClinicInviteUser> {
+  const client = createPublishableClient();
+  if (!client) {
+    console.error("clinic_invite_user_id failed: Supabase environment is not set");
+    return { status: "failed" };
+  }
+
+  try {
+    const { data, error } = await client.rpc("clinic_invite_user_id", { p_token_hash: tokenHash });
+    if (error) {
+      console.error("clinic_invite_user_id rejected:", error.code ?? "unknown");
+      return { status: "failed" };
+    }
+    if (typeof data !== "string" || !data.trim()) {
+      return { status: "missing" };
+    }
+    return { status: "ok", userId: data.trim() };
+  } catch (error) {
+    console.error(
+      "clinic_invite_user_id failed:",
+      error instanceof Error ? error.name : "unknown error",
+    );
+    return { status: "failed" };
   }
 }
 
@@ -235,9 +337,158 @@ export async function acceptClinicInviteMembership(input: {
   return { status: "failed" };
 }
 
+export async function readStaffInvite(tokenHash: string): Promise<StaffInviteRecord> {
+  const record = await inviteRpc("read_staff_invite", { p_token_hash: tokenHash });
+  if (!record) {
+    return { status: "failed" };
+  }
+  if (record.status === "invalid") {
+    return { status: "invalid" };
+  }
+  if (record.status !== "ready") {
+    return { status: "failed" };
+  }
+  const ready = staffInviteReady(record);
+  return ready ?? { status: "failed" };
+}
+
+export async function findStaffInviteUser(tokenHash: string): Promise<ClinicInviteUser> {
+  const client = createPublishableClient();
+  if (!client) {
+    console.error("staff_invite_user_id failed: Supabase environment is not set");
+    return { status: "failed" };
+  }
+
+  try {
+    const { data, error } = await client.rpc("staff_invite_user_id", { p_token_hash: tokenHash });
+    if (error) {
+      console.error("staff_invite_user_id rejected:", error.code ?? "unknown");
+      return { status: "failed" };
+    }
+    if (typeof data !== "string" || !data.trim()) {
+      return { status: "missing" };
+    }
+    return { status: "ok", userId: data.trim() };
+  } catch (error) {
+    console.error("staff_invite_user_id failed:", error instanceof Error ? error.name : "unknown error");
+    return { status: "failed" };
+  }
+}
+
+export async function recordStaffInviteFailure(tokenHash: string): Promise<ClinicInviteFailure> {
+  const record = await inviteRpc("record_staff_invite_failure", { p_token_hash: tokenHash });
+  if (record?.status === "wrong" || record?.status === "invalid") {
+    return { status: record.status };
+  }
+  return { status: "failed" };
+}
+
+export async function storeStaffInviteResend(
+  tokenHash: string,
+  codeHash: string,
+): Promise<StaffInviteResendStored> {
+  const record = await inviteRpc("resend_staff_invite", {
+    p_token_hash: tokenHash,
+    p_code_hash: codeHash,
+  });
+  if (!record) {
+    return { status: "failed" };
+  }
+  if (record.status === "invalid" || record.status === "rate_limit") {
+    return { status: record.status };
+  }
+  if (record.status !== "ok") {
+    return { status: "failed" };
+  }
+  const ready = staffInviteReady({ ...record, status: "ready" });
+  const previousCodeHash = record.previous_code_hash;
+  const previousSendCount = record.previous_send_count;
+  const previousLastSentAt = record.previous_last_sent_at;
+  if (
+    !ready ||
+    typeof previousCodeHash !== "string" ||
+    !isInviteCodeHash(previousCodeHash) ||
+    typeof previousSendCount !== "number" ||
+    !Number.isInteger(previousSendCount) ||
+    previousSendCount < 0 ||
+    (previousLastSentAt !== null && typeof previousLastSentAt !== "string")
+  ) {
+    return { status: "failed" };
+  }
+  return {
+    status: "ok",
+    email: ready.email,
+    role: ready.role,
+    clinicName: ready.clinicName,
+    inviterName: ready.inviterName,
+    previousCodeHash,
+    previousSendCount,
+    previousLastSentAt,
+  };
+}
+
+export async function revertStaffInviteResend(input: {
+  tokenHash: string;
+  previousCodeHash: string;
+  newCodeHash: string;
+  previousSendCount: number;
+  previousLastSentAt: string | null;
+}): Promise<boolean> {
+  const record = await inviteRpc("revert_staff_invite_resend", {
+    p_token_hash: input.tokenHash,
+    p_previous_code_hash: input.previousCodeHash,
+    p_new_code_hash: input.newCodeHash,
+    p_previous_send_count: input.previousSendCount,
+    p_previous_last_sent_at: input.previousLastSentAt,
+  });
+  return record?.status === "ok";
+}
+
+export async function acceptStaffInviteMembership(input: {
+  tokenHash: string;
+  codeHash: string;
+  userId: string;
+}): Promise<StaffInviteAccepted> {
+  const record = await inviteRpc("accept_staff_invite", {
+    p_token_hash: input.tokenHash,
+    p_code_hash: input.codeHash,
+    p_user_id: input.userId,
+  });
+  if (
+    record?.status === "ok" ||
+    record?.status === "invalid" ||
+    record?.status === "email_mismatch" ||
+    record?.status === "already_member"
+  ) {
+    return { status: record.status };
+  }
+  return { status: "failed" };
+}
+
+function staffInviteReady(record: Record<string, unknown>): Extract<StaffInviteRecord, { status: "ready" }> | null {
+  const role = record.role === "dentist" || record.role === "reception" ? record.role : null;
+  const email = typeof record.email === "string" ? record.email.trim() : "";
+  const clinicName = typeof record.clinic_name === "string" ? record.clinic_name.trim() : "";
+  const inviterName = typeof record.inviter_name === "string" ? record.inviter_name.trim() : "";
+  const codeHash = typeof record.code_hash === "string" ? record.code_hash : "";
+  if (!role || !email || !clinicName || !inviterName || !isInviteCodeHash(codeHash)) {
+    return null;
+  }
+  return { status: "ready", email, codeHash, role, clinicName, inviterName };
+}
+
+/** Service role reaches the Auth admin API only. Tables and RPC stay out of its reach. */
 function createAdminClient(): SupabaseClient | null {
+  return keyedClient(process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+/** The invite functions run as anon: their only argument is an HMAC of the link token. */
+function createPublishableClient(): SupabaseClient | null {
+  return keyedClient(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+}
+
+function keyedClient(key: string | undefined): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
     return null;
   }
@@ -264,13 +515,13 @@ async function inviteRpc(
   fn: string,
   args: Record<string, unknown>,
 ): Promise<Record<string, unknown> | null> {
-  const admin = createAdminClient();
-  if (!admin) {
-    console.error(`${fn} failed: admin environment is not set`);
+  const client = createPublishableClient();
+  if (!client) {
+    console.error(`${fn} failed: Supabase environment is not set`);
     return null;
   }
   try {
-    const { data, error } = await admin.rpc(fn, args);
+    const { data, error } = await client.rpc(fn, args);
     if (error) {
       console.error(`${fn} rejected:`, error.code ?? "unknown");
       return null;

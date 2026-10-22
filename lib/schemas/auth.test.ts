@@ -6,6 +6,7 @@ import {
   newPasswordSchema,
   passwordResetRequestSchema,
   signInSchema,
+  staffInviteSchema,
 } from "@/lib/schemas/auth";
 
 describe("signInSchema", () => {
@@ -107,6 +108,36 @@ describe("clinicInviteSchema", () => {
       clinicName: "Ordinacija",
       firstName: "Ana",
       lastName: "Jović",
+      code: "12345",
+      password: "lozinka",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.message)).toEqual(["Unesite kod od 6 cifara."]);
+    }
+  });
+});
+
+describe("staffInviteSchema", () => {
+  it("keeps the code and the password and does not ask for a name", () => {
+    const result = staffInviteSchema.safeParse({
+      token: " token ",
+      code: " 123456 ",
+      password: " lozinka ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({
+        token: "token",
+        code: "123456",
+        password: " lozinka ",
+      });
+    }
+  });
+
+  it("rejects a code that is not six digits", () => {
+    const result = staffInviteSchema.safeParse({
+      token: "token",
       code: "12345",
       password: "lozinka",
     });

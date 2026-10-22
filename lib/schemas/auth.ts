@@ -56,8 +56,19 @@ export const clinicInviteResendSchema = z.object({
   token: inviteToken,
 });
 
+/** Colleague invites already store the name and the role. The page only confirms the code. */
+export const staffInviteSchema = z.object({
+  token: inviteToken,
+  code: z
+    .string({ error: "Unesite kod od 6 cifara." })
+    .trim()
+    .regex(/^\d{6}$/, "Unesite kod od 6 cifara."),
+  password: z.string({ error: "Unesite lozinku." }).min(1, "Unesite lozinku."),
+});
+
 export type SignInInput = z.infer<typeof signInSchema>;
 export type PasswordResetRequestInput = z.infer<typeof passwordResetRequestSchema>;
 export type NewPasswordInput = z.infer<typeof newPasswordSchema>;
 export type ClinicInviteInput = z.infer<typeof clinicInviteSchema>;
 export type ClinicInviteResendInput = z.infer<typeof clinicInviteResendSchema>;
+export type StaffInviteInput = z.infer<typeof staffInviteSchema>;

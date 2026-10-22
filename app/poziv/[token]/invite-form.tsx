@@ -2,21 +2,29 @@
 
 import { useActionState } from "react";
 
-import { acceptClinicInvite, resendClinicInvite } from "@/app/actions/auth";
+import { acceptClinicInvite, acceptStaffInvite, resendClinicInvite, resendStaffInvite } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ActionResult } from "@/lib/action-result";
 
-export function InviteForm({ token }: { token: string }) {
-  const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(acceptClinicInvite, null);
+import { InviteCard } from "./invite-card";
+
+type InviteFormProps =
+  | { kind: "clinic"; token: string }
+  | { kind: "staff"; token: string; clinicName: string; inviterName: string; roleLabel: string };
+
+export function InviteForm(props: InviteFormProps) {
+  const accepting = props.kind === "staff" ? acceptStaffInvite : acceptClinicInvite;
+  const resending = props.kind === "staff" ? resendStaffInvite : resendClinicInvite;
+  const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(accepting, null);
   const [resendResult, resendAction, resendPending] = useActionState<
     ActionResult<{ sent: true }> | null,
     FormData
-  >(resendClinicInvite, null);
+  >(resending, null);
   const error = result && !result.ok ? result : null;
-  const clinicNameError = error?.fieldErrors?.clinicName?.[0];
-  const firstNameError = error?.fieldErrors?.firstName?.[0];
-  const lastNameError = error?.fieldErrors?.lastName?.[0];
+  const clinicNameError = props.kind === "clinic" ? error?.fieldErrors?.clinicName?.[0] : undefined;
+  const firstNameError = props.kind === "clinic" ? error?.fieldErrors?.firstName?.[0] : undefined;
+  const lastNameError = props.kind === "clinic" ? error?.fieldErrors?.lastName?.[0] : undefined;
   const codeError = error?.fieldErrors?.code?.[0];
   const passwordError = error?.fieldErrors?.password?.[0];
   const banner =
@@ -25,27 +33,47 @@ export function InviteForm({ token }: { token: string }) {
       : null;
   const resendError = resendResult && !resendResult.ok ? resendResult : null;
   const busy = pending || resendPending;
+  const title = props.kind === "staff" ? `Poziv u ${props.clinicName}` : "Otvorite ordinaciju";
+  const intro =
+    props.kind === "staff"
+      ? `${props.inviterName} vas poziva kao ${props.roleLabel}. Potvrdite kod iz mejla i postavite lozinku. Link važi 7 dana.`
+      : "Potvrdite kod iz mejla i postavite lozinku. Link važi 7 dana.";
 
   return (
-    <section className="w-full max-w-sm rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xs">
-      <h1 className="text-xl font-semibold">Otvorite ordinaciju</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Potvrdite kod iz mejla i postavite lozinku. Link važi 7 dana.
-      </p>
+    <InviteCard title={title}>
+      <p className="mt-1 text-sm text-muted-foreground">{intro}</p>
 
       <form action={formAction} className="mt-6 flex flex-col gap-4" noValidate>
-        <input type="hidden" name="token" value={token} />
+        <input type="hidden" name="token" value={props.token} />
 
-        <Field
-          id="clinic-name"
-          name="clinicName"
-          label="Naziv ordinacije"
-          autoComplete="organization"
-          error={clinicNameError}
-          maxLength={120}
-        />
-        <Field id="first-name" name="firstName" label="Ime" autoComplete="given-name" error={firstNameError} maxLength={80} />
-        <Field id="last-name" name="lastName" label="Prezime" autoComplete="family-name" error={lastNameError} maxLength={80} />
+        {props.kind === "clinic" ? (
+          <>
+            <Field
+              id="clinic-name"
+              name="clinicName"
+              label="Naziv ordinacije"
+              autoComplete="organization"
+              error={clinicNameError}
+              maxLength={120}
+            />
+            <Field
+              id="first-name"
+              name="firstName"
+              label="Ime"
+              autoComplete="given-name"
+              error={firstNameError}
+              maxLength={80}
+            />
+            <Field
+              id="last-name"
+              name="lastName"
+              label="Prezime"
+              autoComplete="family-name"
+              error={lastNameError}
+              maxLength={80}
+            />
+          </>
+        ) : null}
         <Field
           id="code"
           name="code"
@@ -71,12 +99,18 @@ export function InviteForm({ token }: { token: string }) {
         ) : null}
 
         <Button type="submit" disabled={busy}>
-          {pending ? "Otvaranje u toku…" : "Otvori ordinaciju"}
+          {pending
+            ? props.kind === "staff"
+              ? "Prihvatanje u toku…"
+              : "Otvaranje u toku…"
+            : props.kind === "staff"
+              ? "Prihvati poziv"
+              : "Otvori ordinaciju"}
         </Button>
       </form>
 
       <form action={resendAction} className="mt-4 flex flex-col gap-3">
-        <input type="hidden" name="token" value={token} />
+        <input type="hidden" name="token" value={props.token} />
         <p className="text-sm text-muted-foreground">Kod može da se pošalje ponovo najviše tri puta na sat.</p>
         {resendResult?.ok ? (
           <p role="status" className="text-sm">
@@ -92,7 +126,7 @@ export function InviteForm({ token }: { token: string }) {
           {resendPending ? "Slanje u toku…" : "Pošalji kod ponovo"}
         </Button>
       </form>
-    </section>
+    </InviteCard>
   );
 }
 
