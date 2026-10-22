@@ -1,7 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
+import { normalizeClinicSlug } from "@/lib/password-reset";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const DENTIST_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SLOT_START =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export type StaffRole = "owner" | "dentist" | "reception";
 
@@ -138,4 +144,130 @@ function isStaffRole(value: unknown): value is StaffRole {
 
 function logAuthFailure(error: unknown) {
   console.error("Auth lookup failed:", error instanceof Error ? error.message : "unknown error");
+}
+
+export type PatientSession = {
+  userId: string;
+  accountId: string;
+  email: string;
+  emailConfirmedAt: string | null;
+};
+
+export type PatientAuthPage = "prijava" | "registracija";
+
+export type PatientReturnQuery = {
+  stomatolog?: string;
+  pocetak?: string;
+};
+
+export type RequirePatientOptions = {
+  /** Booking request. An unconfirmed email does not pass. */
+  purpose?: "request";
+  slug?: string;
+  stomatolog?: string;
+  pocetak?: string;
+};
+
+/** Keeps a dentist id and a slot start together. Anything else is dropped. */
+export function readPatientReturnQuery(
+  stomatolog: string | null | undefined,
+  pocetak: string | null | undefined,
+): PatientReturnQuery {
+  const dentistId = stomatolog?.trim() ?? "";
+  const startsAt = pocetak?.trim() ?? "";
+  if (!DENTIST_ID.test(dentistId) || !SLOT_START.test(startsAt)) {
+    return {};
+  }
+  return { stomatolog: dentistId, pocetak: startsAt };
+}
+
+/** Same clinic, or the saved dentist and start when both are still intact. */
+export function patientReturnPath(
+  slug: string | null | undefined,
+  query: PatientReturnQuery = {},
+): string {
+  const safeSlug = normalizeClinicSlug(slug);
+  if (!safeSlug) {
+    return "/";
+  }
+  const saved = readPatientReturnQuery(query.stomatolog, query.pocetak);
+  if (!saved.stomatolog || !saved.pocetak) {
+    return `/ordinacije/${safeSlug}`;
+  }
+  const params = new URLSearchParams({
+    stomatolog: saved.stomatolog,
+    pocetak: saved.pocetak,
+  });
+  return `/ordinacije/${safeSlug}/zakazivanje?${params.toString()}`;
+}
+
+export function patientAuthPath(
+  slug: string | null | undefined,
+  page: PatientAuthPage,
+  query: PatientReturnQuery = {},
+): string {
+  const safeSlug = normalizeClinicSlug(slug);
+  if (!safeSlug) {
+    return "/";
+  }
+  const saved = readPatientReturnQuery(query.stomatolog, query.pocetak);
+  if (!saved.stomatolog || !saved.pocetak) {
+    return `/ordinacije/${safeSlug}/${page}`;
+  }
+  const params = new URLSearchParams({
+    stomatolog: saved.stomatolog,
+    pocetak: saved.pocetak,
+  });
+  return `/ordinacije/${safeSlug}/${page}?${params.toString()}`;
+}
+
+/**
+ * Requires a row in patient_accounts.
+ * A request also requires a confirmed email. An unconfirmed account does not pass.
+ */
+export async function requirePatient(options: RequirePatientOptions = {}): Promise<PatientSession> {
+  const account = await findPatientAccount();
+  const query = { stomatolog: options.stomatolog, pocetak: options.pocetak };
+  if (!account) {
+    redirect(patientAuthPath(options.slug, "prijava", query));
+  }
+  if (options.purpose === "request" && !account.emailConfirmedAt) {
+    redirect(patientAuthPath(options.slug, "registracija", query));
+  }
+  return account;
+}
+
+async function findPatientAccount(): Promise<PatientSession | null> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const userId = await getUserId(supabase);
+    return userId ? await lookupPatientAccount(supabase, userId) : null;
+  } catch (error) {
+    logAuthFailure(error);
+    return null;
+  }
+}
+
+async function lookupPatientAccount(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<PatientSession | null> {
+  const { data, error } = await supabase
+    .from("patient_accounts")
+    .select("id, email, email_confirmed_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`patient_accounts failed: ${error.message}`);
+  }
+  if (!data || typeof data.id !== "string" || typeof data.email !== "string") {
+    return null;
+  }
+  const confirmedAt = data.email_confirmed_at;
+  return {
+    userId,
+    accountId: data.id,
+    email: data.email,
+    emailConfirmedAt: typeof confirmedAt === "string" && confirmedAt.length > 0 ? confirmedAt : null,
+  };
 }
