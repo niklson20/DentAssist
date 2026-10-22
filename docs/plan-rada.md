@@ -49,7 +49,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.D1 | Imenik | Composer 2.5 Fast | [x] |
 | 2.D2 | Mapa | Composer 2.5 Fast | [x] |
 | 2.D3 | Profil ordinacije | Composer 2.5 Fast | [x] |
-| 2.D4 | Slobodni počeci | Composer 2.5 Fast | [ ] |
+| 2.D4 | Slobodni počeci | Composer 2.5 Fast | [x] |
 | 2.D11 | Prijava pacijenta | Claude Sonnet thinking | [ ] |
 | 2.D12 | Deca i povezivanje | Claude Sonnet thinking | [ ] |
 | 2.D13 | Termini pacijenta | Composer 2.5 Fast | [ ] |

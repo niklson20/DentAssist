@@ -11,6 +11,8 @@ export type ClinicPublicView = {
   description: string;
   logoUrl: string | null;
   dentists: PublicDentist[];
+  maxAheadDays: number;
+  defaultDurationMin: number;
 };
 
 export type ClinicPublicLoad =
@@ -26,6 +28,8 @@ type ClinicPublicRow = {
   logo_path: string | null;
   description: string | null;
   dentists: unknown;
+  max_ahead_days: number;
+  default_duration_min: number;
 };
 
 export async function loadClinicPublic(slug: string): Promise<ClinicPublicLoad> {
@@ -59,6 +63,8 @@ export async function loadClinicPublic(slug: string): Promise<ClinicPublicLoad> 
         description: row.description?.trim() ?? "",
         logoUrl: publicLogoUrl(row.logo_path),
         dentists: parsePublicDentists(row.dentists),
+        maxAheadDays: row.max_ahead_days,
+        defaultDurationMin: row.default_duration_min,
       },
     };
   } catch (loadError) {

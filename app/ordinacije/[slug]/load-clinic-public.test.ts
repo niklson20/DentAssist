@@ -35,6 +35,8 @@ describe("loadClinicPublic", () => {
           logo_path: "clinic-id/logo.png",
           description: "Porodična stomatologija",
           dentists: [{ id: "11111111-1111-4111-8111-111111111111", first_name: "Ana", last_name: "Jović" }],
+          max_ahead_days: 30,
+          default_duration_min: 30,
         },
       ],
       error: null,
@@ -57,6 +59,8 @@ describe("loadClinicPublic", () => {
             lastName: "Jović",
           },
         ],
+        maxAheadDays: 30,
+        defaultDurationMin: 30,
       },
     });
     expect(mocks.rpc).toHaveBeenCalledWith("get_clinic_public", { slug: "ordinacija-jovanovic" });

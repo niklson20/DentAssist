@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { ClinicSlotsPanel } from "./clinic-slots-panel";
 import {
   dentistStorageKey,
   formatDentistLabel,
@@ -26,6 +27,10 @@ type ClinicProfileViewProps = {
   initialDentistId: string | null;
   showPatientAuth: boolean;
   showSlotsHint: boolean;
+  bookingDays: string[];
+  todayIso: string;
+  defaultDurationMin: number;
+  initialSlots: string[];
 };
 
 export function ClinicProfileView({
@@ -39,6 +44,10 @@ export function ClinicProfileView({
   initialDentistId,
   showPatientAuth,
   showSlotsHint,
+  bookingDays,
+  todayIso,
+  defaultDurationMin,
+  initialSlots,
 }: ClinicProfileViewProps) {
   const [selectedDentistId, setSelectedDentistId] = useState(() => {
     if (typeof window !== "undefined") {
@@ -118,6 +127,19 @@ export function ClinicProfileView({
 
         {showSlotsHint ? (
           <p className="text-sm text-muted-foreground">Prijavite se da vidite slobodne termine</p>
+        ) : null}
+
+        {!showSlotsHint && selectedDentistId ? (
+          <ClinicSlotsPanel
+            key={selectedDentistId}
+            slug={slug}
+            dentistId={selectedDentistId}
+            defaultDurationMin={defaultDurationMin}
+            todayIso={todayIso}
+            bookingDays={bookingDays}
+            initialDay={todayIso}
+            initialSlots={initialSlots}
+          />
         ) : null}
       </main>
     </div>
