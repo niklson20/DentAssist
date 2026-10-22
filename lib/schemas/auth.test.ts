@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { signInSchema } from "@/lib/schemas/auth";
+import { newPasswordSchema, passwordResetRequestSchema, signInSchema } from "@/lib/schemas/auth";
 
 describe("signInSchema", () => {
   it("trims and lowercases the email", () => {
@@ -41,6 +41,46 @@ describe("signInSchema", () => {
       if (!result.success) {
         expect(result.error.issues.map((issue) => issue.message)).toEqual(["Unesite lozinku."]);
       }
+    }
+  });
+});
+
+describe("passwordResetRequestSchema", () => {
+  it("normalizes the email and a clinic slug", () => {
+    const result = passwordResetRequestSchema.safeParse({
+      email: " Pacijent@Example.com ",
+      audience: "patient",
+      clinicSlug: " Ordinacija-Centar ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe("pacijent@example.com");
+      expect(result.data.clinicSlug).toBe("ordinacija-centar");
+    }
+  });
+
+  it("drops a slug that could be a URL", () => {
+    const result = passwordResetRequestSchema.safeParse({
+      email: "a@b.rs",
+      audience: "patient",
+      clinicSlug: "https://evil.example/prijava",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.clinicSlug).toBeUndefined();
+    }
+  });
+});
+
+describe("newPasswordSchema", () => {
+  it("asks for a password and a token", () => {
+    const empty = newPasswordSchema.safeParse({ token: "", password: "", clinicSlug: null });
+    expect(empty.success).toBe(false);
+    if (!empty.success) {
+      expect(empty.error.issues.map((issue) => issue.message)).toEqual([
+        "Ovaj link više ne važi.",
+        "Unesite lozinku.",
+      ]);
     }
   });
 });

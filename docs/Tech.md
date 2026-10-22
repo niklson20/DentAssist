@@ -200,7 +200,8 @@ Sve u `lib/calendar-dates.ts`.
 4. Javne funkcije su jedini ulaz bez naloga. Ne vraćaju tuđe ime, zauzet termin ni razlog blokade.
 
 `service_role` ne čita karton. Serverski kod sme da ga upotrebi samo da napravi
-`auth.users` red kad pozivnica bude prihvaćena, i da sa cron rute pozove
+`auth.users` red kad pozivnica bude prihvaćena, da izda recovery link za novu
+lozinku (`generateLink`, bez čitanja tabela), i da sa cron rute pozove
 `expire_booking_requests()`, `purge_booking_request_pii()` i `due_reminders()`.
 Te tri funkcije ne vraćaju zapis, anamnezu, zube ni dokument.
 
@@ -344,6 +345,7 @@ dozvoljava dva projekta. Lozinke ne idu u git ni u ovaj dokument.
 | `NEXT_PUBLIC_SUPABASE_URL` | ne |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | ne, podleže RLS-u |
 | `SUPABASE_DB_URL` | da; samo migracije i backup, nije na Vercel-u |
+| `SUPABASE_SERVICE_ROLE_KEY` | da; Vercel i `.env.local`; samo `generateLink` za novu lozinku |
 | `RESEND_API_KEY` | da; Vercel i `.env.local` |
 | `MAIL_FROM` | ne; `ne-odgovaraj@<domen-aplikacije>` |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | ne |
@@ -356,7 +358,7 @@ dozvoljava dva projekta. Lozinke ne idu u git ni u ovaj dokument.
 Dok `STAFF_URL` nije postavljen, link „Za ordinacije“ i linkovi osoblju ostaju na trenutnom originu. Tako `localhost` radi bez drugog imena.
 
 `SUPABASE_DB_URL` je Session pooler (port 5432, IPv4). `service_role` nije u
-`NEXT_PUBLIC_` promenljivoj. Javna registracija u konzoli je isključena.
+`NEXT_PUBLIC_` promenljivoj. Ime ključa je `SUPABASE_SERVICE_ROLE_KEY`. Javna registracija u konzoli je isključena.
 
 `db:reset` i seed ne smeju na produkciju. Skripta poredi konekciju sa refom produkcije
 i odbija reset. Jedini izuzetak je `CONFIRM_RESET_PROD=1` i `--yes`. Pre `db:migrate`

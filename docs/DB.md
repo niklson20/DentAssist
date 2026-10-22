@@ -512,7 +512,8 @@ pogled `audit_log_for_member`, ne kopija tabele.
 | `anon` | nema `SELECT`. Imenik i javna strana ordinacije idu kroz funkcije iz odeljka 8. Slobodne termine i zahtev ne sme. |
 
 `service_role` se ne koristi za čitanje kartona. Serverski izuzeci su kreiranje
-`auth.users` kad neko prihvati pozivnicu, i cron poziv `expire_booking_requests()`,
+`auth.users` kad neko prihvati pozivnicu, izdavanje recovery linka za novu lozinku
+(`generateLink`, bez čitanja tabela), i cron poziv `expire_booking_requests()`,
 `purge_booking_request_pii()` i `due_reminders()`. Javna registracija u Supabase konzoli
 ostaje isključena. Nalog pacijenta pravi aplikacija čim registracija sačuva lozinku,
 istim izuzetkom za `auth.users`, i odmah prestane. Lozinka ne ide u izazov.

@@ -29,7 +29,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.A0 | Dva ulaza | Composer 2.5 Fast | [x] |
 | 2.A1 | Prijava | Claude Sonnet thinking | [x] |
 | 2.A1b | Osvežavanje sesije | Claude Sonnet thinking | [x] |
-| 2.A2 | Nova lozinka | Claude Sonnet thinking | [ ] |
+| 2.A2 | Nova lozinka | Claude Sonnet thinking | [x] |
 | 2.A3 | Pozivnica ordinacije | Claude Sonnet thinking | [ ] |
 | 2.A4 | Pozivnica kolege | Claude Sonnet thinking | [ ] |
 | 2.A5 | PIN | Claude Sonnet thinking | [ ] |
