@@ -65,7 +65,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.E3 | Nedelja i mesec | Composer 2.5 Fast | [x] |
 | 2.E4 | Unos termina | Claude Sonnet thinking | [x] |
 | 2.E11 | Blokade | Claude Sonnet thinking | [x] |
-| 2.E5 | Statusi | Claude Sonnet thinking | [ ] |
+| 2.E5 | Statusi | Claude Sonnet thinking | [x] |
 | 2.E12 | Izmena termina | Claude Sonnet thinking | [ ] |
 | 2.E6 | Zahtevi | Claude Sonnet thinking | [ ] |
 | 2.E7 | Ponuda iz kalendara | Claude Sonnet thinking | [ ] |

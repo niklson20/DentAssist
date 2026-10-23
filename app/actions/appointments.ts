@@ -1,12 +1,13 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { z, type ZodError } from "zod";
 
 import { fail, ok, type ActionResult } from "@/lib/action-result";
-import { requireMember } from "@/lib/auth";
+import { requireMember, type MemberSession } from "@/lib/auth";
 import { formatBelgradeDate, hasTurned15, isIsoDate, parseBelgradeLocal } from "@/lib/calendar-dates";
-import { RELATIONSHIPS } from "@/lib/labels";
+import { APPOINTMENT_STATUSES, RELATIONSHIPS } from "@/lib/labels";
 import { normalizePhone } from "@/lib/phone";
 import {
   insertGuardianContact,
@@ -34,6 +35,14 @@ const PICK_DAY = "Izaberite dan.";
 const PICK_END = "Unesite kraj.";
 const END_AFTER_START = "Kraj mora biti posle početka.";
 const REASON_MAX = "Razlog može imati najviše 200 znakova.";
+const PICK_APPOINTMENT = "Izaberite termin.";
+const PICK_STATUS = "Izaberite status.";
+const CANCEL_NOTE = "Otkaz zakazanog termina traži poruku.";
+const CANCEL_NOTE_MAX = "Poruka može imati najviše 300 znakova.";
+const COMPLETED_ONLY =
+  "Samo stomatolog tog termina i vlasnik mogu da označe termin završenim.";
+const APPOINTMENT_MISSING = "Termin nije pronađen.";
+const STAFF_STATUS_CHANGES = ["no_show", "cancelled", "completed"] as const;
 const BLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 
 const appointmentSchema = z.object({
@@ -63,6 +72,12 @@ const blockSchema = z.object({
   pocetak: z.string({ error: PICK_START }).trim().regex(BLOCK_TIME, PICK_START),
   kraj: z.string({ error: PICK_END }).trim().regex(BLOCK_TIME, PICK_END),
   razlog: z.string().trim().max(200, REASON_MAX),
+});
+
+const statusSchema = z.object({
+  termin: z.string({ error: PICK_APPOINTMENT }).trim().uuid(PICK_APPOINTMENT),
+  status: z.enum(STAFF_STATUS_CHANGES, { error: PICK_STATUS }),
+  poruka: z.string().trim().max(300, CANCEL_NOTE_MAX),
 });
 
 const contactSchema = z.object({
@@ -276,6 +291,78 @@ export async function createBlock(
   }
 }
 
+export async function setAppointmentStatus(
+  _previous: ActionResult<{ id: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = statusSchema.safeParse(readStatusFields(formData));
+  if (!parsed.success) {
+    return fail(CHECK, fieldErrorsFrom(parsed.error));
+  }
+
+  const member = await requireMember();
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const loaded = await supabase
+      .from("appointments")
+      .select("id, status, dentist_id")
+      .eq("id", parsed.data.termin)
+      .eq("clinic_id", member.clinicId)
+      .maybeSingle();
+
+    if (loaded.error) {
+      console.error("set_appointment_status_read rejected:", "unknown");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const row = loaded.data;
+    if (!row) return fail(APPOINTMENT_MISSING);
+    const status = APPOINTMENT_STATUSES.find((item) => item === row.status);
+    const dentistId = typeof row.dentist_id === "string" ? row.dentist_id : null;
+    const id = typeof row.id === "string" ? row.id : null;
+    if (!status || !dentistId || !id) return fail(SAVE_UNAVAILABLE);
+
+    if (parsed.data.status === "cancelled" && status === "scheduled" && parsed.data.poruka === "") {
+      return fail(CHECK, { poruka: [CANCEL_NOTE] });
+    }
+
+    if (parsed.data.status === "completed") {
+      const denied = await denyUnlessCanComplete(supabase, member, dentistId);
+      if (denied) return denied;
+    }
+
+    const changes =
+      parsed.data.status === "cancelled"
+        ? {
+            status: parsed.data.status,
+            cancelled_by: "staff",
+            cancellation_note: parsed.data.poruka === "" ? null : parsed.data.poruka,
+          }
+        : { status: parsed.data.status };
+
+    const saved = await supabase
+      .from("appointments")
+      .update(changes)
+      .eq("id", id)
+      .eq("clinic_id", member.clinicId)
+      .select("id")
+      .maybeSingle();
+
+    const savedId = saved.data && typeof saved.data.id === "string" ? saved.data.id : null;
+    if (saved.error || !savedId) {
+      console.error("set_appointment_status rejected:", saved.error ? "unknown" : "empty");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    revalidatePath("/danas");
+    return ok({ id: savedId });
+  } catch (error) {
+    console.error("set_appointment_status failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+}
+
 function readBlockFields(formData: FormData) {
   return {
     stomatolog: text(formData.get("stomatolog")),
@@ -290,6 +377,39 @@ function localInstant(day: string, time: string): Date | null {
   const value = `${day}T${time}`;
   if (!localClock(value)) return null;
   return parseBelgradeLocal(value);
+}
+
+function readStatusFields(formData: FormData) {
+  return {
+    termin: text(formData.get("termin")),
+    status: text(formData.get("status")),
+    poruka: text(formData.get("poruka")),
+  };
+}
+
+async function denyUnlessCanComplete(
+  supabase: SupabaseClient,
+  member: MemberSession,
+  dentistId: string,
+): Promise<ActionResult<never> | null> {
+  if (member.role === "owner") return null;
+  if (member.role !== "dentist") return fail(COMPLETED_ONLY);
+
+  const self = await supabase
+    .from("clinic_members")
+    .select("id")
+    .eq("clinic_id", member.clinicId)
+    .eq("user_id", member.userId)
+    .maybeSingle();
+
+  if (self.error) {
+    console.error("set_appointment_status_member rejected:", "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+
+  const memberId = self.data && typeof self.data.id === "string" ? self.data.id : null;
+  if (memberId !== dentistId) return fail(COMPLETED_ONLY);
+  return null;
 }
 
 function readAppointmentFields(formData: FormData) {

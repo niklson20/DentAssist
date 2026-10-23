@@ -2,12 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 
-import {
-  DirectoryMapPanel,
-  formatDistanceKm,
-  NearMeButton,
-  ViewModeTabs,
-} from "@/app/directory-map";
+import { directoryHref, formatDistanceKm, type DirectoryViewMode } from "@/app/directory-href";
+import { DirectoryMapPanel, NearMeButton, ViewModeTabs } from "@/app/directory-map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,8 +16,6 @@ export const metadata: Metadata = {
   title: "Imenik — DentAssist",
   description: "Pronađite stomatološku ordinaciju sa online zakazivanjem",
 };
-
-type DirectoryViewMode = "lista" | "mapa";
 
 type PageProps = {
   searchParams: Promise<{
@@ -115,7 +109,7 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
           <section className="space-y-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-sm font-medium">Grad</h2>
-              <NearMeButton buildHref={(coords) => directoryHref({ grad: selectedCity, coords })} />
+              <NearMeButton grad={selectedCity || undefined} />
             </div>
             {cities.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -144,11 +138,7 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
             )}
           </section>
         ) : (
-          <NearMeButton
-            buildHref={(coords) =>
-              directoryHref({ grad: selectedCity, pretraga: nameQuery, coords })
-            }
-          />
+          <NearMeButton grad={selectedCity || undefined} pretraga={nameQuery || undefined} />
         )}
 
         {showResults ? (
@@ -239,9 +229,7 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
   );
 }
 
-type Coords = { lat: number; lng: number };
-
-function parseCoords(latRaw?: string, lngRaw?: string): Coords | null {
+function parseCoords(latRaw?: string, lngRaw?: string): { lat: number; lng: number } | null {
   if (!latRaw || !lngRaw) {
     return null;
   }
@@ -254,30 +242,6 @@ function parseCoords(latRaw?: string, lngRaw?: string): Coords | null {
     return null;
   }
   return { lat, lng };
-}
-
-function directoryHref(input: {
-  grad?: string;
-  pretraga?: string;
-  coords?: Coords | null;
-  prikaz?: DirectoryViewMode;
-}): string {
-  const params = new URLSearchParams();
-  if (input.grad) {
-    params.set("grad", input.grad);
-  }
-  if (input.pretraga) {
-    params.set("pretraga", input.pretraga);
-  }
-  if (input.coords) {
-    params.set("lat", String(input.coords.lat));
-    params.set("lng", String(input.coords.lng));
-  }
-  if (input.prikaz) {
-    params.set("prikaz", input.prikaz);
-  }
-  const query = params.toString();
-  return query ? `/?${query}` : "/";
 }
 
 async function resolveStaffEntryUrl(): Promise<string> {
