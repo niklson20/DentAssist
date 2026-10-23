@@ -15,7 +15,18 @@ import Page from "./page";
 
 const chart = {
   status: "ready" as const,
-  patient: { slug: "mika-mikic", firstName: "Mika", lastName: "Mikić" },
+  patient: {
+    slug: "mika-mikic",
+    firstName: "Mika",
+    lastName: "Mikić",
+    phone: null,
+    dateOfBirth: "2015-01-01",
+    sex: null,
+    address: null,
+    note: null,
+    jmbg: null,
+  },
+  alerts: null,
   connect: {
     kind: "ready" as const,
     contacts: [{ id: "40000000-0000-4000-8000-000000000004", label: "Ana Anić · roditelj@example.com" }],

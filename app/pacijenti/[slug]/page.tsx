@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { requireMember } from "@/lib/auth";
 
+import { ChartHeader } from "./chart-header";
 import { ConnectParentButton } from "./connect-parent-button";
 import { loadChildChart } from "./load-child-chart";
 import { BIRTH_DATE_MISSING, CHART_MISSING } from "./schema";
@@ -17,8 +18,9 @@ type PageProps = {
 export default async function Page({ params }: PageProps) {
   const { slug } = await params;
   const member = await requireMember();
-  const chart = await loadChildChart(member.clinicId, slug);
+  const chart = await loadChildChart(member.clinicId, slug, member.role);
   const canSend = member.role === "owner" || member.role === "dentist";
+  const clinical = member.role === "owner" || member.role === "dentist";
 
   if (chart.status === "unavailable") {
     return (
@@ -38,11 +40,7 @@ export default async function Page({ params }: PageProps) {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 py-8">
-      <header>
-        <h1 className="text-2xl font-semibold">
-          {chart.patient.firstName} {chart.patient.lastName}
-        </h1>
-      </header>
+      <ChartHeader patient={chart.patient} alerts={chart.alerts} clinical={clinical} />
 
       {canSend && chart.connect.kind === "needsBirthDate" ? (
         <p className="text-sm text-muted-foreground">{BIRTH_DATE_MISSING}</p>
