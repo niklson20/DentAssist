@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, type ReactNode } from "react";
 
 import { showCalendarDay } from "@/app/danas/actions";
 import { calendarPath } from "@/app/danas/schema";
@@ -23,7 +23,13 @@ const VIEWS: { id: CalendarView; label: string }[] = [
   { id: "mesec", label: "Mesec" },
 ];
 
-export function CalendarShell({ query }: { query: CalendarQuery }) {
+export function CalendarShell({
+  query,
+  dayCalendar = null,
+}: {
+  query: CalendarQuery;
+  dayCalendar?: ReactNode;
+}) {
   const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(showCalendarDay, null);
   const dateError = result && !result.ok ? result.fieldErrors?.datum?.[0] : undefined;
   const formError = result && !result.ok && !dateError ? result.error : null;
@@ -115,7 +121,9 @@ export function CalendarShell({ query }: { query: CalendarQuery }) {
           {query.sakrijOtkazane ? "Otkazani termini su sakriveni." : "Otkazani termini su vidljivi."}
         </p>
       </header>
-      <section aria-label="Kalendar" className="min-h-64 rounded-lg border border-border bg-card" />
+      <section aria-label="Kalendar" className="min-h-64 rounded-lg border border-border bg-card">
+        {query.prikaz === "dan" ? dayCalendar : null}
+      </section>
     </main>
   );
 }

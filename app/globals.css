@@ -134,3 +134,141 @@
  * Dentist columns and the tooth map are not a ready-made component.
  * Their layout CSS stays in this file, apart from the theme tokens.
  */
+
+/* calendar-grid */
+.calendar-grid {
+  --calendar-hour: 4rem;
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.calendar-grid__hours {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex: 0 0 4.5rem;
+  flex-direction: column;
+  background: var(--card);
+  border-right: 1px solid var(--border);
+}
+
+.calendar-grid__hours-pad {
+  height: 2.75rem;
+  flex: 0 0 auto;
+}
+
+.calendar-grid__hours-list {
+  position: relative;
+  height: calc(var(--calendar-span) * var(--calendar-hour));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calendar-grid__hour {
+  position: absolute;
+  right: 0.5rem;
+  left: 0;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1;
+  color: var(--muted-foreground);
+  text-align: right;
+}
+
+.calendar-grid__columns {
+  display: flex;
+  flex: 1 0 auto;
+  min-width: calc(100% - 4.5rem);
+}
+
+.calendar-grid__column {
+  flex: 1 0 14rem;
+  min-width: 14rem;
+  border-right: 1px solid var(--border);
+}
+
+.calendar-grid__head {
+  height: 2.75rem;
+  margin: 0;
+  overflow: hidden;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-grid__track {
+  position: relative;
+  height: calc(var(--calendar-span) * var(--calendar-hour));
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--border),
+    var(--border) 1px,
+    transparent 1px,
+    transparent var(--calendar-hour)
+  );
+}
+
+.calendar-grid__visit {
+  position: absolute;
+  right: 0.25rem;
+  left: 0.25rem;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.calendar-grid__visit-line {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Pending confirmation is the warning. Offered uses the teal accent, which is --primary. */
+.calendar-grid__visit[data-status="pending_confirmation"] {
+  background: color-mix(in oklch, var(--destructive) 24%, var(--card));
+  color: var(--foreground);
+  border-color: color-mix(in oklch, var(--destructive) 50%, var(--border));
+}
+
+.calendar-grid__visit[data-status="offered"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.calendar-grid__visit[data-status="scheduled"] {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.calendar-grid__visit[data-status="completed"] {
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.calendar-grid__visit[data-status="no_show"] {
+  background: color-mix(in oklch, var(--destructive) 10%, var(--muted));
+  color: var(--destructive);
+  border-color: color-mix(in oklch, var(--destructive) 25%, var(--border));
+}
+
+.calendar-grid__visit[data-status="cancelled"] {
+  background: var(--background);
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  opacity: 0.55;
+}
