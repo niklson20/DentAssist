@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import { AppointmentForm, type AppointmentFormChoices } from "./appointment-form";
+import { BlockForm } from "./block-form";
 
 const EMPTY_APPOINTMENT_CHOICES: AppointmentFormChoices = {
   dentists: [],
@@ -47,6 +48,9 @@ export function CalendarShell({
   appointmentChoices?: AppointmentFormChoices;
 }) {
   const [appointmentOpen, setAppointmentOpen] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const dentistLabel =
+    appointmentChoices.dentists.find((dentist) => dentist.id === query.stomatolog)?.label ?? null;
   const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(showCalendarDay, null);
   const dateError = result && !result.ok ? result.fieldErrors?.datum?.[0] : undefined;
   const formError = result && !result.ok && !dateError ? result.error : null;
@@ -138,16 +142,26 @@ export function CalendarShell({
           {query.sakrijOtkazane ? "Otkazani termini su sakriveni." : "Otkazani termini su vidljivi."}
         </p>
         <div className="flex flex-col gap-3">
-          <Button
-            type="button"
-            size="sm"
-            className="self-start"
-            aria-expanded={appointmentOpen}
-            aria-controls="novi-termin"
-            onClick={() => setAppointmentOpen(true)}
-          >
-            Novi termin
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              aria-expanded={appointmentOpen}
+              aria-controls="novi-termin"
+              onClick={() => setAppointmentOpen(true)}
+            >
+              Novi termin
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              aria-expanded={blockOpen}
+              aria-controls="nova-blokada"
+              onClick={() => setBlockOpen(true)}
+            >
+              Nova blokada
+            </Button>
+          </div>
           {appointmentOpen ? (
             <AppointmentForm
               key={query.datum}
@@ -155,6 +169,14 @@ export function CalendarShell({
               datum={query.datum}
               today={formatBelgradeDate(new Date())}
               defaultDentistId={query.stomatolog}
+            />
+          ) : null}
+          {blockOpen ? (
+            <BlockForm
+              key={`${query.datum}:${query.stomatolog ?? ""}`}
+              datum={query.datum}
+              dentistId={query.stomatolog}
+              dentistLabel={dentistLabel}
             />
           ) : null}
         </div>

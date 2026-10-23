@@ -30,6 +30,11 @@ const PICK_DURATION = "Unesite trajanje.";
 const DURATION_STEP = "Trajanje je umnožak koraka, najviše 120 minuta.";
 const START_STEP = "Početak mora da bude na koraku ordinacije.";
 const NOTE_MAX = "Napomena može imati najviše 1000 znakova.";
+const PICK_DAY = "Izaberite dan.";
+const PICK_END = "Unesite kraj.";
+const END_AFTER_START = "Kraj mora biti posle početka.";
+const REASON_MAX = "Razlog može imati najviše 200 znakova.";
+const BLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 
 const appointmentSchema = z.object({
   stomatolog: z.string({ error: PICK_DENTIST }).trim().uuid(PICK_DENTIST),
@@ -47,6 +52,17 @@ const appointmentSchema = z.object({
   kontaktPrezime: z.string().trim(),
   kontaktTelefon: z.string().trim(),
   kontaktMejl: z.string().trim(),
+});
+
+const blockSchema = z.object({
+  stomatolog: z.string({ error: PICK_DENTIST }).trim().uuid(PICK_DENTIST),
+  datum: z
+    .string({ error: PICK_DAY })
+    .trim()
+    .refine((value) => isIsoDate(value), PICK_DAY),
+  pocetak: z.string({ error: PICK_START }).trim().regex(BLOCK_TIME, PICK_START),
+  kraj: z.string({ error: PICK_END }).trim().regex(BLOCK_TIME, PICK_END),
+  razlog: z.string().trim().max(200, REASON_MAX),
 });
 
 const contactSchema = z.object({
@@ -189,6 +205,91 @@ export async function createAppointment(
     console.error("create_appointment failed:", error instanceof Error ? error.name : "unknown");
     return fail(SAVE_UNAVAILABLE);
   }
+}
+
+export async function createBlock(
+  _previous: ActionResult<{ id: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = blockSchema.safeParse(readBlockFields(formData));
+  if (!parsed.success) {
+    return fail(CHECK, fieldErrorsFrom(parsed.error));
+  }
+
+  const startsAt = localInstant(parsed.data.datum, parsed.data.pocetak);
+  const endsAt = localInstant(parsed.data.datum, parsed.data.kraj);
+  if (!startsAt || !endsAt) {
+    return fail(CHECK, { pocetak: [PICK_START], kraj: [PICK_END] });
+  }
+  if (endsAt.getTime() <= startsAt.getTime()) {
+    return fail(CHECK, { kraj: [END_AFTER_START] });
+  }
+
+  const member = await requireMember();
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const dentist = await supabase
+      .from("clinic_members")
+      .select("role, sees_patients")
+      .eq("id", parsed.data.stomatolog)
+      .eq("clinic_id", member.clinicId)
+      .maybeSingle();
+
+    if (dentist.error) {
+      console.error("create_block_dentist rejected:", "unknown");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const dentistRow = dentist.data;
+    if (
+      !dentistRow ||
+      (dentistRow.role !== "dentist" && dentistRow.role !== "owner") ||
+      dentistRow.sees_patients !== true
+    ) {
+      return fail(CHECK, { stomatolog: [PICK_DENTIST] });
+    }
+
+    const saved = await supabase
+      .from("blocked_periods")
+      .insert({
+        clinic_id: member.clinicId,
+        clinic_member_id: parsed.data.stomatolog,
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+        reason: parsed.data.razlog === "" ? null : parsed.data.razlog,
+      })
+      .select("id")
+      .single();
+
+    const id = saved.data && typeof saved.data.id === "string" ? saved.data.id : null;
+    if (saved.error || !id) {
+      console.error("create_block rejected:", saved.error ? "unknown" : "empty");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    revalidatePath("/danas");
+    return ok({ id });
+  } catch (error) {
+    console.error("create_block failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+}
+
+function readBlockFields(formData: FormData) {
+  return {
+    stomatolog: text(formData.get("stomatolog")),
+    datum: text(formData.get("datum")),
+    pocetak: text(formData.get("pocetak")),
+    kraj: text(formData.get("kraj")),
+    razlog: text(formData.get("razlog")),
+  };
+}
+
+function localInstant(day: string, time: string): Date | null {
+  const value = `${day}T${time}`;
+  if (!localClock(value)) return null;
+  return parseBelgradeLocal(value);
 }
 
 function readAppointmentFields(formData: FormData) {
