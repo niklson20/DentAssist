@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { AppointmentForm, type AppointmentFormChoices } from "./appointment-form";
 import { BlockForm } from "./block-form";
 import { OfferPicker } from "./offer-picker";
+import { PhoneBar, type PhoneTab } from "./phone-bar";
 
 const EMPTY_APPOINTMENT_CHOICES: AppointmentFormChoices = {
   dentists: [],
@@ -40,17 +41,22 @@ export function CalendarShell({
   dayCalendar = null,
   weekCalendar = null,
   monthCalendar = null,
+  pendingColumn = null,
+  phoneCalendar = null,
   appointmentChoices = EMPTY_APPOINTMENT_CHOICES,
 }: {
   query: CalendarQuery;
   dayCalendar?: ReactNode;
   weekCalendar?: ReactNode;
   monthCalendar?: ReactNode;
+  pendingColumn?: ReactNode;
+  phoneCalendar?: ReactNode;
   appointmentChoices?: AppointmentFormChoices;
 }) {
   const [appointmentOpen, setAppointmentOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [offerOpen, setOfferOpen] = useState(false);
+  const [phoneTab, setPhoneTab] = useState<PhoneTab>("requests");
   const dentistLabel =
     appointmentChoices.dentists.find((dentist) => dentist.id === query.stomatolog)?.label ?? null;
   const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(showCalendarDay, null);
@@ -64,7 +70,31 @@ export function CalendarShell({
   });
 
   return (
-    <main className="flex flex-col gap-6 p-4">
+    <>
+      <main className="flex min-h-dvh flex-col gap-6 p-4 pb-24 md:hidden">
+        <section
+          id="phone-requests-panel"
+          aria-label="Zahtevi"
+          hidden={phoneTab !== "requests"}
+          className="flex flex-col gap-4"
+        >
+          {pendingColumn}
+        </section>
+        <section
+          id="phone-calendar-panel"
+          aria-label="Kalendar"
+          hidden={phoneTab !== "calendar"}
+          className="flex flex-col gap-4"
+        >
+          <div>
+            <h1 className="text-2xl font-semibold">Kalendar</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{dateLabel}</p>
+          </div>
+          {phoneCalendar}
+        </section>
+        <PhoneBar activeTab={phoneTab} onTabChange={setPhoneTab} />
+      </main>
+      <main className="hidden flex-col gap-6 p-4 md:flex">
       <header className="flex flex-col gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Danas</h1>
@@ -203,6 +233,7 @@ export function CalendarShell({
       <section aria-label="Kalendar" className="min-h-64 rounded-lg border border-border bg-card">
         {query.prikaz === "dan" ? dayCalendar : query.prikaz === "nedelja" ? weekCalendar : monthCalendar}
       </section>
-    </main>
+      </main>
+    </>
   );
 }

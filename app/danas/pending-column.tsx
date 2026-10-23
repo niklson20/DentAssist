@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useId } from "react";
 
 import { acceptRequest, rejectRequest } from "@/app/actions/appointments";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,7 @@ function RequestCard({ request, canRespond }: { request: PendingRequestView; can
   const acceptError = acceptState && !acceptState.ok ? acceptState.error : null;
   const rejectError = rejectState && !rejectState.ok ? rejectState.error : null;
   const messageError = rejectState && !rejectState.ok ? rejectState.fieldErrors?.poruka?.[0] : undefined;
+  const messageId = useId();
 
   return (
     <li className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
@@ -108,9 +109,9 @@ function RequestCard({ request, canRespond }: { request: PendingRequestView; can
           )}
           <form action={rejectAction} className="flex flex-col gap-2">
             <input type="hidden" name="zahtev" value={request.id} />
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground" htmlFor={`poruka-${request.id}`}>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground" htmlFor={messageId}>
               Poruka
-              <textarea id={`poruka-${request.id}`} name="poruka" rows={2} maxLength={300} className={areaClass} />
+              <textarea id={messageId} name="poruka" rows={2} maxLength={300} className={areaClass} />
             </label>
             {messageError ? <p className="text-sm text-destructive">{messageError}</p> : null}
             <Button type="submit" size="sm" variant="outline" disabled={rejectPending}>

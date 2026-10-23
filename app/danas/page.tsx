@@ -6,12 +6,13 @@ import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate, type CalendarParams } from "@/lib/calendar-dates";
 
 import { CalendarShell } from "./calendar-shell";
-import { PendingColumn } from "./pending-column";
 import { DayGrid } from "./day-grid";
 import { loadDayCalendar } from "./load-day";
 import { loadMonthCalendar } from "./load-month";
 import { loadWeekCalendar } from "./load-week";
 import { MonthView } from "./month-view";
+import { PendingColumn } from "./pending-column";
+import { PhoneDayList } from "./phone-day-list";
 import { calendarPath, hasCanonicalCalendarParams, readCalendarQuery } from "./schema";
 import { WeekView } from "./week-view";
 
@@ -31,10 +32,7 @@ export default async function Page({ searchParams }: PageProps) {
     redirect(calendarPath(query));
   }
 
-  const day =
-    query.prikaz === "dan"
-      ? await loadDayCalendar(member.clinicId, query.datum, query.sakrijOtkazane)
-      : null;
+  const day = await loadDayCalendar(member.clinicId, query.datum, query.sakrijOtkazane);
   const week =
     query.prikaz === "nedelja"
       ? await loadWeekCalendar(member.clinicId, query)
@@ -44,21 +42,32 @@ export default async function Page({ searchParams }: PageProps) {
       ? await loadMonthCalendar(member.clinicId, query)
       : null;
   const pending = await loadPendingRequests();
+  const pendingColumn = (
+    <PendingColumn
+      role={member.role}
+      requests={pending.ok ? pending.data : []}
+      error={pending.ok ? null : pending.error}
+    />
+  );
+  const dayBody = day.ok ? (
+    <DayGrid model={day.data} />
+  ) : (
+    <p className="p-4 text-sm text-destructive">{day.error}</p>
+  );
+  const phoneCalendar = day.ok ? (
+    <PhoneDayList model={day.data} dentistId={query.stomatolog} />
+  ) : (
+    <p className="p-4 text-sm text-destructive">{day.error}</p>
+  );
 
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
       <div className="min-w-0 flex-1">
         <CalendarShell
           query={query}
-          dayCalendar={
-            day ? (
-              day.ok ? (
-                <DayGrid model={day.data} />
-              ) : (
-                <p className="p-4 text-sm text-destructive">{day.error}</p>
-              )
-            ) : null
-          }
+          pendingColumn={pendingColumn}
+          phoneCalendar={phoneCalendar}
+          dayCalendar={dayBody}
           weekCalendar={
             week ? (
               week.ok ? (
@@ -79,11 +88,7 @@ export default async function Page({ searchParams }: PageProps) {
           }
         />
       </div>
-      <PendingColumn
-        role={member.role}
-        requests={pending.ok ? pending.data : []}
-        error={pending.ok ? null : pending.error}
-      />
+      <div className="hidden md:block">{pendingColumn}</div>
     </div>
   );
 }
