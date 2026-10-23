@@ -3,6 +3,10 @@ import { Resend } from "resend";
 import { formatBelgrade } from "@/lib/calendar-dates";
 
 export const REQUEST_RECEIVED_SUBJECT = "Zahtev je primljen";
+export const APPOINTMENT_CONFIRMED_SUBJECT = "Termin je potvrđen";
+export const REQUEST_REJECTED_SUBJECT = "Zahtev nije prihvaćen";
+export const APPOINTMENT_CANCELLED_SUBJECT = "Termin je otkazan";
+export const OFFERED_TIMES_SUBJECT = "Ponuđeni termini";
 export const APPOINTMENT_MOVED_SUBJECT = "Termin je pomeren";
 
 export type MailMessage = {
@@ -29,6 +33,40 @@ export type AppointmentMovedInput = {
   startsAt: string;
   dentistName: string;
   address: string;
+  phone: string;
+};
+
+export type AppointmentConfirmedInput = {
+  to: string;
+  clinicName: string;
+  patientName: string;
+  startsAt: string;
+  dentistName: string;
+  address: string;
+  phone: string;
+};
+
+export type RequestRejectedInput = {
+  to: string;
+  clinicName: string;
+  message: string;
+  phone: string;
+};
+
+export type AppointmentCancelledInput = {
+  to: string;
+  clinicName: string;
+  startsAt: string;
+  message: string;
+  phone: string;
+};
+
+export type OfferedTimesInput = {
+  to: string;
+  clinicName: string;
+  dentistName: string;
+  link: string;
+  deadlineAt: string;
   phone: string;
 };
 
@@ -96,6 +134,62 @@ export function appointmentMovedMessage(input: AppointmentMovedInput): MailMessa
   };
 }
 
+/** „Termin je potvrđen“. The clinic is not a recipient; its phone is in the body. */
+export function appointmentConfirmedMessage(input: AppointmentConfirmedInput): MailMessage {
+  const clinicName = oneLine(input.clinicName);
+  const patientName = oneLine(input.patientName);
+  const when = oneLine(formatAppointmentWhen(input.startsAt));
+  const dentistName = oneLine(input.dentistName);
+  const address = oneLine(input.address);
+  const phone = oneLine(input.phone);
+  return {
+    to: input.to.trim(),
+    subject: APPOINTMENT_CONFIRMED_SUBJECT,
+    fromName: clinicName,
+    text: `Termin je potvrđen. ${patientName}, ${when}, ${dentistName}, ${address}. Telefon: ${phone}.`,
+  };
+}
+
+/** „Zahtev nije prihvaćen“. The clinic is not a recipient. An empty note is left out. */
+export function requestRejectedMessage(input: RequestRejectedInput): MailMessage {
+  const clinicName = oneLine(input.clinicName);
+  const phone = oneLine(input.phone);
+  return {
+    to: input.to.trim(),
+    subject: REQUEST_REJECTED_SUBJECT,
+    fromName: clinicName,
+    text: `${clinicName} ne može da primi ovaj termin. ${optionalSentence(input.message)}Telefon: ${phone}.`,
+  };
+}
+
+/** „Termin je otkazan“. Sent when the clinic cancels. The clinic is not a recipient. */
+export function appointmentCancelledMessage(input: AppointmentCancelledInput): MailMessage {
+  const clinicName = oneLine(input.clinicName);
+  const when = oneLine(formatAppointmentWhen(input.startsAt));
+  const phone = oneLine(input.phone);
+  return {
+    to: input.to.trim(),
+    subject: APPOINTMENT_CANCELLED_SUBJECT,
+    fromName: clinicName,
+    text: `Termin ${when} je otkazan. ${optionalSentence(input.message)}Telefon: ${phone}.`,
+  };
+}
+
+/** „Ponuđeni termini“. The clinic is not a recipient. */
+export function offeredTimesMessage(input: OfferedTimesInput): MailMessage {
+  const clinicName = oneLine(input.clinicName);
+  const dentistName = oneLine(input.dentistName);
+  const link = oneLine(input.link);
+  const deadline = oneLine(formatAppointmentWhen(input.deadlineAt));
+  const phone = oneLine(input.phone);
+  return {
+    to: input.to.trim(),
+    subject: OFFERED_TIMES_SUBJECT,
+    fromName: clinicName,
+    text: `${clinicName} nudi druga vremena kod ${dentistName}. Izaberite jedan, ili javite da nijedan ne odgovara: ${link}. Rok za izbor: ${deadline}. Telefon: ${phone}.`,
+  };
+}
+
 export function formatAppointmentWhen(startsAt: string): string {
   const start = new Date(startsAt);
   if (Number.isNaN(start.getTime())) {
@@ -133,4 +227,10 @@ function quotedDisplayName(name: string): string {
 
 function oneLine(value: string): string {
   return value.replace(/[\r\n]+/g, " ").trim();
+}
+
+function optionalSentence(value: string): string {
+  const text = oneLine(value);
+  if (!text) return "";
+  return /[.!?]$/.test(text) ? `${text} ` : `${text}. `;
 }

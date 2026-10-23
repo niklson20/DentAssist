@@ -1,5 +1,7 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { z, type ZodError } from "zod";
@@ -13,8 +15,18 @@ import {
   isIsoDate,
   parseBelgradeLocal,
 } from "@/lib/calendar-dates";
+import { hashInviteToken } from "@/lib/clinic-invite";
 import { APPOINTMENT_STATUSES, RELATIONSHIPS } from "@/lib/labels";
-import { appointmentMovedMessage, MailError, sendMail } from "@/lib/mail";
+import {
+  appointmentCancelledMessage,
+  appointmentConfirmedMessage,
+  appointmentMovedMessage,
+  type MailMessage,
+  MailError,
+  offeredTimesMessage,
+  requestRejectedMessage,
+  sendMail,
+} from "@/lib/mail";
 import { normalizePhone } from "@/lib/phone";
 import { allocateSlug } from "@/lib/slug";
 import {
@@ -545,7 +557,7 @@ export async function setAppointmentStatus(
     const supabase = await createSupabaseServerClient();
     const loaded = await supabase
       .from("appointments")
-      .select("id, status, dentist_id")
+      .select("id, status, dentist_id, patient_id, starts_at")
       .eq("id", parsed.data.termin)
       .eq("clinic_id", member.clinicId)
       .maybeSingle();
@@ -560,6 +572,8 @@ export async function setAppointmentStatus(
     const status = APPOINTMENT_STATUSES.find((item) => item === row.status);
     const dentistId = typeof row.dentist_id === "string" ? row.dentist_id : null;
     const id = typeof row.id === "string" ? row.id : null;
+    const patientId = typeof row.patient_id === "string" ? row.patient_id : null;
+    const startsAt = typeof row.starts_at === "string" ? row.starts_at : null;
     if (!status || !dentistId || !id) return fail(SAVE_UNAVAILABLE);
 
     if (parsed.data.status === "cancelled" && status === "scheduled" && parsed.data.poruka === "") {
@@ -592,6 +606,18 @@ export async function setAppointmentStatus(
     if (saved.error || !savedId) {
       console.error("set_appointment_status rejected:", saved.error ? "unknown" : "empty");
       return fail(SAVE_UNAVAILABLE);
+    }
+
+    if (parsed.data.status === "cancelled" && patientId && startsAt) {
+      await sendStaffMail("appointment_cancelled", async () => {
+        const notice = await readCancelledNotice(supabase, {
+          clinicId: member.clinicId,
+          patientId,
+          startsAt,
+          message: parsed.data.poruka,
+        });
+        return notice ? appointmentCancelledMessage(notice) : null;
+      });
     }
 
     revalidatePath("/danas");
@@ -843,6 +869,17 @@ export async function acceptRequest(
       return fail(SAVE_UNAVAILABLE);
     }
 
+    await sendStaffMail("appointment_confirmed", async () => {
+      const notice = await readConfirmedNotice(supabase, {
+        clinicId: member.clinicId,
+        to: request.bookerEmail,
+        patientName: `${request.firstName} ${request.lastName}`,
+        dentistId: request.dentistId,
+        appointmentId: request.appointmentId,
+      });
+      return notice ? appointmentConfirmedMessage(notice) : null;
+    });
+
     revalidatePath("/danas");
     revalidatePath("/pacijenti");
     return ok({ id: scheduledId });
@@ -911,6 +948,15 @@ export async function rejectRequest(
       console.error("reject_request rejected:", rejected.error ? "unknown" : "empty");
       return fail(SAVE_UNAVAILABLE);
     }
+
+    await sendStaffMail("request_rejected", async () => {
+      const notice = await readRejectedNotice(supabase, {
+        clinicId: member.clinicId,
+        to: request.bookerEmail,
+        message: parsed.data.poruka,
+      });
+      return notice ? requestRejectedMessage(notice) : null;
+    });
 
     revalidatePath("/danas");
     return ok({ id: cancelledId });
@@ -1076,6 +1122,17 @@ export async function sendOffer(
     }
 
     if (offeredIds.length !== chosen.length) return fail(SAVE_UNAVAILABLE);
+
+    await sendStaffMail("offered_times", async () => {
+      const notice = await prepareOfferedNotice(supabase, {
+        clinicId: member.clinicId,
+        requestId: request.id,
+        to: request.bookerEmail,
+        dentistId: request.dentistId,
+        deadlineAt: request.expiresAt,
+      });
+      return notice ? offeredTimesMessage(notice) : null;
+    });
 
     revalidatePath("/danas");
     return ok({ id: request.id });
@@ -1250,6 +1307,241 @@ function sameInstant(stored: string, next: Date): boolean {
 
 function isExclusionConflict(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "23P01";
+}
+
+async function sendStaffMail(label: string, load: () => Promise<MailMessage | null>): Promise<void> {
+  try {
+    const message = await load();
+    if (!message) return;
+    await sendMail(message);
+  } catch (error) {
+    const detail = error instanceof MailError ? error.code : error instanceof Error ? error.name : "unknown";
+    console.error(`${label} mail failed:`, detail);
+  }
+}
+
+async function readConfirmedNotice(
+  supabase: SupabaseClient,
+  input: {
+    clinicId: string;
+    to: string;
+    patientName: string;
+    dentistId: string;
+    appointmentId: string;
+  },
+): Promise<{
+  to: string;
+  clinicName: string;
+  patientName: string;
+  startsAt: string;
+  dentistName: string;
+  address: string;
+  phone: string;
+} | null> {
+  const to = mailboxOf(input.to);
+  const patientName = input.patientName.replace(/\s+/g, " ").trim();
+  if (!to || !patientName) return null;
+
+  const [clinic, dentistName, startsAt] = await Promise.all([
+    readClinicMail(supabase, input.clinicId),
+    readDentistName(supabase, input.clinicId, input.dentistId),
+    readAppointmentStart(supabase, input.clinicId, input.appointmentId),
+  ]);
+  if (!clinic?.address || !dentistName || !startsAt) return null;
+
+  return {
+    to,
+    clinicName: clinic.clinicName,
+    patientName,
+    startsAt,
+    dentistName,
+    address: clinic.address,
+    phone: clinic.phone,
+  };
+}
+
+async function readRejectedNotice(
+  supabase: SupabaseClient,
+  input: { clinicId: string; to: string; message: string },
+): Promise<{ to: string; clinicName: string; message: string; phone: string } | null> {
+  const to = mailboxOf(input.to);
+  if (!to) return null;
+  const clinic = await readClinicMail(supabase, input.clinicId);
+  if (!clinic) return null;
+  return { to, clinicName: clinic.clinicName, message: input.message, phone: clinic.phone };
+}
+
+async function readCancelledNotice(
+  supabase: SupabaseClient,
+  input: { clinicId: string; patientId: string; startsAt: string; message: string },
+): Promise<{
+  to: string;
+  clinicName: string;
+  startsAt: string;
+  message: string;
+  phone: string;
+} | null> {
+  if (Number.isNaN(new Date(input.startsAt).getTime())) return null;
+  const [clinic, to] = await Promise.all([
+    readClinicMail(supabase, input.clinicId),
+    readPatientMailbox(supabase, input.clinicId, input.patientId),
+  ]);
+  if (!clinic || !to) return null;
+  return {
+    to,
+    clinicName: clinic.clinicName,
+    startsAt: input.startsAt,
+    message: input.message,
+    phone: clinic.phone,
+  };
+}
+
+async function prepareOfferedNotice(
+  supabase: SupabaseClient,
+  input: { clinicId: string; requestId: string; to: string; dentistId: string; deadlineAt: string },
+): Promise<{
+  to: string;
+  clinicName: string;
+  dentistName: string;
+  link: string;
+  deadlineAt: string;
+  phone: string;
+} | null> {
+  const to = mailboxOf(input.to);
+  if (!to || Number.isNaN(new Date(input.deadlineAt).getTime())) return null;
+
+  const [clinic, dentistName] = await Promise.all([
+    readClinicMail(supabase, input.clinicId),
+    readDentistName(supabase, input.clinicId, input.dentistId),
+  ]);
+  if (!clinic || !dentistName) return null;
+
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = hashInviteToken(token, process.env.TOKEN_PEPPER);
+  const link = offerChoiceLink(token);
+  if (!tokenHash || !link) {
+    console.error("offer_link rejected:", "unconfigured");
+    return null;
+  }
+
+  const saved = await supabase
+    .from("booking_links")
+    .insert({
+      clinic_id: input.clinicId,
+      booking_request_id: input.requestId,
+      purpose: "offer",
+      token_hash: tokenHash,
+      expires_at: input.deadlineAt,
+    })
+    .select("id")
+    .single();
+  const id = saved.data && typeof saved.data.id === "string" ? saved.data.id : null;
+  if (saved.error || !id) {
+    console.error("offer_link rejected:", saved.error ? "unknown" : "empty");
+    return null;
+  }
+
+  return {
+    to,
+    clinicName: clinic.clinicName,
+    dentistName,
+    link,
+    deadlineAt: input.deadlineAt,
+    phone: clinic.phone,
+  };
+}
+
+function offerChoiceLink(token: string): string | null {
+  const value = token.trim();
+  if (!/^[A-Za-z0-9_-]{1,200}$/.test(value)) return null;
+  const configured = process.env.APP_URL?.trim();
+  if (!configured) return null;
+  try {
+    const url = new URL(configured);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return `${url.origin}/zakazivanje/${encodeURIComponent(value)}`;
+  } catch {
+    return null;
+  }
+}
+
+async function readClinicMail(
+  supabase: SupabaseClient,
+  clinicId: string,
+): Promise<{ clinicName: string; address: string; phone: string } | null> {
+  const loaded = await supabase.from("clinics").select("name, address, phone").eq("id", clinicId).maybeSingle();
+  if (loaded.error) {
+    console.error("staff_mail_clinic rejected:", "unknown");
+    return null;
+  }
+  const row = recordOf(loaded.data);
+  if (!row) return null;
+  const clinicName = textOf(row.name);
+  const phone = textOf(row.phone);
+  if (!clinicName || !phone) return null;
+  return { clinicName, address: textOf(row.address), phone };
+}
+
+async function readDentistName(
+  supabase: SupabaseClient,
+  clinicId: string,
+  dentistId: string,
+): Promise<string | null> {
+  const loaded = await supabase
+    .from("clinic_members")
+    .select("first_name, last_name")
+    .eq("id", dentistId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (loaded.error) {
+    console.error("staff_mail_dentist rejected:", "unknown");
+    return null;
+  }
+  const row = recordOf(loaded.data);
+  if (!row) return null;
+  const name = `${textOf(row.first_name)} ${textOf(row.last_name)}`.replace(/\s+/g, " ").trim();
+  return name || null;
+}
+
+async function readAppointmentStart(
+  supabase: SupabaseClient,
+  clinicId: string,
+  appointmentId: string,
+): Promise<string | null> {
+  const loaded = await supabase
+    .from("appointments")
+    .select("starts_at")
+    .eq("id", appointmentId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (loaded.error) {
+    console.error("staff_mail_appointment rejected:", "unknown");
+    return null;
+  }
+  const startsAt = textOf(recordOf(loaded.data)?.starts_at);
+  if (!startsAt || Number.isNaN(new Date(startsAt).getTime())) return null;
+  return startsAt;
+}
+
+async function readPatientMailbox(
+  supabase: SupabaseClient,
+  clinicId: string,
+  patientId: string,
+): Promise<string | null> {
+  const [patient, contacts] = await Promise.all([
+    supabase.from("patients").select("email").eq("id", patientId).eq("clinic_id", clinicId).maybeSingle(),
+    supabase
+      .from("patient_contacts")
+      .select("email")
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId)
+      .limit(1),
+  ]);
+  if (patient.error || contacts.error) {
+    console.error("staff_mail_patient rejected:", "unknown");
+    return null;
+  }
+  return mailboxOf(recordOf(patient.data)?.email) ?? firstContactMailbox(contacts.data);
 }
 
 async function sendMovedAppointment(
