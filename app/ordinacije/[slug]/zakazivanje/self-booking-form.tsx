@@ -1,19 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { submitChildBooking, submitSelfBooking } from "@/app/actions/booking";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ActionResult } from "@/lib/action-result";
-import { relationshipLabel } from "@/lib/labels";
+import { bookingRequestStatusLabel, relationshipLabel } from "@/lib/labels";
 
 import {
   bookingConsentText,
   CHILD_ROUTE_TEXT,
+  freeStartsHref,
   GUARDIAN_STATEMENT,
   isChildRoute,
   NOT_PROCEDURE_CONSENT,
+  REQUEST_RECEIVED,
+  SLOT_TAKEN,
   type BookingChild,
 } from "./schema";
 
@@ -39,7 +43,17 @@ type SelfBookingScreenProps = {
   initialDependentId?: string;
 };
 
-type BookingResult = ActionResult<{ ready: true }> | null;
+type BookingResult = ActionResult<{ status: "pending" }> | null;
+
+export function bookingFollowUp(result: BookingResult, slug: string) {
+  if (result?.ok) {
+    return <RequestReceived />;
+  }
+  if (result && !result.ok && result.error === SLOT_TAKEN) {
+    return <SlotTaken slug={slug} />;
+  }
+  return null;
+}
 
 export function SelfBookingScreen({
   slug,
@@ -182,6 +196,10 @@ export function ChildBookingForm({
   const [relationship, setRelationship] = useState(initial?.relationship ?? "");
   const selected = bookable.find((child) => child.id === dependentId) ?? null;
   const [result, formAction, pending] = useActionState<BookingResult, FormData>(submitChildBooking, null);
+  const followUp = bookingFollowUp(result, slug);
+  if (followUp) {
+    return followUp;
+  }
   const error = result && !result.ok ? result : null;
 
   function pickChild(id: string) {
@@ -382,6 +400,10 @@ function LinkedRequest({
   slotLabel: string;
 }) {
   const [result, formAction, pending] = useActionState<BookingResult, FormData>(submitSelfBooking, null);
+  const followUp = bookingFollowUp(result, slug);
+  if (followUp) {
+    return followUp;
+  }
   const error = result && !result.ok ? result : null;
 
   return (
@@ -424,6 +446,10 @@ function IdentityForm({
   onDateOfBirth: (value: string) => void;
 }) {
   const [result, formAction, pending] = useActionState<BookingResult, FormData>(submitSelfBooking, null);
+  const followUp = bookingFollowUp(result, slug);
+  if (followUp) {
+    return followUp;
+  }
   const error = result && !result.ok ? result : null;
 
   return (
@@ -678,6 +704,28 @@ function CheckField({ id, name, label, error }: { id: string; name: string; labe
         </p>
       ) : null}
     </div>
+  );
+}
+
+function RequestReceived() {
+  return (
+    <section role="status" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4 text-card-foreground">
+      <p className="text-sm">{REQUEST_RECEIVED}</p>
+      <p className="w-fit rounded-md bg-muted px-2 py-1 text-sm font-medium text-foreground">
+        {bookingRequestStatusLabel("pending")}
+      </p>
+    </section>
+  );
+}
+
+function SlotTaken({ slug }: { slug: string }) {
+  return (
+    <section role="alert" className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 text-card-foreground">
+      <p className="text-sm">{SLOT_TAKEN}</p>
+      <Link href={freeStartsHref(slug)} className="text-sm text-primary underline-offset-4 hover:underline">
+        Slobodni počeci
+      </Link>
+    </section>
   );
 }
 

@@ -16,6 +16,16 @@ export const CHILD_BOOKS_ALONE =
 export const GUARDIAN_STATEMENT = "Zakazujem kao roditelj ili zakonski staratelj.";
 export const NOT_PROCEDURE_CONSENT = "Zakazivanje nije pristanak na zahvat.";
 export const EMAIL_IS_ACCOUNT = "Mejl je mejl ovog naloga.";
+export const REQUEST_RECEIVED = "Zahtev je primljen. Ordinacija treba da ga potvrdi.";
+export const SLOT_TAKEN = "Ovaj početak je zauzet. Izaberite drugi početak.";
+export const TWO_PENDING = "Već imate dva zahteva koja čekaju u ovoj ordinaciji.";
+export const PHONE_REQUIRED = "Unesite telefon.";
+export const BIRTH_DATE_REQUIRED = "Unesite datum rođenja.";
+
+/** Clinic page, where a signed-in patient picks another free start. */
+export function freeStartsHref(slug: string): string {
+  return `/ordinacije/${slug}`;
+}
 
 export type BookingChild = {
   id: string;

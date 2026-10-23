@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -9,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
 }));
 
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ requirePatient: mocks.requirePatient }));
 vi.mock("@/app/ordinacije/[slug]/load-clinic-public", () => ({
   loadClinicPublic: mocks.loadClinicPublic,
@@ -85,25 +84,23 @@ beforeEach(() => {
     selfLinked: false,
     profile,
   });
+  mocks.createClient.mockResolvedValue({
+    rpc: async () => ({ data: "99999999-9999-4999-8999-999999999999", error: null }),
+  });
 });
 
 describe("submitSelfBooking", () => {
-  it("does not create a request", () => {
-    const source = readFileSync(path.join(process.cwd(), "app/actions/booking.ts"), "utf8");
-    expect(source).not.toContain("create_booking");
-  });
-
   it("accepts a confirmed account without a chart link", async () => {
     const result = await submitSelfBooking(null, identity());
 
-    expect(result).toEqual({ ok: true, data: { ready: true } });
+    expect(result).toEqual({ ok: true, data: { status: "pending" } });
     expect(mocks.requirePatient).toHaveBeenCalledWith({
       purpose: "request",
       slug: "centar",
       stomatolog: dentistId,
       pocetak: startsAt,
     });
-    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.createClient).toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain("Tuđi");
   });
 
@@ -155,7 +152,7 @@ describe("submitSelfBooking", () => {
       }),
     );
 
-    expect(result).toEqual({ ok: true, data: { ready: true } });
+    expect(result).toEqual({ ok: true, data: { status: "pending" } });
     expect(JSON.stringify(result)).not.toContain("Tuđi");
   });
 

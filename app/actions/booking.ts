@@ -1,16 +1,23 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import type { ZodError } from "zod";
 
 import { loadClinicPublic } from "@/app/ordinacije/[slug]/load-clinic-public";
 import { loadSelfBooking } from "@/app/ordinacije/[slug]/zakazivanje/load-self-booking";
 import {
+  BIRTH_DATE_REQUIRED,
+  BOOKING_UNAVAILABLE,
   CHECK_BOOKING,
   CHILD_BOOKS_ALONE,
   CHILD_ROUTE_TEXT,
   EMAIL_IS_ACCOUNT,
+  PHONE_REQUIRED,
+  SLOT_TAKEN,
+  TWO_PENDING,
   childBookingIdentitySchema,
   childBookingLinkedSchema,
+  freeStartsHref,
   isChildRoute,
   selfBookingIdentitySchema,
   selfBookingSlotSchema,
@@ -18,14 +25,31 @@ import {
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requirePatient } from "@/lib/auth";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
+import { normalizePhone } from "@/lib/phone";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { CLINIC_UNAVAILABLE } from "../ordinacije/[slug]/registracija/schema";
 
-// The request row is created later. This step only accepts a valid self form.
+const REQUEST_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type BookingCreated = { status: "pending" };
+
+type BookingCall = {
+  slug: string;
+  dentistId: string;
+  startsAt: string;
+  forChild: boolean;
+  dependentId: string | null;
+  phone: string | null;
+  dateOfBirth: string | null;
+  reason: string;
+};
+
 export async function submitSelfBooking(
-  _previous: ActionResult<{ ready: true }> | null,
+  _previous: ActionResult<BookingCreated> | null,
   formData: FormData,
-): Promise<ActionResult<{ ready: true }>> {
+): Promise<ActionResult<BookingCreated>> {
   const slot = selfBookingSlotSchema.safeParse({
     slug: entry(formData, "slug"),
     stomatolog: entry(formData, "stomatolog"),
@@ -54,11 +78,22 @@ export async function submitSelfBooking(
   }
 
   const today = formatBelgradeDate(new Date());
+  const call: BookingCall = {
+    slug: clinic.clinic.slug,
+    dentistId: slot.data.stomatolog,
+    startsAt: slot.data.pocetak,
+    forChild: false,
+    dependentId: null,
+    phone: storedPhone(booking.profile.phone),
+    dateOfBirth: booking.profile.dateOfBirth,
+    reason: slot.data.reason,
+  };
+
   if (booking.selfLinked) {
     if (isChildRoute(booking.profile.dateOfBirth, today)) {
       return fail(CHILD_ROUTE_TEXT);
     }
-    return ok({ ready: true });
+    return openRequest(call);
   }
 
   const identity = selfBookingIdentitySchema.safeParse({
@@ -80,15 +115,20 @@ export async function submitSelfBooking(
     return fail(CHILD_ROUTE_TEXT);
   }
 
-  return ok({ ready: true });
+  return openRequest({
+    ...call,
+    phone: storedPhone(identity.data.phone),
+    dateOfBirth: identity.data.dateOfBirth,
+  });
 }
 
 // The child is a separate patient. The account email stays on the contact
-// and is not written as the patient's email. The request row is created later.
+// and is not written as the patient's email. Names are stored on the
+// dependent row; create_booking reads them from there.
 export async function submitChildBooking(
-  _previous: ActionResult<{ ready: true }> | null,
+  _previous: ActionResult<BookingCreated> | null,
   formData: FormData,
-): Promise<ActionResult<{ ready: true }>> {
+): Promise<ActionResult<BookingCreated>> {
   const slot = selfBookingSlotSchema.safeParse({
     slug: entry(formData, "slug"),
     stomatolog: entry(formData, "stomatolog"),
@@ -126,6 +166,17 @@ export async function submitChildBooking(
     return fail(CHILD_BOOKS_ALONE);
   }
 
+  const call: BookingCall = {
+    slug: clinic.clinic.slug,
+    dentistId: slot.data.stomatolog,
+    startsAt: slot.data.pocetak,
+    forChild: true,
+    dependentId: child?.id ?? null,
+    phone: storedPhone(booking.profile.phone),
+    dateOfBirth: child?.dateOfBirth ?? null,
+    reason: slot.data.reason,
+  };
+
   if (child?.linked) {
     const linked = childBookingLinkedSchema.safeParse({
       ...slot.data,
@@ -135,7 +186,7 @@ export async function submitChildBooking(
     if (!linked.success) {
       return fail(CHECK_BOOKING, fieldErrorsFrom(linked.error));
     }
-    return ok({ ready: true });
+    return openRequest(call);
   }
 
   const identity = childBookingIdentitySchema.safeParse({
@@ -162,7 +213,121 @@ export async function submitChildBooking(
     return fail(CHILD_BOOKS_ALONE);
   }
 
-  return ok({ ready: true });
+  const dependentId = identity.data.dependentId || (await insertChild(patient.accountId, identity.data));
+  if (typeof dependentId !== "string") {
+    return dependentId;
+  }
+
+  return openRequest({
+    ...call,
+    dependentId,
+    phone: storedPhone(identity.data.contactPhone),
+    dateOfBirth: identity.data.childDateOfBirth,
+  });
+}
+
+async function insertChild(
+  accountId: string,
+  child: {
+    childFirstName: string;
+    childLastName: string;
+    childDateOfBirth: string;
+    relationship: string;
+  },
+): Promise<ActionResult<BookingCreated> | string> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase
+      .from("patient_dependents")
+      .insert({
+        account_id: accountId,
+        first_name: child.childFirstName,
+        last_name: child.childLastName,
+        date_of_birth: child.childDateOfBirth,
+        relationship: child.relationship,
+      })
+      .select("id")
+      .single();
+
+    const id = readId(data);
+    if (error || !id) {
+      console.error("save_child rejected:", error?.code ?? "rejected");
+      return fail(BOOKING_UNAVAILABLE);
+    }
+    return id;
+  } catch (error) {
+    console.error("save_child failed:", error instanceof Error ? error.name : "unknown");
+    return fail(BOOKING_UNAVAILABLE);
+  }
+}
+
+async function openRequest(input: BookingCall): Promise<ActionResult<BookingCreated>> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data, error } = await supabase.rpc("create_booking", {
+      slug: input.slug,
+      dentist_id: input.dentistId,
+      starts_at: input.startsAt,
+      for_child: input.forChild,
+      dependent_id: input.dependentId,
+      phone: input.phone,
+      date_of_birth: input.dateOfBirth,
+      contact: null,
+      reason: input.reason.trim() ? input.reason.trim() : null,
+    });
+    if (error) {
+      return bookingFailure(input.slug, error);
+    }
+    if (!readRequestId(data)) {
+      console.error("create_booking rejected: invalid");
+      return fail(BOOKING_UNAVAILABLE);
+    }
+    revalidatePath(freeStartsHref(input.slug));
+    return ok({ status: "pending" });
+  } catch (error) {
+    console.error("create_booking failed:", error instanceof Error ? error.name : "unknown");
+    return fail(BOOKING_UNAVAILABLE);
+  }
+}
+
+function bookingFailure(
+  slug: string,
+  error: { message?: string; code?: string },
+): ActionResult<never> {
+  const message = error.message ?? "";
+  if (message.includes("slot is not available")) {
+    revalidatePath(freeStartsHref(slug));
+    return fail(SLOT_TAKEN);
+  }
+  if (message.includes("two pending requests")) {
+    return fail(TWO_PENDING);
+  }
+  if (message.includes("phone is required") || message.includes("not a valid Serbian number")) {
+    return fail(PHONE_REQUIRED);
+  }
+  if (message.includes("date of birth is required")) {
+    return fail(BIRTH_DATE_REQUIRED);
+  }
+  console.error("create_booking rejected:", error.code ?? "rejected");
+  return fail(BOOKING_UNAVAILABLE);
+}
+
+function storedPhone(value: string | null | undefined): string | null {
+  if (!value?.trim()) {
+    return null;
+  }
+  return normalizePhone(value);
+}
+
+function readId(data: unknown): string | null {
+  if (!data || typeof data !== "object" || !("id" in data)) {
+    return null;
+  }
+  return readRequestId((data as { id: unknown }).id);
+}
+
+function readRequestId(data: unknown): string | null {
+  return typeof data === "string" && REQUEST_ID.test(data) ? data : null;
 }
 
 function entry(formData: FormData, key: string): string | null {

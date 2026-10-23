@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
 }));
 
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth")>();
   return { ...actual, requirePatient: mocks.requirePatient };
@@ -126,6 +127,22 @@ beforeEach(() => {
     profile: adult,
     children: [mila, luka],
   });
+  const savedChild = {
+    insert() {
+      return savedChild;
+    },
+    select() {
+      return savedChild;
+    },
+    eq() {
+      return savedChild;
+    },
+    single: async () => ({ data: { id: "55555555-5555-4555-8555-555555555555" }, error: null }),
+  };
+  mocks.createClient.mockResolvedValue({
+    from: () => savedChild,
+    rpc: async () => ({ data: "99999999-9999-4999-8999-999999999999", error: null }),
+  });
 });
 
 describe("child booking page", () => {
@@ -217,10 +234,10 @@ describe("submitChildBooking", () => {
       }),
     );
 
-    expect(result).toEqual({ ok: true, data: { ready: true } });
+    expect(result).toEqual({ ok: true, data: { status: "pending" } });
     expect(JSON.stringify(result)).not.toContain("dete@example.com");
     expect(JSON.stringify(result)).not.toContain("Mila");
-    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.createClient).toHaveBeenCalled();
     expect(mocks.requirePatient).toHaveBeenCalledWith({
       purpose: "request",
       slug: "centar",
@@ -267,9 +284,8 @@ describe("submitChildBooking", () => {
       null,
       childIdentity({ patientEmail: "dete@example.com" }),
     );
-    expect(accepted).toEqual({ ok: true, data: { ready: true } });
+    expect(accepted).toEqual({ ok: true, data: { status: "pending" } });
     expect(JSON.stringify(accepted)).not.toContain("dete@example.com");
-    expect(mocks.createClient).not.toHaveBeenCalled();
   });
 
   it("refuses a child who has turned 15 and a dependent from another account", async () => {
