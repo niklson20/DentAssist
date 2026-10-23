@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { formatBelgrade } from "@/lib/calendar-dates";
 
 export const REQUEST_RECEIVED_SUBJECT = "Zahtev je primljen";
+export const APPOINTMENT_MOVED_SUBJECT = "Termin je pomeren";
 
 export type MailMessage = {
   to: string;
@@ -16,6 +17,15 @@ export type RequestReceivedInput = {
   to: string;
   clinicName: string;
   patientName: string;
+  startsAt: string;
+  dentistName: string;
+  address: string;
+  phone: string;
+};
+
+export type AppointmentMovedInput = {
+  to: string;
+  clinicName: string;
   startsAt: string;
   dentistName: string;
   address: string;
@@ -68,6 +78,21 @@ export function requestReceivedMessage(input: RequestReceivedInput): MailMessage
     subject: REQUEST_RECEIVED_SUBJECT,
     fromName: clinicName,
     text: `Zahtev za termin je primljen. ${clinicName} treba da ga potvrdi. ${patientName}, ${when}, ${dentistName}, ${address}. Telefon: ${phone}.`,
+  };
+}
+
+/** „Termin je pomeren“. Sent only when the clinic changes the start time. */
+export function appointmentMovedMessage(input: AppointmentMovedInput): MailMessage {
+  const clinicName = oneLine(input.clinicName);
+  const when = oneLine(formatAppointmentWhen(input.startsAt));
+  const dentistName = oneLine(input.dentistName);
+  const address = oneLine(input.address);
+  const phone = oneLine(input.phone);
+  return {
+    to: input.to.trim(),
+    subject: APPOINTMENT_MOVED_SUBJECT,
+    fromName: clinicName,
+    text: `Novi termin: ${when}, ${dentistName}, ${address}. Telefon: ${phone}.`,
   };
 }
 

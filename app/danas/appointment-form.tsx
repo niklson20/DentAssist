@@ -2,7 +2,7 @@
 
 import { useActionState, useState, type ReactNode } from "react";
 
-import { createAppointment } from "@/app/actions/appointments";
+import { createAppointment, updateAppointment } from "@/app/actions/appointments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ActionResult } from "@/lib/action-result";
@@ -27,6 +27,16 @@ export type AppointmentFormChoices = {
   slotMinutes: SlotMinutes;
 };
 
+export type ExistingAppointment = {
+  id: string;
+  dentistId: string;
+  patientId: string;
+  startsAt: string;
+  durationMinutes: number;
+  typeId: string;
+  note: string;
+};
+
 const controlClass =
   "h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -38,28 +48,44 @@ export function AppointmentForm({
   datum,
   today,
   defaultDentistId = null,
+  termin = null,
 }: {
   choices: AppointmentFormChoices;
   datum: string;
   today: string;
   defaultDentistId?: string | null;
+  termin?: ExistingAppointment | null;
 }) {
   const [result, formAction, pending] = useActionState<ActionResult<{ id: string }> | null, FormData>(
-    createAppointment,
+    termin ? updateAppointment : createAppointment,
     null,
   );
   const { dentists, patients, types, slotMinutes } = choices;
-  const [patientId, setPatientId] = useState(patients[0]?.id ?? "");
+  const [patientId, setPatientId] = useState(
+    termin && patients.some((patient) => patient.id === termin.patientId)
+      ? termin.patientId
+      : (patients[0]?.id ?? ""),
+  );
   const selected = patients.find((patient) => patient.id === patientId) ?? null;
   const askForContact = selected ? isUnder15(selected, today) && !selected.hasContact : false;
   const contactOnFile = selected ? isUnder15(selected, today) && selected.hasContact : false;
+  const dentistFromTermin =
+    termin && dentists.some((dentist) => dentist.id === termin.dentistId) ? termin.dentistId : null;
   const dentistDefault =
-    defaultDentistId && dentists.some((dentist) => dentist.id === defaultDentistId)
+    dentistFromTermin ??
+    (defaultDentistId && dentists.some((dentist) => dentist.id === defaultDentistId)
       ? defaultDentistId
-      : (dentists[0]?.id ?? "");
+      : (dentists[0]?.id ?? ""));
   const durations = durationChoices(slotMinutes);
-  const durationDefault = durations.includes(30) ? "30" : String(slotMinutes);
-  const startDefault = isIsoDate(datum) ? `${datum}T09:00` : "";
+  const durationDefault =
+    termin && durations.includes(termin.durationMinutes)
+      ? String(termin.durationMinutes)
+      : durations.includes(30)
+        ? "30"
+        : String(slotMinutes);
+  const startDefault = termin ? termin.startsAt : isIsoDate(datum) ? `${datum}T09:00` : "";
+  const typeDefault =
+    termin && types.some((type) => type.id === termin.typeId) ? termin.typeId : (types[0]?.id ?? "");
   const formError = result && !result.ok ? result.error : null;
   const dentistError = message(result, "stomatolog");
   const patientError = message(result, "pacijent");
@@ -75,12 +101,13 @@ export function AppointmentForm({
 
   return (
     <form
-      id="novi-termin"
+      id={termin ? "izmena-termina" : "novi-termin"}
       action={formAction}
       noValidate
       className="flex max-w-lg flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground"
     >
-      <h2 className="text-lg font-semibold text-foreground">Novi termin</h2>
+      <h2 className="text-lg font-semibold text-foreground">{termin ? "Izmena termina" : "Novi termin"}</h2>
+      {termin ? <input type="hidden" name="termin" value={termin.id} /> : null}
       <Field id="appointment-dentist" label="Stomatolog" message={dentistError}>
         <select
           id="appointment-dentist"
@@ -140,7 +167,7 @@ export function AppointmentForm({
         <select
           id="appointment-type"
           name="tip"
-          defaultValue={types[0]?.id ?? ""}
+          defaultValue={typeDefault}
           required
           aria-invalid={typeError ? true : undefined}
           aria-describedby={describedBy("appointment-type", typeError)}
@@ -155,6 +182,7 @@ export function AppointmentForm({
           name="napomena"
           rows={3}
           maxLength={1000}
+          defaultValue={termin ? termin.note : undefined}
           aria-invalid={noteError ? true : undefined}
           aria-describedby={describedBy("appointment-note", noteError)}
           className={areaClass}
@@ -225,7 +253,7 @@ export function AppointmentForm({
       ) : null}
       {result?.ok ? (
         <p role="status" className="text-sm text-foreground">
-          Termin je sačuvan.
+          {termin ? "Termin je izmenjen." : "Termin je sačuvan."}
         </p>
       ) : null}
       {formError ? (

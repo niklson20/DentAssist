@@ -8,12 +8,14 @@ import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireMember, type MemberSession } from "@/lib/auth";
 import { formatBelgradeDate, hasTurned15, isIsoDate, parseBelgradeLocal } from "@/lib/calendar-dates";
 import { APPOINTMENT_STATUSES, RELATIONSHIPS } from "@/lib/labels";
+import { appointmentMovedMessage, MailError, sendMail } from "@/lib/mail";
 import { normalizePhone } from "@/lib/phone";
 import {
   insertGuardianContact,
   insertStaffAppointment,
   readAppointmentFacts,
 } from "@/lib/queries/appointments";
+import { appointmentsOverlap } from "@/lib/slots";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const CHECK = "Proverite unete podatke.";
@@ -42,6 +44,7 @@ const CANCEL_NOTE_MAX = "Poruka može imati najviše 300 znakova.";
 const COMPLETED_ONLY =
   "Samo stomatolog tog termina i vlasnik mogu da označe termin završenim.";
 const APPOINTMENT_MISSING = "Termin nije pronađen.";
+const ONLY_SCHEDULED = "Samo zakazan termin može da se izmeni.";
 const STAFF_STATUS_CHANGES = ["no_show", "cancelled", "completed"] as const;
 const BLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 
@@ -61,6 +64,10 @@ const appointmentSchema = z.object({
   kontaktPrezime: z.string().trim(),
   kontaktTelefon: z.string().trim(),
   kontaktMejl: z.string().trim(),
+});
+
+const updateSchema = appointmentSchema.extend({
+  termin: z.string({ error: PICK_APPOINTMENT }).trim().uuid(PICK_APPOINTMENT),
 });
 
 const blockSchema = z.object({
@@ -218,6 +225,185 @@ export async function createAppointment(
     return ok({ id: saved.id });
   } catch (error) {
     console.error("create_appointment failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+}
+
+export async function updateAppointment(
+  _previous: ActionResult<{ id: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = updateSchema.safeParse({
+    ...readAppointmentFields(formData),
+    termin: text(formData.get("termin")),
+  });
+  if (!parsed.success) {
+    return fail(CHECK, fieldErrorsFrom(parsed.error));
+  }
+
+  const clock = localClock(parsed.data.pocetak);
+  if (!clock) {
+    return fail(CHECK, { pocetak: [PICK_START] });
+  }
+
+  const member = await requireMember();
+  const today = formatBelgradeDate(new Date());
+  if (clock.day < today) {
+    return fail(EARLIER_DAY, { pocetak: [EARLIER_DAY] });
+  }
+
+  const startsAt = parseBelgradeLocal(parsed.data.pocetak);
+  const endsAt = new Date(startsAt.getTime() + parsed.data.trajanje * 60_000);
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const loaded = await supabase
+      .from("appointments")
+      .select("id, status, starts_at")
+      .eq("id", parsed.data.termin)
+      .eq("clinic_id", member.clinicId)
+      .maybeSingle();
+
+    if (loaded.error) {
+      console.error("update_appointment_read rejected:", "unknown");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const current = loaded.data;
+    if (!current || typeof current.id !== "string") return fail(APPOINTMENT_MISSING);
+    if (typeof current.status !== "string" || typeof current.starts_at !== "string") {
+      return fail(SAVE_UNAVAILABLE);
+    }
+    if (current.status !== "scheduled") return fail(ONLY_SCHEDULED);
+
+    const read = await readAppointmentFacts(supabase, {
+      clinicId: member.clinicId,
+      dentistId: parsed.data.stomatolog,
+      patientId: parsed.data.pacijent,
+      appointmentTypeId: parsed.data.tip,
+      startsAt,
+      endsAt,
+    });
+    if (!read.ok) {
+      if (read.reason === "dentist") return fail(CHECK, { stomatolog: [PICK_DENTIST] });
+      if (read.reason === "patient") return fail(CHECK, { pacijent: [PICK_PATIENT] });
+      if (read.reason === "type") return fail(CHECK, { tip: [PICK_TYPE] });
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const { facts } = read;
+    if (
+      parsed.data.trajanje < facts.slotMinutes ||
+      parsed.data.trajanje > 120 ||
+      parsed.data.trajanje % facts.slotMinutes !== 0
+    ) {
+      return fail(CHECK, { trajanje: [DURATION_STEP] });
+    }
+    if (clock.second !== 0 || (clock.hour * 60 + clock.minute) % facts.slotMinutes !== 0) {
+      return fail(CHECK, { pocetak: [START_STEP] });
+    }
+
+    // Staff may save outside working hours. Unavailability and another appointment of this dentist still block it.
+    if (facts.unavailable) {
+      return fail(DENTIST_UNAVAILABLE);
+    }
+
+    const under15 = facts.dateOfBirth !== null && !hasTurned15(facts.dateOfBirth, today);
+    let contact: {
+      relationship: z.infer<typeof contactSchema>["kontaktOdnos"];
+      firstName: string;
+      lastName: string;
+      phone: string;
+      email: string | null;
+    } | null = null;
+    if (under15 && !facts.hasContact) {
+      const parsedContact = contactSchema.safeParse(parsed.data);
+      if (!parsedContact.success) {
+        return fail(CONTACT_REQUIRED, fieldErrorsFrom(parsedContact.error));
+      }
+      const phone = normalizePhone(parsedContact.data.kontaktTelefon);
+      if (!phone) {
+        return fail(CONTACT_REQUIRED, { kontaktTelefon: ["Unesite ispravan telefon."] });
+      }
+      contact = {
+        relationship: parsedContact.data.kontaktOdnos,
+        firstName: parsedContact.data.kontaktIme,
+        lastName: parsedContact.data.kontaktPrezime,
+        phone,
+        email: parsedContact.data.kontaktMejl === "" ? null : parsedContact.data.kontaktMejl.toLowerCase(),
+      };
+    }
+
+    const occupied = await supabase
+      .from("appointments")
+      .select("id, dentist_id, starts_at, ends_at, status")
+      .eq("clinic_id", member.clinicId)
+      .eq("dentist_id", parsed.data.stomatolog)
+      .lt("starts_at", endsAt.toISOString())
+      .gt("ends_at", startsAt.toISOString());
+    if (occupied.error) {
+      console.error("update_appointment_overlap rejected:", "unknown");
+      return fail(SAVE_UNAVAILABLE);
+    }
+    const overlap = otherAppointmentOverlaps(
+      current.id,
+      parsed.data.stomatolog,
+      startsAt,
+      endsAt,
+      occupied.data,
+    );
+    if (overlap === null) return fail(SAVE_UNAVAILABLE);
+    if (overlap) return fail(DENTIST_BUSY);
+
+    if (contact) {
+      const savedContact = await insertGuardianContact(supabase, {
+        clinicId: member.clinicId,
+        patientId: parsed.data.pacijent,
+        relationship: contact.relationship,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        phone: contact.phone,
+        email: contact.email,
+      });
+      if (!savedContact) return fail(SAVE_UNAVAILABLE);
+    }
+
+    const saved = await supabase
+      .from("appointments")
+      .update({
+        dentist_id: parsed.data.stomatolog,
+        patient_id: parsed.data.pacijent,
+        appointment_type_id: parsed.data.tip,
+        starts_at: startsAt.toISOString(),
+        ends_at: endsAt.toISOString(),
+        note: parsed.data.napomena === "" ? null : parsed.data.napomena,
+      })
+      .eq("id", current.id)
+      .eq("clinic_id", member.clinicId)
+      .select("id")
+      .maybeSingle();
+
+    const savedId = saved.data && typeof saved.data.id === "string" ? saved.data.id : null;
+    if (saved.error || !savedId) {
+      console.error("update_appointment rejected:", saved.error ? "unknown" : "empty");
+      return fail(isExclusionConflict(saved.error) ? DENTIST_BUSY : SAVE_UNAVAILABLE);
+    }
+
+    // A new start time emails the patient and does not spend their one reschedule.
+    // Moving only the dentist does not send mail.
+    if (!sameInstant(current.starts_at, startsAt)) {
+      await sendMovedAppointment(supabase, {
+        clinicId: member.clinicId,
+        patientId: parsed.data.pacijent,
+        dentistId: parsed.data.stomatolog,
+        startsAt: startsAt.toISOString(),
+      });
+    }
+
+    revalidatePath("/danas");
+    return ok({ id: savedId });
+  } catch (error) {
+    console.error("update_appointment failed:", error instanceof Error ? error.name : "unknown");
     return fail(SAVE_UNAVAILABLE);
   }
 }
@@ -451,4 +637,138 @@ function fieldErrorsFrom(error: ZodError): Record<string, string[]> {
     (result[field] ??= []).push(issue.message);
   }
   return result;
+}
+
+function otherAppointmentOverlaps(
+  appointmentId: string,
+  dentistId: string,
+  startsAt: Date,
+  endsAt: Date,
+  rows: unknown,
+): boolean | null {
+  if (!Array.isArray(rows)) return null;
+  const next = { dentistId, startsAt, endsAt, status: "scheduled" as const };
+  for (const item of rows) {
+    const row = recordOf(item);
+    if (!row) return null;
+    if (row.id === appointmentId) continue;
+    if (typeof row.id !== "string" || typeof row.dentist_id !== "string") return null;
+    const status = APPOINTMENT_STATUSES.find((value) => value === row.status);
+    if (!status || typeof row.starts_at !== "string" || typeof row.ends_at !== "string") return null;
+    const rowStart = new Date(row.starts_at);
+    const rowEnd = new Date(row.ends_at);
+    if (Number.isNaN(rowStart.getTime()) || Number.isNaN(rowEnd.getTime())) return null;
+    if (
+      appointmentsOverlap(next, {
+        dentistId: row.dentist_id,
+        startsAt: rowStart,
+        endsAt: rowEnd,
+        status,
+      })
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function sameInstant(stored: string, next: Date): boolean {
+  const previous = new Date(stored);
+  return !Number.isNaN(previous.getTime()) && previous.getTime() === next.getTime();
+}
+
+function isExclusionConflict(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23P01";
+}
+
+async function sendMovedAppointment(
+  supabase: SupabaseClient,
+  input: { clinicId: string; patientId: string; dentistId: string; startsAt: string },
+): Promise<void> {
+  try {
+    const notice = await readMovedNotice(supabase, input);
+    if (!notice) return;
+    await sendMail(appointmentMovedMessage(notice));
+  } catch (error) {
+    const detail = error instanceof MailError ? error.code : error instanceof Error ? error.name : "unknown";
+    console.error("appointment_moved mail failed:", detail);
+  }
+}
+
+async function readMovedNotice(
+  supabase: SupabaseClient,
+  input: { clinicId: string; patientId: string; dentistId: string; startsAt: string },
+): Promise<{
+  to: string;
+  clinicName: string;
+  startsAt: string;
+  dentistName: string;
+  address: string;
+  phone: string;
+} | null> {
+  const [clinic, dentist, patient, contacts] = await Promise.all([
+    supabase.from("clinics").select("name, address, phone").eq("id", input.clinicId).maybeSingle(),
+    supabase
+      .from("clinic_members")
+      .select("first_name, last_name")
+      .eq("id", input.dentistId)
+      .eq("clinic_id", input.clinicId)
+      .maybeSingle(),
+    supabase.from("patients").select("email").eq("id", input.patientId).eq("clinic_id", input.clinicId).maybeSingle(),
+    supabase
+      .from("patient_contacts")
+      .select("email")
+      .eq("clinic_id", input.clinicId)
+      .eq("patient_id", input.patientId)
+      .limit(1),
+  ]);
+
+  if (clinic.error || dentist.error || patient.error || contacts.error) {
+    console.error("appointment_moved_mail rejected:", "unknown");
+    return null;
+  }
+
+  const clinicRow = recordOf(clinic.data);
+  const dentistRow = recordOf(dentist.data);
+  const to = mailboxOf(recordOf(patient.data)?.email) ?? firstContactMailbox(contacts.data);
+  if (!clinicRow || !dentistRow || !to) return null;
+
+  const clinicName = textOf(clinicRow.name);
+  const address = textOf(clinicRow.address);
+  const phone = textOf(clinicRow.phone);
+  const dentistName = `${textOf(dentistRow.first_name)} ${textOf(dentistRow.last_name)}`.replace(/\s+/g, " ").trim();
+  if (!clinicName || !address || !phone || !dentistName) return null;
+
+  return {
+    to,
+    clinicName,
+    startsAt: input.startsAt,
+    dentistName,
+    address,
+    phone,
+  };
+}
+
+function firstContactMailbox(value: unknown): string | null {
+  if (!Array.isArray(value)) return null;
+  for (const item of value) {
+    const email = mailboxOf(recordOf(item)?.email);
+    if (email) return email;
+  }
+  return null;
+}
+
+function mailboxOf(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  return email === "" ? null : email;
+}
+
+function textOf(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }
