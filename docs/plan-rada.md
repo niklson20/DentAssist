@@ -71,7 +71,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.E7 | Ponuda iz kalendara | Claude Sonnet thinking | [x] |
 | 2.E9 | Mejlovi osoblja | Claude Sonnet thinking | [x] |
 | 2.E8 | Telefon | Composer 2.5 Fast | [x] |
-| 2.F1 | Lista pacijenata | Composer 2.5 Fast | [ ] |
+| 2.F1 | Lista pacijenata | Composer 2.5 Fast | [x] |
 | 2.F2 | Pregled kartona | Composer 2.5 Fast | [ ] |
 | 2.F3 | Istorija | Composer 2.5 Fast | [ ] |
 | 2.F4 | Anamneza i upozorenje | Claude Sonnet thinking | [ ] |
