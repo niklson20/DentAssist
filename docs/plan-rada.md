@@ -57,7 +57,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.D5 | Zakazivanje za sebe | Claude Sonnet thinking | [x] |
 | 2.D6 | Zakazivanje za dete | Claude Sonnet thinking | [x] |
 | 2.D7 | Zahtev | Claude Sonnet thinking | [x] |
-| 2.D8 | Ponuda | Claude Sonnet thinking | [ ] |
+| 2.D8 | Ponuda | Claude Sonnet thinking | [x] |
 | 2.D9 | Pomeranje i otkaz | Claude Sonnet thinking | [ ] |
 | 2.D10 | Mejlovi pacijentu | Composer 2.5 Fast | [ ] |
 | 2.E1 | Školjka kalendara | Composer 2.5 Fast | [ ] |
