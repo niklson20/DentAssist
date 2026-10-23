@@ -26,9 +26,13 @@ const VIEWS: { id: CalendarView; label: string }[] = [
 export function CalendarShell({
   query,
   dayCalendar = null,
+  weekCalendar = null,
+  monthCalendar = null,
 }: {
   query: CalendarQuery;
   dayCalendar?: ReactNode;
+  weekCalendar?: ReactNode;
+  monthCalendar?: ReactNode;
 }) {
   const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(showCalendarDay, null);
   const dateError = result && !result.ok ? result.fieldErrors?.datum?.[0] : undefined;
@@ -122,7 +126,7 @@ export function CalendarShell({
         </p>
       </header>
       <section aria-label="Kalendar" className="min-h-64 rounded-lg border border-border bg-card">
-        {query.prikaz === "dan" ? dayCalendar : null}
+        {query.prikaz === "dan" ? dayCalendar : query.prikaz === "nedelja" ? weekCalendar : monthCalendar}
       </section>
     </main>
   );

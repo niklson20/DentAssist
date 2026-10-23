@@ -62,7 +62,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.D10 | Mejlovi pacijentu | Composer 2.5 Fast | [x] |
 | 2.E1 | Školjka kalendara | Composer 2.5 Fast | [x] |
 | 2.E2 | Dnevni prikaz | Claude Sonnet thinking | [x] |
-| 2.E3 | Nedelja i mesec | Composer 2.5 Fast | [ ] |
+| 2.E3 | Nedelja i mesec | Composer 2.5 Fast | [x] |
 | 2.E4 | Unos termina | Claude Sonnet thinking | [ ] |
 | 2.E11 | Blokade | Claude Sonnet thinking | [ ] |
 | 2.E5 | Statusi | Claude Sonnet thinking | [ ] |
