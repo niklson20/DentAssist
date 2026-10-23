@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { ZodError } from "zod";
 
+import { formatDentistLabel, type PublicDentist } from "@/app/ordinacije/[slug]/dentist-preference";
 import { loadClinicPublic } from "@/app/ordinacije/[slug]/load-clinic-public";
 import { loadSelfBooking } from "@/app/ordinacije/[slug]/zakazivanje/load-self-booking";
 import {
@@ -25,6 +26,7 @@ import {
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requirePatient } from "@/lib/auth";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
+import { MailError, requestReceivedMessage, sendMail } from "@/lib/mail";
 import { normalizePhone } from "@/lib/phone";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -34,6 +36,15 @@ const REQUEST_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type BookingCreated = { status: "pending" };
+
+type ReceivedNotice = {
+  to: string;
+  clinicName: string;
+  patientName: string;
+  dentistName: string;
+  address: string;
+  phone: string;
+};
 
 type BookingCall = {
   slug: string;
@@ -89,11 +100,18 @@ export async function submitSelfBooking(
     reason: slot.data.reason,
   };
 
+  const notice = receivedNotice(
+    patient.email,
+    clinic.clinic,
+    personName(booking.profile),
+    slot.data.stomatolog,
+  );
+
   if (booking.selfLinked) {
     if (isChildRoute(booking.profile.dateOfBirth, today)) {
       return fail(CHILD_ROUTE_TEXT);
     }
-    return openRequest(call);
+    return openRequest(call, notice);
   }
 
   const identity = selfBookingIdentitySchema.safeParse({
@@ -115,11 +133,14 @@ export async function submitSelfBooking(
     return fail(CHILD_ROUTE_TEXT);
   }
 
-  return openRequest({
-    ...call,
-    phone: storedPhone(identity.data.phone),
-    dateOfBirth: identity.data.dateOfBirth,
-  });
+  return openRequest(
+    {
+      ...call,
+      phone: storedPhone(identity.data.phone),
+      dateOfBirth: identity.data.dateOfBirth,
+    },
+    notice,
+  );
 }
 
 // The child is a separate patient. The account email stays on the contact
@@ -186,7 +207,10 @@ export async function submitChildBooking(
     if (!linked.success) {
       return fail(CHECK_BOOKING, fieldErrorsFrom(linked.error));
     }
-    return openRequest(call);
+    return openRequest(
+      call,
+      receivedNotice(patient.email, clinic.clinic, personName(child), slot.data.stomatolog),
+    );
   }
 
   const identity = childBookingIdentitySchema.safeParse({
@@ -218,12 +242,23 @@ export async function submitChildBooking(
     return dependentId;
   }
 
-  return openRequest({
-    ...call,
-    dependentId,
-    phone: storedPhone(identity.data.contactPhone),
-    dateOfBirth: identity.data.childDateOfBirth,
-  });
+  return openRequest(
+    {
+      ...call,
+      dependentId,
+      phone: storedPhone(identity.data.contactPhone),
+      dateOfBirth: identity.data.childDateOfBirth,
+    },
+    receivedNotice(
+      patient.email,
+      clinic.clinic,
+      personName({
+        firstName: identity.data.childFirstName,
+        lastName: identity.data.childLastName,
+      }),
+      slot.data.stomatolog,
+    ),
+  );
 }
 
 async function insertChild(
@@ -261,7 +296,10 @@ async function insertChild(
   }
 }
 
-async function openRequest(input: BookingCall): Promise<ActionResult<BookingCreated>> {
+async function openRequest(
+  input: BookingCall,
+  notice: ReceivedNotice,
+): Promise<ActionResult<BookingCreated>> {
   try {
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.rpc("create_booking", {
@@ -283,11 +321,52 @@ async function openRequest(input: BookingCall): Promise<ActionResult<BookingCrea
       return fail(BOOKING_UNAVAILABLE);
     }
     revalidatePath(freeStartsHref(input.slug));
+    await sendRequestReceived(notice, input.startsAt);
     return ok({ status: "pending" });
   } catch (error) {
     console.error("create_booking failed:", error instanceof Error ? error.name : "unknown");
     return fail(BOOKING_UNAVAILABLE);
   }
+}
+
+async function sendRequestReceived(notice: ReceivedNotice, startsAt: string): Promise<void> {
+  try {
+    await sendMail(
+      requestReceivedMessage({
+        to: notice.to,
+        clinicName: notice.clinicName,
+        patientName: notice.patientName,
+        startsAt,
+        dentistName: notice.dentistName,
+        address: notice.address,
+        phone: notice.phone,
+      }),
+    );
+  } catch (error) {
+    const detail = error instanceof MailError ? error.code : error instanceof Error ? error.name : "unknown";
+    console.error("request_received mail failed:", detail);
+  }
+}
+
+function receivedNotice(
+  email: string,
+  clinic: { name: string; address: string; phone: string; dentists: PublicDentist[] },
+  patientName: string,
+  dentistId: string,
+): ReceivedNotice {
+  const dentist = clinic.dentists.find((item) => item.id.toLowerCase() === dentistId.toLowerCase());
+  return {
+    to: email.trim().toLowerCase(),
+    clinicName: clinic.name,
+    patientName,
+    dentistName: dentist ? formatDentistLabel(dentist) : "",
+    address: clinic.address,
+    phone: clinic.phone,
+  };
+}
+
+function personName(person: { firstName: string; lastName: string }): string {
+  return `${person.firstName} ${person.lastName}`.trim();
 }
 
 function bookingFailure(
