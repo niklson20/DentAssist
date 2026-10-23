@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 
 import { showCalendarDay } from "@/app/danas/actions";
 import { calendarPath } from "@/app/danas/schema";
@@ -11,11 +11,21 @@ import type { ActionResult } from "@/lib/action-result";
 import {
   addCalendarDays,
   formatBelgrade,
+  formatBelgradeDate,
   startOfBelgradeDay,
   type CalendarQuery,
   type CalendarView,
 } from "@/lib/calendar-dates";
 import { cn } from "@/lib/utils";
+
+import { AppointmentForm, type AppointmentFormChoices } from "./appointment-form";
+
+const EMPTY_APPOINTMENT_CHOICES: AppointmentFormChoices = {
+  dentists: [],
+  patients: [],
+  types: [],
+  slotMinutes: 15,
+};
 
 const VIEWS: { id: CalendarView; label: string }[] = [
   { id: "dan", label: "Dan" },
@@ -28,12 +38,15 @@ export function CalendarShell({
   dayCalendar = null,
   weekCalendar = null,
   monthCalendar = null,
+  appointmentChoices = EMPTY_APPOINTMENT_CHOICES,
 }: {
   query: CalendarQuery;
   dayCalendar?: ReactNode;
   weekCalendar?: ReactNode;
   monthCalendar?: ReactNode;
+  appointmentChoices?: AppointmentFormChoices;
 }) {
+  const [appointmentOpen, setAppointmentOpen] = useState(false);
   const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(showCalendarDay, null);
   const dateError = result && !result.ok ? result.fieldErrors?.datum?.[0] : undefined;
   const formError = result && !result.ok && !dateError ? result.error : null;
@@ -124,6 +137,27 @@ export function CalendarShell({
         <p role="status" className="text-sm text-muted-foreground">
           {query.sakrijOtkazane ? "Otkazani termini su sakriveni." : "Otkazani termini su vidljivi."}
         </p>
+        <div className="flex flex-col gap-3">
+          <Button
+            type="button"
+            size="sm"
+            className="self-start"
+            aria-expanded={appointmentOpen}
+            aria-controls="novi-termin"
+            onClick={() => setAppointmentOpen(true)}
+          >
+            Novi termin
+          </Button>
+          {appointmentOpen ? (
+            <AppointmentForm
+              key={query.datum}
+              choices={appointmentChoices}
+              datum={query.datum}
+              today={formatBelgradeDate(new Date())}
+              defaultDentistId={query.stomatolog}
+            />
+          ) : null}
+        </div>
       </header>
       <section aria-label="Kalendar" className="min-h-64 rounded-lg border border-border bg-card">
         {query.prikaz === "dan" ? dayCalendar : query.prikaz === "nedelja" ? weekCalendar : monthCalendar}
