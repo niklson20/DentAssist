@@ -4,6 +4,7 @@ import { requireMember } from "@/lib/auth";
 
 import { ChartHeader } from "./chart-header";
 import { ConnectParentButton } from "./connect-parent-button";
+import { VisitHistory } from "./history";
 import { loadChildChart } from "./load-child-chart";
 import { BIRTH_DATE_MISSING, CHART_MISSING } from "./schema";
 
@@ -41,6 +42,8 @@ export default async function Page({ params }: PageProps) {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 py-8">
       <ChartHeader patient={chart.patient} alerts={chart.alerts} clinical={clinical} />
+
+      <VisitHistory visits={[]} />
 
       {canSend && chart.connect.kind === "needsBirthDate" ? (
         <p className="text-sm text-muted-foreground">{BIRTH_DATE_MISSING}</p>
