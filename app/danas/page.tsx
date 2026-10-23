@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { loadPendingRequests } from "@/app/actions/appointments";
 import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate, type CalendarParams } from "@/lib/calendar-dates";
 
 import { CalendarShell } from "./calendar-shell";
+import { PendingColumn } from "./pending-column";
 import { DayGrid } from "./day-grid";
 import { loadDayCalendar } from "./load-day";
 import { loadMonthCalendar } from "./load-month";
@@ -41,37 +43,47 @@ export default async function Page({ searchParams }: PageProps) {
     query.prikaz === "mesec"
       ? await loadMonthCalendar(member.clinicId, query)
       : null;
+  const pending = await loadPendingRequests();
 
   return (
-    <CalendarShell
-      query={query}
-      dayCalendar={
-        day ? (
-          day.ok ? (
-            <DayGrid model={day.data} />
-          ) : (
-            <p className="p-4 text-sm text-destructive">{day.error}</p>
-          )
-        ) : null
-      }
-      weekCalendar={
-        week ? (
-          week.ok ? (
-            <WeekView model={week.data} />
-          ) : (
-            <p className="p-4 text-sm text-destructive">{week.error}</p>
-          )
-        ) : null
-      }
-      monthCalendar={
-        month ? (
-          month.ok ? (
-            <MonthView model={month.data} />
-          ) : (
-            <p className="p-4 text-sm text-destructive">{month.error}</p>
-          )
-        ) : null
-      }
-    />
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <div className="min-w-0 flex-1">
+        <CalendarShell
+          query={query}
+          dayCalendar={
+            day ? (
+              day.ok ? (
+                <DayGrid model={day.data} />
+              ) : (
+                <p className="p-4 text-sm text-destructive">{day.error}</p>
+              )
+            ) : null
+          }
+          weekCalendar={
+            week ? (
+              week.ok ? (
+                <WeekView model={week.data} />
+              ) : (
+                <p className="p-4 text-sm text-destructive">{week.error}</p>
+              )
+            ) : null
+          }
+          monthCalendar={
+            month ? (
+              month.ok ? (
+                <MonthView model={month.data} />
+              ) : (
+                <p className="p-4 text-sm text-destructive">{month.error}</p>
+              )
+            ) : null
+          }
+        />
+      </div>
+      <PendingColumn
+        role={member.role}
+        requests={pending.ok ? pending.data : []}
+        error={pending.ok ? null : pending.error}
+      />
+    </div>
   );
 }

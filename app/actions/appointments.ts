@@ -6,10 +6,17 @@ import { z, type ZodError } from "zod";
 
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireMember, type MemberSession } from "@/lib/auth";
-import { formatBelgradeDate, hasTurned15, isIsoDate, parseBelgradeLocal } from "@/lib/calendar-dates";
+import {
+  formatBelgrade,
+  formatBelgradeDate,
+  hasTurned15,
+  isIsoDate,
+  parseBelgradeLocal,
+} from "@/lib/calendar-dates";
 import { APPOINTMENT_STATUSES, RELATIONSHIPS } from "@/lib/labels";
 import { appointmentMovedMessage, MailError, sendMail } from "@/lib/mail";
 import { normalizePhone } from "@/lib/phone";
+import { allocateSlug } from "@/lib/slug";
 import {
   insertGuardianContact,
   insertStaffAppointment,
@@ -45,6 +52,15 @@ const COMPLETED_ONLY =
   "Samo stomatolog tog termina i vlasnik mogu da označe termin završenim.";
 const APPOINTMENT_MISSING = "Termin nije pronađen.";
 const ONLY_SCHEDULED = "Samo zakazan termin može da se izmeni.";
+const PICK_REQUEST = "Izaberite zahtev.";
+const RESPOND_ONLY =
+  "Samo vlasnik i stomatolog kome je termin tražen mogu da odgovore.";
+const REQUEST_MISSING = "Zahtev nije pronađen.";
+const REQUEST_CLOSED = "Zahtev više ne čeka potvrdu.";
+const REQUEST_EXPIRED = "Rok za ovaj zahtev je istekao.";
+const MESSAGE_MAX = "Poruka može imati najviše 300 znakova.";
+const PICK_DECISION = "Izaberite odluku.";
+const ACCEPT_DECISIONS = ["", "prihvati", "isti", "drugi"] as const;
 const STAFF_STATUS_CHANGES = ["no_show", "cancelled", "completed"] as const;
 const BLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 
@@ -85,6 +101,16 @@ const statusSchema = z.object({
   termin: z.string({ error: PICK_APPOINTMENT }).trim().uuid(PICK_APPOINTMENT),
   status: z.enum(STAFF_STATUS_CHANGES, { error: PICK_STATUS }),
   poruka: z.string().trim().max(300, CANCEL_NOTE_MAX),
+});
+
+const acceptSchema = z.object({
+  zahtev: z.string({ error: PICK_REQUEST }).trim().uuid(PICK_REQUEST),
+  odluka: z.enum(ACCEPT_DECISIONS, { error: PICK_DECISION }),
+});
+
+const rejectSchema = z.object({
+  zahtev: z.string({ error: PICK_REQUEST }).trim().uuid(PICK_REQUEST),
+  poruka: z.string().trim().max(300, MESSAGE_MAX),
 });
 
 const contactSchema = z.object({
@@ -549,6 +575,324 @@ export async function setAppointmentStatus(
   }
 }
 
+type PendingRequestView = {
+  id: string;
+  timeLabel: string;
+  name: string;
+  dentistName: string;
+  reason: string;
+  deadlineLabel: string;
+  needsChoice: boolean;
+};
+
+type AcceptDecision = "prihvati" | "isti" | "drugi";
+
+type AcceptPayload = { id: string } | { chartChoice: true };
+
+type BookingRequestRow = {
+  id: string;
+  dentistId: string;
+  accountId: string;
+  bookerEmail: string;
+  forChild: boolean;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  phone: string | null;
+  contactRelationship: string | null;
+  contactFirstName: string | null;
+  contactLastName: string | null;
+  contactPhone: string | null;
+  reason: string | null;
+  patientId: string | null;
+  appointmentId: string;
+  expiresAt: string;
+};
+
+type ChartRecord = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  dateOfBirth: string | null;
+  mergedIntoId: string | null;
+  slug: string;
+};
+
+type ContactRecord = {
+  patientId: string;
+  email: string | null;
+  confirmedAt: string | null;
+};
+
+type ChartMatch =
+  | { kind: "use"; patientId: string }
+  | { kind: "choice"; patientId: string; claimEmail: boolean; addContact: boolean }
+  | { kind: "create" };
+
+export async function loadPendingRequests(): Promise<ActionResult<PendingRequestView[]>> {
+  const member = await requireMember();
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const actor = await clinicActor(supabase, member);
+    if (!actor) return fail(SAVE_UNAVAILABLE);
+
+    let requestQuery = supabase
+      .from("booking_requests")
+      .select(
+        "id, dentist_id, account_id, booker_email, for_child, patient_first_name, patient_last_name, patient_date_of_birth, patient_phone, contact_relationship, contact_first_name, contact_last_name, contact_phone, reason, patient_id, appointment_id, status, expires_at",
+      )
+      .eq("clinic_id", member.clinicId)
+      .eq("status", "pending");
+    if (member.role === "dentist") {
+      requestQuery = requestQuery.eq("dentist_id", actor.id);
+    }
+
+    const [requestResult, memberResult] = await Promise.all([
+      requestQuery,
+      supabase
+        .from("clinic_members")
+        .select("id, first_name, last_name")
+        .eq("clinic_id", member.clinicId),
+    ]);
+
+    if (requestResult.error || memberResult.error) {
+      console.error("pending_requests rejected:", "unknown");
+      if (member.role === "reception") return ok([]);
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const requests = rowsOf(requestResult.data)
+      .map((row) => bookingRequestFrom(row))
+      .filter((row): row is BookingRequestRow => row !== null)
+      .filter((row) => member.role !== "dentist" || row.dentistId === actor.id);
+    if (requests.length === 0) return ok([]);
+
+    const names = new Map<string, string>();
+    for (const row of rowsOf(memberResult.data)) {
+      if (typeof row.id !== "string") continue;
+      const name = `${textOf(row.first_name)} ${textOf(row.last_name)}`.replace(/\s+/g, " ").trim();
+      if (name) names.set(row.id, name);
+    }
+
+    const appointmentIds = requests.map((request) => request.appointmentId);
+    const [appointmentResult, patientResult, contactResult] = await Promise.all([
+      supabase
+        .from("appointments")
+        .select("id, starts_at")
+        .eq("clinic_id", member.clinicId)
+        .in("id", appointmentIds),
+      supabase
+        .from("patients")
+        .select("id, first_name, last_name, email, date_of_birth, merged_into_id, slug")
+        .eq("clinic_id", member.clinicId),
+      supabase
+        .from("patient_contacts")
+        .select("patient_id, email, confirmed_at")
+        .eq("clinic_id", member.clinicId),
+    ]);
+
+    if (appointmentResult.error || patientResult.error || contactResult.error) {
+      console.error("pending_requests_match rejected:", "unknown");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const starts = new Map<string, string>();
+    for (const row of rowsOf(appointmentResult.data)) {
+      if (typeof row.id === "string" && typeof row.starts_at === "string") {
+        starts.set(row.id, row.starts_at);
+      }
+    }
+    const charts = chartRows(patientResult.data);
+    const contacts = contactRows(contactResult.data);
+
+    const views = requests
+      .slice()
+      .sort((left, right) =>
+        (starts.get(left.appointmentId) ?? "").localeCompare(starts.get(right.appointmentId) ?? ""),
+      )
+      .map((request) =>
+        pendingView(
+          request,
+          names.get(request.dentistId) ?? "—",
+          starts.get(request.appointmentId) ?? null,
+          charts,
+          contacts,
+        ),
+      );
+
+    return ok(views);
+  } catch (error) {
+    console.error("pending_requests failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+}
+
+export async function acceptRequest(
+  _previous: ActionResult<AcceptPayload> | null,
+  formData: FormData,
+): Promise<ActionResult<AcceptPayload>> {
+  const parsed = acceptSchema.safeParse({
+    zahtev: text(formData.get("zahtev")),
+    odluka: text(formData.get("odluka")),
+  });
+  if (!parsed.success) {
+    return fail(CHECK, fieldErrorsFrom(parsed.error));
+  }
+  const decision: AcceptDecision = parsed.data.odluka === "" ? "prihvati" : parsed.data.odluka;
+
+  const member = await requireMember();
+  if (member.role === "reception") return fail(RESPOND_ONLY);
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const actor = await clinicActor(supabase, member);
+    if (!actor) return fail(SAVE_UNAVAILABLE);
+
+    const request = await readPendingRequest(supabase, member.clinicId, parsed.data.zahtev);
+    if (request === "missing") return fail(REQUEST_MISSING);
+    if (request === "closed") return fail(REQUEST_CLOSED);
+    if (request === "unavailable") return fail(SAVE_UNAVAILABLE);
+    if (!mayRespond(member, actor.id, request.dentistId)) return fail(RESPOND_ONLY);
+    if (isExpired(request.expiresAt)) return fail(REQUEST_EXPIRED);
+
+    const hold = await readHeldAppointment(supabase, member.clinicId, request.appointmentId);
+    if (hold === "missing") return fail(REQUEST_MISSING);
+    if (hold === "closed") return fail(REQUEST_CLOSED);
+    if (hold === "unavailable") return fail(SAVE_UNAVAILABLE);
+
+    const charts = await readCharts(supabase, member.clinicId);
+    if (!charts) return fail(SAVE_UNAVAILABLE);
+    const contacts = request.forChild ? await readContacts(supabase, member.clinicId) : [];
+    if (!contacts) return fail(SAVE_UNAVAILABLE);
+
+    const match = matchChart(request, charts, contacts);
+    if (match.kind === "choice" && decision === "prihvati") {
+      return ok({ chartChoice: true });
+    }
+
+    const placed = await placeAcceptedChart(supabase, member.clinicId, request, charts, match, decision);
+    if ("error" in placed) return placed.error;
+    if ("chartChoice" in placed) return ok({ chartChoice: true });
+
+    const linked = await ensureChartLink(supabase, member.clinicId, request, placed.patientId);
+    if (!linked) return fail(SAVE_UNAVAILABLE);
+
+    if (placed.claimEmail) {
+      const claimed = await insertEmailClaim(supabase, member.clinicId, placed.patientId, request);
+      if (!claimed) return fail(SAVE_UNAVAILABLE);
+    }
+
+    const scheduled = await supabase
+      .from("appointments")
+      .update({
+        status: "scheduled",
+        patient_id: placed.patientId,
+        confirmed_at: new Date().toISOString(),
+        confirmed_by: actor.id,
+      })
+      .eq("id", request.appointmentId)
+      .eq("clinic_id", member.clinicId)
+      .eq("status", "pending_confirmation")
+      .select("id")
+      .maybeSingle();
+    const scheduledId = scheduled.data && typeof scheduled.data.id === "string" ? scheduled.data.id : null;
+    if (scheduled.error || !scheduledId) {
+      console.error("accept_request_appointment rejected:", scheduled.error ? "unknown" : "empty");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const accepted = await supabase
+      .from("booking_requests")
+      .update({ status: "accepted", patient_id: placed.patientId })
+      .eq("id", request.id)
+      .eq("clinic_id", member.clinicId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+    if (accepted.error || !accepted.data) {
+      console.error("accept_request rejected:", accepted.error ? "unknown" : "empty");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    revalidatePath("/danas");
+    revalidatePath("/pacijenti");
+    return ok({ id: scheduledId });
+  } catch (error) {
+    console.error("accept_request failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+}
+
+export async function rejectRequest(
+  _previous: ActionResult<{ id: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = rejectSchema.safeParse({
+    zahtev: text(formData.get("zahtev")),
+    poruka: text(formData.get("poruka")),
+  });
+  if (!parsed.success) {
+    return fail(CHECK, fieldErrorsFrom(parsed.error));
+  }
+
+  const member = await requireMember();
+  if (member.role === "reception") return fail(RESPOND_ONLY);
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const actor = await clinicActor(supabase, member);
+    if (!actor) return fail(SAVE_UNAVAILABLE);
+
+    const request = await readPendingRequest(supabase, member.clinicId, parsed.data.zahtev);
+    if (request === "missing") return fail(REQUEST_MISSING);
+    if (request === "closed") return fail(REQUEST_CLOSED);
+    if (request === "unavailable") return fail(SAVE_UNAVAILABLE);
+    if (!mayRespond(member, actor.id, request.dentistId)) return fail(RESPOND_ONLY);
+
+    const cancelled = await supabase
+      .from("appointments")
+      .update({
+        status: "cancelled",
+        cancelled_by: "staff",
+        cancellation_note: null,
+      })
+      .eq("id", request.appointmentId)
+      .eq("clinic_id", member.clinicId)
+      .eq("status", "pending_confirmation")
+      .select("id")
+      .maybeSingle();
+    const cancelledId = cancelled.data && typeof cancelled.data.id === "string" ? cancelled.data.id : null;
+    if (cancelled.error || !cancelledId) {
+      console.error("reject_request_appointment rejected:", cancelled.error ? "unknown" : "empty");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const rejected = await supabase
+      .from("booking_requests")
+      .update({
+        status: "rejected",
+        patient_note: parsed.data.poruka === "" ? null : parsed.data.poruka,
+      })
+      .eq("id", request.id)
+      .eq("clinic_id", member.clinicId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+    if (rejected.error || !rejected.data) {
+      console.error("reject_request rejected:", rejected.error ? "unknown" : "empty");
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    revalidatePath("/danas");
+    return ok({ id: cancelledId });
+  } catch (error) {
+    console.error("reject_request failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+}
+
 function readBlockFields(formData: FormData) {
   return {
     stomatolog: text(formData.get("stomatolog")),
@@ -771,4 +1115,507 @@ function textOf(value: unknown): string {
 function recordOf(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+type PlacedChart =
+  | { patientId: string; claimEmail: boolean }
+  | { chartChoice: true }
+  | { error: ActionResult<never> };
+
+async function clinicActor(
+  supabase: SupabaseClient,
+  member: MemberSession,
+): Promise<{ id: string } | null> {
+  const loaded = await supabase
+    .from("clinic_members")
+    .select("id")
+    .eq("clinic_id", member.clinicId)
+    .eq("user_id", member.userId)
+    .maybeSingle();
+  if (loaded.error) {
+    console.error("booking_response_member rejected:", "unknown");
+    return null;
+  }
+  const id = loaded.data && typeof loaded.data.id === "string" ? loaded.data.id : null;
+  return id ? { id } : null;
+}
+
+function mayRespond(member: MemberSession, actorId: string, dentistId: string): boolean {
+  if (member.role === "owner") return true;
+  return member.role === "dentist" && actorId === dentistId;
+}
+
+function isExpired(iso: string): boolean {
+  const time = new Date(iso).getTime();
+  return Number.isNaN(time) || time <= Date.now();
+}
+
+async function readPendingRequest(
+  supabase: SupabaseClient,
+  clinicId: string,
+  requestId: string,
+): Promise<BookingRequestRow | "missing" | "closed" | "unavailable"> {
+  const loaded = await supabase
+    .from("booking_requests")
+    .select(
+      "id, dentist_id, account_id, booker_email, for_child, patient_first_name, patient_last_name, patient_date_of_birth, patient_phone, contact_relationship, contact_first_name, contact_last_name, contact_phone, reason, patient_id, appointment_id, status, expires_at",
+    )
+    .eq("id", requestId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (loaded.error) {
+    console.error("booking_request_read rejected:", "unknown");
+    return "unavailable";
+  }
+  const row = recordOf(loaded.data);
+  if (!row) return "missing";
+  if (row.status !== "pending") return "closed";
+  const request = bookingRequestFrom(row);
+  return request ?? "unavailable";
+}
+
+async function readHeldAppointment(
+  supabase: SupabaseClient,
+  clinicId: string,
+  appointmentId: string,
+): Promise<"ok" | "missing" | "closed" | "unavailable"> {
+  const loaded = await supabase
+    .from("appointments")
+    .select("id, status")
+    .eq("id", appointmentId)
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (loaded.error) {
+    console.error("booking_request_appointment rejected:", "unknown");
+    return "unavailable";
+  }
+  const row = recordOf(loaded.data);
+  if (!row) return "missing";
+  if (row.status !== "pending_confirmation") return "closed";
+  return "ok";
+}
+
+async function readCharts(supabase: SupabaseClient, clinicId: string): Promise<ChartRecord[] | null> {
+  const listed = await supabase
+    .from("patients")
+    .select("id, first_name, last_name, email, date_of_birth, merged_into_id, slug")
+    .eq("clinic_id", clinicId);
+  if (listed.error) {
+    console.error("accept_request_charts rejected:", "unknown");
+    return null;
+  }
+  return chartRows(listed.data);
+}
+
+async function readContacts(supabase: SupabaseClient, clinicId: string): Promise<ContactRecord[] | null> {
+  const listed = await supabase
+    .from("patient_contacts")
+    .select("patient_id, email, confirmed_at")
+    .eq("clinic_id", clinicId);
+  if (listed.error) {
+    console.error("accept_request_contacts rejected:", "unknown");
+    return null;
+  }
+  return contactRows(listed.data);
+}
+
+async function placeAcceptedChart(
+  supabase: SupabaseClient,
+  clinicId: string,
+  request: BookingRequestRow,
+  charts: ChartRecord[],
+  match: ChartMatch,
+  decision: AcceptDecision,
+): Promise<PlacedChart> {
+  if (match.kind === "choice" && decision === "prihvati") return { chartChoice: true };
+
+  if (match.kind === "use" || (match.kind === "choice" && decision === "isti")) {
+    const claimEmail = match.kind === "choice" && match.claimEmail;
+    if (match.kind === "choice" && match.addContact) {
+      const added = await insertContact(supabase, clinicId, match.patientId, request);
+      if (!added) return { error: fail(SAVE_UNAVAILABLE) };
+    }
+    return { patientId: match.patientId, claimEmail };
+  }
+
+  if (decision === "isti") return { error: fail(CHECK, { odluka: [PICK_DECISION] }) };
+
+  const patientId = await createChart(supabase, clinicId, request, charts);
+  if (!patientId) return { error: fail(SAVE_UNAVAILABLE) };
+  return { patientId, claimEmail: false };
+}
+
+async function createChart(
+  supabase: SupabaseClient,
+  clinicId: string,
+  request: BookingRequestRow,
+  charts: ChartRecord[],
+): Promise<string | null> {
+  const contact = request.forChild ? childContact(request) : null;
+  if (request.forChild && !contact) return null;
+
+  const email = request.forChild || emailUsed(charts, request.bookerEmail) ? null : request.bookerEmail;
+  const slug = allocateSlug(
+    `${request.firstName} ${request.lastName}`,
+    "patient",
+    charts.map((chart) => chart.slug).filter((value) => value !== ""),
+  );
+  const created = await supabase
+    .from("patients")
+    .insert({
+      clinic_id: clinicId,
+      first_name: request.firstName,
+      last_name: request.lastName,
+      slug,
+      email,
+      phone: request.forChild ? null : request.phone,
+      date_of_birth: request.dateOfBirth,
+    })
+    .select("id")
+    .single();
+  const patientId = created.data && typeof created.data.id === "string" ? created.data.id : null;
+  if (created.error || !patientId) {
+    console.error("accept_request_chart rejected:", created.error ? "unknown" : "empty");
+    return null;
+  }
+
+  if (contact) {
+    const added = await insertContact(supabase, clinicId, patientId, request);
+    if (!added) return null;
+  }
+  return patientId;
+}
+
+async function insertContact(
+  supabase: SupabaseClient,
+  clinicId: string,
+  patientId: string,
+  request: BookingRequestRow,
+): Promise<boolean> {
+  const contact = childContact(request);
+  if (!contact) return false;
+  const inserted = await supabase
+    .from("patient_contacts")
+    .insert({
+      patient_id: patientId,
+      clinic_id: clinicId,
+      relationship: contact.relationship,
+      first_name: contact.firstName,
+      last_name: contact.lastName,
+      phone: contact.phone,
+      email: request.bookerEmail,
+      confirmed_at: null,
+    })
+    .select("id")
+    .single();
+  if (inserted.error || !inserted.data) {
+    console.error("accept_request_contact rejected:", inserted.error ? "unknown" : "empty");
+    return false;
+  }
+  return true;
+}
+
+async function ensureChartLink(
+  supabase: SupabaseClient,
+  clinicId: string,
+  request: BookingRequestRow,
+  patientId: string,
+): Promise<boolean> {
+  const dependentId = await dependentFor(supabase, request);
+  const existing = await supabase
+    .from("patient_chart_links")
+    .select("account_id, dependent_id")
+    .eq("clinic_id", clinicId)
+    .eq("patient_id", patientId)
+    .maybeSingle();
+  if (existing.error) {
+    console.error("accept_request_link_read rejected:", "unknown");
+    return false;
+  }
+
+  const row = recordOf(existing.data);
+  if (row) {
+    const accountId = typeof row.account_id === "string" ? row.account_id : null;
+    const linkedDependent = typeof row.dependent_id === "string" ? row.dependent_id : null;
+    return accountId === request.accountId && linkedDependent === dependentId;
+  }
+
+  const inserted = await supabase
+    .from("patient_chart_links")
+    .insert({
+      clinic_id: clinicId,
+      patient_id: patientId,
+      account_id: request.accountId,
+      dependent_id: dependentId,
+      confirmed_at: null,
+    })
+    .select("id")
+    .single();
+  if (inserted.error || !inserted.data) {
+    console.error("accept_request_link rejected:", inserted.error ? "unknown" : "empty");
+    return false;
+  }
+  return true;
+}
+
+async function dependentFor(supabase: SupabaseClient, request: BookingRequestRow): Promise<string | null> {
+  if (!request.forChild) return null;
+  const listed = await supabase
+    .from("patient_dependents")
+    .select("id, first_name, last_name, date_of_birth, relationship")
+    .eq("account_id", request.accountId);
+  if (listed.error) {
+    console.error("accept_request_dependent rejected:", "unknown");
+    return null;
+  }
+  for (const row of rowsOf(listed.data)) {
+    if (typeof row.id !== "string") continue;
+    const relationship = textOf(row.relationship);
+    if (
+      sameName(textOf(row.first_name), request.firstName) &&
+      sameName(textOf(row.last_name), request.lastName) &&
+      dateKey(row.date_of_birth) === request.dateOfBirth &&
+      (relationship === "" || relationship === request.contactRelationship)
+    ) {
+      return row.id;
+    }
+  }
+  return null;
+}
+
+async function insertEmailClaim(
+  supabase: SupabaseClient,
+  clinicId: string,
+  patientId: string,
+  request: BookingRequestRow,
+): Promise<boolean> {
+  const inserted = await supabase
+    .from("patient_email_claims")
+    .insert({
+      patient_id: patientId,
+      clinic_id: clinicId,
+      appointment_id: request.appointmentId,
+      email: request.bookerEmail,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (inserted.error || !inserted.data) {
+    console.error("accept_request_email_claim rejected:", inserted.error ? "unknown" : "empty");
+    return false;
+  }
+  return true;
+}
+
+function pendingView(
+  request: BookingRequestRow,
+  dentistName: string,
+  startsAt: string | null,
+  charts: ChartRecord[],
+  contacts: ContactRecord[],
+): PendingRequestView {
+  const start = startsAt ? new Date(startsAt) : null;
+  const deadline = new Date(request.expiresAt);
+  const timeLabel =
+    start && !Number.isNaN(start.getTime())
+      ? formatBelgrade(start, { hour: "2-digit", minute: "2-digit" })
+      : "—";
+  const deadlineLabel = Number.isNaN(deadline.getTime())
+    ? "—"
+    : formatBelgrade(deadline, {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+  return {
+    id: request.id,
+    timeLabel,
+    name: `${request.firstName} ${request.lastName}`.replace(/\s+/g, " ").trim(),
+    dentistName,
+    reason: request.reason ?? "Nije unet",
+    deadlineLabel,
+    needsChoice: matchChart(request, charts, contacts).kind === "choice",
+  };
+}
+
+function bookingRequestFrom(row: Record<string, unknown>): BookingRequestRow | null {
+  if (
+    typeof row.id !== "string" ||
+    typeof row.dentist_id !== "string" ||
+    typeof row.account_id !== "string" ||
+    typeof row.for_child !== "boolean" ||
+    typeof row.appointment_id !== "string" ||
+    typeof row.expires_at !== "string"
+  ) {
+    return null;
+  }
+  const email = mailboxOf(row.booker_email);
+  const firstName = textOf(row.patient_first_name);
+  const lastName = textOf(row.patient_last_name);
+  const dateOfBirth = dateKey(row.patient_date_of_birth);
+  if (!email || !firstName || !lastName || !dateOfBirth) return null;
+  const phone = textOf(row.patient_phone);
+  return {
+    id: row.id,
+    dentistId: row.dentist_id,
+    accountId: row.account_id,
+    bookerEmail: email,
+    forChild: row.for_child,
+    firstName,
+    lastName,
+    dateOfBirth,
+    phone: phone === "" ? null : phone,
+    contactRelationship: textOf(row.contact_relationship) || null,
+    contactFirstName: textOf(row.contact_first_name) || null,
+    contactLastName: textOf(row.contact_last_name) || null,
+    contactPhone: textOf(row.contact_phone) || null,
+    reason: textOf(row.reason) || null,
+    patientId: typeof row.patient_id === "string" ? row.patient_id : null,
+    appointmentId: row.appointment_id,
+    expiresAt: row.expires_at,
+  };
+}
+
+function matchChart(request: BookingRequestRow, charts: ChartRecord[], contacts: ContactRecord[]): ChartMatch {
+  if (request.patientId) return { kind: "use", patientId: request.patientId };
+
+  const open = charts.filter((chart) => chart.mergedIntoId === null);
+  if (!request.forChild) {
+    const exact = open.find(
+      (chart) =>
+        chart.email === request.bookerEmail &&
+        sameName(chart.firstName, request.firstName) &&
+        sameName(chart.lastName, request.lastName) &&
+        chart.dateOfBirth === request.dateOfBirth,
+    );
+    if (exact) return { kind: "use", patientId: exact.id };
+
+    const sameEmpty = open.find(
+      (chart) =>
+        chart.email === null &&
+        sameName(chart.firstName, request.firstName) &&
+        sameName(chart.lastName, request.lastName) &&
+        chart.dateOfBirth === request.dateOfBirth,
+    );
+    if (sameEmpty) {
+      return { kind: "choice", patientId: sameEmpty.id, claimEmail: true, addContact: false };
+    }
+
+    // The chart that already holds this email may belong to someone else.
+    // Its name stays here and is not returned to the patient.
+    const emailOwner = open.find((chart) => chart.email === request.bookerEmail);
+    if (emailOwner) {
+      return { kind: "choice", patientId: emailOwner.id, claimEmail: false, addContact: false };
+    }
+
+    const sameNameOnly = open.find(
+      (chart) =>
+        sameName(chart.firstName, request.firstName) &&
+        sameName(chart.lastName, request.lastName) &&
+        chart.dateOfBirth !== request.dateOfBirth,
+    );
+    if (sameNameOnly) {
+      return {
+        kind: "choice",
+        patientId: sameNameOnly.id,
+        claimEmail: sameNameOnly.email === null,
+        addContact: false,
+      };
+    }
+    return { kind: "create" };
+  }
+
+  const sameChild = open.filter(
+    (chart) =>
+      sameName(chart.firstName, request.firstName) &&
+      sameName(chart.lastName, request.lastName) &&
+      chart.dateOfBirth === request.dateOfBirth,
+  );
+  const confirmed = sameChild.find((chart) =>
+    contacts.some(
+      (contact) =>
+        contact.patientId === chart.id &&
+        contact.email === request.bookerEmail &&
+        contact.confirmedAt !== null,
+    ),
+  );
+  if (confirmed) return { kind: "use", patientId: confirmed.id };
+
+  const existing = sameChild[0];
+  if (!existing) return { kind: "create" };
+  const alreadyContact = contacts.some(
+    (contact) => contact.patientId === existing.id && contact.email === request.bookerEmail,
+  );
+  return { kind: "choice", patientId: existing.id, claimEmail: false, addContact: !alreadyContact };
+}
+
+function chartRows(value: unknown): ChartRecord[] {
+  const charts: ChartRecord[] = [];
+  for (const row of rowsOf(value)) {
+    if (typeof row.id !== "string") continue;
+    charts.push({
+      id: row.id,
+      firstName: textOf(row.first_name),
+      lastName: textOf(row.last_name),
+      email: mailboxOf(row.email),
+      dateOfBirth: dateKey(row.date_of_birth),
+      mergedIntoId: typeof row.merged_into_id === "string" ? row.merged_into_id : null,
+      slug: textOf(row.slug),
+    });
+  }
+  return charts;
+}
+
+function contactRows(value: unknown): ContactRecord[] {
+  const contacts: ContactRecord[] = [];
+  for (const row of rowsOf(value)) {
+    if (typeof row.patient_id !== "string") continue;
+    contacts.push({
+      patientId: row.patient_id,
+      email: mailboxOf(row.email),
+      confirmedAt: typeof row.confirmed_at === "string" && row.confirmed_at !== "" ? row.confirmed_at : null,
+    });
+  }
+  return contacts;
+}
+
+function rowsOf(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  const rows: Record<string, unknown>[] = [];
+  for (const item of value) {
+    const row = recordOf(item);
+    if (row) rows.push(row);
+  }
+  return rows;
+}
+
+function childContact(request: BookingRequestRow): {
+  relationship: (typeof RELATIONSHIPS)[number];
+  firstName: string;
+  lastName: string;
+  phone: string;
+} | null {
+  const relationship = RELATIONSHIPS.find((item) => item === request.contactRelationship);
+  if (!relationship || !request.contactFirstName || !request.contactLastName || !request.contactPhone) return null;
+  return {
+    relationship,
+    firstName: request.contactFirstName,
+    lastName: request.contactLastName,
+    phone: request.contactPhone,
+  };
+}
+
+function emailUsed(charts: ChartRecord[], email: string): boolean {
+  return charts.some((chart) => chart.mergedIntoId === null && chart.email === email);
+}
+
+function sameName(left: string, right: string): boolean {
+  return left.trim().toLocaleLowerCase("sr-Latn") === right.trim().toLocaleLowerCase("sr-Latn");
+}
+
+function dateKey(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{4}-\d{2}-\d{2})/.exec(value.trim());
+  return match ? match[1] : null;
 }
