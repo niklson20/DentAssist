@@ -60,6 +60,13 @@ const REQUEST_CLOSED = "Zahtev više ne čeka potvrdu.";
 const REQUEST_EXPIRED = "Rok za ovaj zahtev je istekao.";
 const MESSAGE_MAX = "Poruka može imati najviše 300 znakova.";
 const PICK_DECISION = "Izaberite odluku.";
+const OFFER_MAX = "Možete ponuditi najviše tri termina.";
+const PICK_OFFER = "Izaberite bar jedan početak.";
+const SLOT_TAKEN = "Traženi sat je zauzet.";
+const SLOT_CLOSED = "Izaberite slobodan početak.";
+const OFFER_OVERLAP = "Izabrani termini se preklapaju.";
+const OFFER_EXISTS = "Ponuda je već poslata.";
+const SAME_START = "Isti početak je izabran dvaput.";
 const ACCEPT_DECISIONS = ["", "prihvati", "isti", "drugi"] as const;
 const STAFF_STATUS_CHANGES = ["no_show", "cancelled", "completed"] as const;
 const BLOCK_TIME = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
@@ -112,6 +119,26 @@ const rejectSchema = z.object({
   zahtev: z.string({ error: PICK_REQUEST }).trim().uuid(PICK_REQUEST),
   poruka: z.string().trim().max(300, MESSAGE_MAX),
 });
+
+const offerInstant = z
+  .string()
+  .trim()
+  .min(1, PICK_START)
+  .refine((value) => Number.isFinite(Date.parse(value)), PICK_START);
+
+const offerSchema = z
+  .object({
+    zahtev: z.string({ error: PICK_REQUEST }).trim().uuid(PICK_REQUEST),
+    pocetak: z.array(offerInstant),
+  })
+  .superRefine((value, ctx) => {
+    if (value.pocetak.length < 1) {
+      ctx.addIssue({ code: "custom", message: PICK_OFFER, path: ["pocetak"] });
+    }
+    if (value.pocetak.length > 3) {
+      ctx.addIssue({ code: "custom", message: OFFER_MAX, path: ["pocetak"] });
+    }
+  });
 
 const contactSchema = z.object({
   kontaktOdnos: z.enum(RELATIONSHIPS, { error: "Izaberite odnos." }),
@@ -891,6 +918,206 @@ export async function rejectRequest(
     console.error("reject_request failed:", error instanceof Error ? error.name : "unknown");
     return fail(SAVE_UNAVAILABLE);
   }
+}
+
+export async function sendOffer(
+  _previous: ActionResult<{ id: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = offerSchema.safeParse(readOfferFields(formData));
+  if (!parsed.success) {
+    return fail(CHECK, fieldErrorsFrom(parsed.error));
+  }
+
+  const member = await requireMember();
+  if (member.role === "reception") return fail(RESPOND_ONLY);
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const actor = await clinicActor(supabase, member);
+    if (!actor) return fail(SAVE_UNAVAILABLE);
+
+    const request = await readPendingRequest(supabase, member.clinicId, parsed.data.zahtev);
+    if (request === "missing") return fail(REQUEST_MISSING);
+    if (request === "closed") return fail(REQUEST_CLOSED);
+    if (request === "unavailable") return fail(SAVE_UNAVAILABLE);
+    if (!mayRespond(member, actor.id, request.dentistId)) return fail(RESPOND_ONLY);
+    if (isExpired(request.expiresAt)) return fail(REQUEST_EXPIRED);
+
+    const held = await supabase
+      .from("appointments")
+      .select("id, status, dentist_id, starts_at, ends_at, appointment_type_id")
+      .eq("id", request.appointmentId)
+      .eq("clinic_id", member.clinicId)
+      .maybeSingle();
+    if (held.error) {
+      console.error("send_offer_hold rejected:", "unknown");
+      return fail(SAVE_UNAVAILABLE);
+    }
+    const hold = recordOf(held.data);
+    if (!hold) return fail(REQUEST_MISSING);
+    if (hold.status !== "pending_confirmation") return fail(REQUEST_CLOSED);
+    const holdStart = typeof hold.starts_at === "string" ? Date.parse(hold.starts_at) : Number.NaN;
+    const holdEnd = typeof hold.ends_at === "string" ? Date.parse(hold.ends_at) : Number.NaN;
+    const duration = holdEnd - holdStart;
+    const typeId = typeof hold.appointment_type_id === "string" ? hold.appointment_type_id : "";
+    if (
+      hold.dentist_id !== request.dentistId ||
+      !Number.isFinite(duration) ||
+      duration <= 0 ||
+      typeId === ""
+    ) {
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const existing = await supabase
+      .from("appointment_offers")
+      .select("position")
+      .eq("booking_request_id", request.id);
+    if (existing.error) {
+      console.error("send_offer_existing rejected:", "unknown");
+      return fail(SAVE_UNAVAILABLE);
+    }
+    if (rowsOf(existing.data).length > 0) return fail(OFFER_EXISTS);
+
+    const clinic = await supabase
+      .from("clinics")
+      .select("slug, buffer_minutes")
+      .eq("id", member.clinicId)
+      .maybeSingle();
+    if (clinic.error) {
+      console.error("send_offer_clinic rejected:", "unknown");
+      return fail(SAVE_UNAVAILABLE);
+    }
+    const clinicRow = recordOf(clinic.data);
+    const slug = textOf(clinicRow?.slug);
+    const bufferMs = bufferMsOf(clinicRow?.buffer_minutes);
+    if (!clinicRow || slug === "" || bufferMs === null) return fail(SAVE_UNAVAILABLE);
+
+    const chosen: { start: number; end: number }[] = [];
+    for (const value of parsed.data.pocetak) {
+      const start = Date.parse(value);
+      chosen.push({ start, end: start + duration });
+    }
+    if (new Set(chosen.map((item) => item.start)).size !== chosen.length) {
+      return fail(CHECK, { pocetak: [SAME_START] });
+    }
+    for (const item of chosen) {
+      if (rangesOverlap(item.start, item.end, holdStart, holdEnd, bufferMs)) {
+        return fail(SLOT_TAKEN, { pocetak: [SLOT_TAKEN] });
+      }
+    }
+    for (let index = 0; index < chosen.length; index += 1) {
+      for (let other = index + 1; other < chosen.length; other += 1) {
+        const left = chosen[index];
+        const right = chosen[other];
+        if (!left || !right) continue;
+        if (rangesOverlap(left.start, left.end, right.start, right.end, bufferMs)) {
+          return fail(OFFER_OVERLAP, { pocetak: [OFFER_OVERLAP] });
+        }
+      }
+    }
+
+    const free = new Set<number>();
+    const days = [...new Set(chosen.map((item) => formatBelgradeDate(new Date(item.start))))];
+    for (const day of days) {
+      const listed = await supabase.rpc("get_available_slots", {
+        slug,
+        dentist_id: request.dentistId,
+        day,
+      });
+      if (listed.error) {
+        console.error("send_offer_slots rejected:", "unknown");
+        return fail(SAVE_UNAVAILABLE);
+      }
+      for (const instant of slotInstants(listed.data)) free.add(instant);
+    }
+    if (chosen.some((item) => !free.has(item.start))) {
+      return fail(SLOT_CLOSED, { pocetak: [SLOT_CLOSED] });
+    }
+
+    const offeredIds: string[] = [];
+    for (const [index, item] of chosen.entries()) {
+      const saved = await supabase
+        .from("appointments")
+        .insert({
+          clinic_id: member.clinicId,
+          dentist_id: request.dentistId,
+          patient_id: null,
+          booking_request_id: request.id,
+          starts_at: new Date(item.start).toISOString(),
+          ends_at: new Date(item.end).toISOString(),
+          appointment_type_id: typeId,
+          status: "offered",
+          source: "staff",
+        })
+        .select("id")
+        .single();
+      const id = saved.data && typeof saved.data.id === "string" ? saved.data.id : null;
+      if (saved.error || !id) {
+        console.error("send_offer_appointment rejected:", saved.error ? "unknown" : "empty");
+        return fail(isExclusionConflict(saved.error) ? DENTIST_BUSY : SAVE_UNAVAILABLE);
+      }
+
+      const linked = await supabase
+        .from("appointment_offers")
+        .insert({
+          booking_request_id: request.id,
+          appointment_id: id,
+          position: index + 1,
+        })
+        .select("appointment_id")
+        .single();
+      if (linked.error || !linked.data) {
+        console.error("send_offer_link rejected:", linked.error ? "unknown" : "empty");
+        return fail(SAVE_UNAVAILABLE);
+      }
+      offeredIds.push(id);
+    }
+
+    if (offeredIds.length !== chosen.length) return fail(SAVE_UNAVAILABLE);
+
+    revalidatePath("/danas");
+    return ok({ id: request.id });
+  } catch (error) {
+    console.error("send_offer failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+}
+
+function readOfferFields(formData: FormData) {
+  return {
+    zahtev: text(formData.get("zahtev")),
+    pocetak: formData.getAll("pocetak").flatMap((value) => (typeof value === "string" ? [value] : [])),
+  };
+}
+
+function bufferMsOf(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 240) return null;
+  return value * 60_000;
+}
+
+function rangesOverlap(
+  start: number,
+  end: number,
+  otherStart: number,
+  otherEnd: number,
+  bufferMs: number,
+): boolean {
+  return start < otherEnd + bufferMs && otherStart < end + bufferMs;
+}
+
+function slotInstants(value: unknown): Set<number> {
+  const found = new Set<number>();
+  if (!Array.isArray(value)) return found;
+  for (const item of value) {
+    const row = recordOf(item);
+    const raw = typeof item === "string" ? item : row?.starts_at;
+    if (typeof raw !== "string") continue;
+    const time = Date.parse(raw);
+    if (Number.isFinite(time)) found.add(time);
+  }
+  return found;
 }
 
 function readBlockFields(formData: FormData) {

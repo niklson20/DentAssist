@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 import { AppointmentForm, type AppointmentFormChoices } from "./appointment-form";
 import { BlockForm } from "./block-form";
+import { OfferPicker } from "./offer-picker";
 
 const EMPTY_APPOINTMENT_CHOICES: AppointmentFormChoices = {
   dentists: [],
@@ -49,6 +50,7 @@ export function CalendarShell({
 }) {
   const [appointmentOpen, setAppointmentOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
+  const [offerOpen, setOfferOpen] = useState(false);
   const dentistLabel =
     appointmentChoices.dentists.find((dentist) => dentist.id === query.stomatolog)?.label ?? null;
   const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(showCalendarDay, null);
@@ -161,6 +163,15 @@ export function CalendarShell({
             >
               Nova blokada
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              aria-expanded={offerOpen}
+              aria-controls="ponuda"
+              onClick={() => setOfferOpen(true)}
+            >
+              Ponudi
+            </Button>
           </div>
           {appointmentOpen ? (
             <AppointmentForm
@@ -177,6 +188,14 @@ export function CalendarShell({
               datum={query.datum}
               dentistId={query.stomatolog}
               dentistLabel={dentistLabel}
+            />
+          ) : null}
+          {offerOpen ? (
+            <OfferPicker
+              requestId=""
+              requestedStart={null}
+              starts={[]}
+              onClose={() => setOfferOpen(false)}
             />
           ) : null}
         </div>
