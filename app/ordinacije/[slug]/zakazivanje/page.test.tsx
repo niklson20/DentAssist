@@ -184,10 +184,11 @@ describe("self booking page", () => {
     expect(html).toContain("Zakazivanje za dete");
     expect(html).toContain("2020-01-01");
     expect(html).toContain("Osoba još nema 15 godina.");
+    expect(html).toContain("Zakazujem kao roditelj ili zakonski staratelj.");
+    expect(html).toContain('name="contactEmail"');
+    expect(html).toContain("Pošalji zahtev");
     expect(html).not.toContain('name="firstName"');
-    expect(html).not.toContain("Pošalji zahtev");
-    expect(html).not.toContain("Slažem se");
-    expect(html).not.toContain("Ana");
+    expect(html).not.toContain('name="email"');
   });
 
   it("does not show the form when the clinic is closed", async () => {

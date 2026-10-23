@@ -17,7 +17,11 @@ export const metadata: Metadata = {
 
 type PageProps = {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ stomatolog?: string | string[]; pocetak?: string | string[] }>;
+  searchParams: Promise<{
+    stomatolog?: string | string[];
+    pocetak?: string | string[];
+    dete?: string | string[];
+  }>;
 };
 
 export default async function Page({ params, searchParams }: PageProps) {
@@ -34,6 +38,7 @@ export default async function Page({ params, searchParams }: PageProps) {
 
   const clinic = loaded.clinic;
   const saved = readPatientReturnQuery(one(query.stomatolog), one(query.pocetak));
+  const requestedChild = one(query.dete)?.trim().toLowerCase() ?? "";
   const patient = await requirePatient({
     purpose: "request",
     slug: clinic.slug,
@@ -76,6 +81,8 @@ export default async function Page({ params, searchParams }: PageProps) {
           today={formatBelgradeDate(new Date())}
           selfLinked={booking.selfLinked}
           profile={booking.profile}
+          accountChildren={booking.children ?? []}
+          initialDependentId={requestedChild}
         />
       ) : (
         <p className="text-sm text-destructive">{booking.message}</p>

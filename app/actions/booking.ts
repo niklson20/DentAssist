@@ -6,8 +6,11 @@ import { loadClinicPublic } from "@/app/ordinacije/[slug]/load-clinic-public";
 import { loadSelfBooking } from "@/app/ordinacije/[slug]/zakazivanje/load-self-booking";
 import {
   CHECK_BOOKING,
+  CHILD_BOOKS_ALONE,
   CHILD_ROUTE_TEXT,
   EMAIL_IS_ACCOUNT,
+  childBookingIdentitySchema,
+  childBookingLinkedSchema,
   isChildRoute,
   selfBookingIdentitySchema,
   selfBookingSlotSchema,
@@ -75,6 +78,88 @@ export async function submitSelfBooking(
   }
   if (isChildRoute(identity.data.dateOfBirth, today)) {
     return fail(CHILD_ROUTE_TEXT);
+  }
+
+  return ok({ ready: true });
+}
+
+// The child is a separate patient. The account email stays on the contact
+// and is not written as the patient's email. The request row is created later.
+export async function submitChildBooking(
+  _previous: ActionResult<{ ready: true }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ ready: true }>> {
+  const slot = selfBookingSlotSchema.safeParse({
+    slug: entry(formData, "slug"),
+    stomatolog: entry(formData, "stomatolog"),
+    pocetak: entry(formData, "pocetak"),
+    reason: entry(formData, "reason") ?? "",
+  });
+  if (!slot.success) {
+    return fail(CHECK_BOOKING, fieldErrorsFrom(slot.error));
+  }
+
+  const clinic = await loadClinicPublic(slot.data.slug);
+  if (clinic.status !== "ready") {
+    return fail(CLINIC_UNAVAILABLE);
+  }
+
+  const patient = await requirePatient({
+    purpose: "request",
+    slug: clinic.clinic.slug,
+    stomatolog: slot.data.stomatolog,
+    pocetak: slot.data.pocetak,
+  });
+
+  const booking = await loadSelfBooking(patient.accountId, clinic.clinic.slug);
+  if (booking.status !== "ready") {
+    return fail(booking.message);
+  }
+
+  const today = formatBelgradeDate(new Date());
+  const rawId = (entry(formData, "dependentId") ?? "").trim().toLowerCase();
+  const child = rawId === "" ? undefined : booking.children.find((item) => item.id === rawId);
+  if (rawId !== "" && !child) {
+    return fail(CHECK_BOOKING);
+  }
+  if (child && !isChildRoute(child.dateOfBirth, today)) {
+    return fail(CHILD_BOOKS_ALONE);
+  }
+
+  if (child?.linked) {
+    const linked = childBookingLinkedSchema.safeParse({
+      ...slot.data,
+      dependentId: rawId,
+      guardian: entry(formData, "guardian"),
+    });
+    if (!linked.success) {
+      return fail(CHECK_BOOKING, fieldErrorsFrom(linked.error));
+    }
+    return ok({ ready: true });
+  }
+
+  const identity = childBookingIdentitySchema.safeParse({
+    ...slot.data,
+    dependentId: rawId,
+    childFirstName: entry(formData, "childFirstName"),
+    childLastName: entry(formData, "childLastName"),
+    childDateOfBirth: entry(formData, "childDateOfBirth"),
+    relationship: entry(formData, "relationship"),
+    contactFirstName: entry(formData, "contactFirstName"),
+    contactLastName: entry(formData, "contactLastName"),
+    contactPhone: entry(formData, "contactPhone"),
+    contactEmail: entry(formData, "contactEmail"),
+    guardian: entry(formData, "guardian"),
+    consent: entry(formData, "consent"),
+  });
+  if (!identity.success) {
+    return fail(CHECK_BOOKING, fieldErrorsFrom(identity.error));
+  }
+  if (identity.data.contactEmail !== patient.email.trim().toLowerCase()) {
+    return fail(CHECK_BOOKING, { contactEmail: [EMAIL_IS_ACCOUNT] });
+  }
+  if (!isChildRoute(identity.data.childDateOfBirth, today)) {
+    return fail(CHILD_BOOKS_ALONE);
   }
 
   return ok({ ready: true });

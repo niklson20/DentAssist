@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { formatBelgradeDate, hasTurned15, isIsoDate } from "@/lib/calendar-dates";
+import { RELATIONSHIPS, type Relationship } from "@/lib/labels";
 import { normalizePhone } from "@/lib/phone";
 
 import { CLINIC_UNAVAILABLE } from "../registracija/schema";
@@ -10,7 +11,20 @@ export const CHECK_BOOKING = "Proverite unete podatke.";
 export const PICK_SLOT = "Izaberite slobodan početak.";
 export const CHILD_ROUTE_TEXT =
   "Osoba još nema 15 godina. Termin se zakazuje kao za dete, a uneti datum rođenja ostaje.";
+export const CHILD_BOOKS_ALONE =
+  "Osoba od 15 godina zakazuje sama. Roditelj je online ne zakazuje.";
+export const GUARDIAN_STATEMENT = "Zakazujem kao roditelj ili zakonski staratelj.";
+export const NOT_PROCEDURE_CONSENT = "Zakazivanje nije pristanak na zahvat.";
 export const EMAIL_IS_ACCOUNT = "Mejl je mejl ovog naloga.";
+
+export type BookingChild = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  relationship: Relationship;
+  linked: boolean;
+};
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SLOT_START =
@@ -68,6 +82,44 @@ export const selfBookingIdentitySchema = selfBookingSlotSchema.extend({
     .min(1, "Unesite mejl.")
     .toLowerCase()
     .pipe(z.email("Unesite ispravan mejl.")),
+  consent: z.literal("yes", { error: "Prihvatite saglasnost." }),
+});
+
+const dependentId = z
+  .string({ error: "Izaberite dete." })
+  .trim()
+  .toLowerCase()
+  .pipe(z.string().uuid("Izaberite dete."));
+
+export const childBookingLinkedSchema = selfBookingSlotSchema.extend({
+  dependentId,
+  guardian: z.literal("yes", { error: "Potvrdite izjavu staratelja." }),
+});
+
+export const childBookingIdentitySchema = selfBookingSlotSchema.extend({
+  dependentId: z
+    .string({ error: "Izaberite dete." })
+    .trim()
+    .toLowerCase()
+    .refine((value) => value === "" || z.string().uuid().safeParse(value).success, "Izaberite dete."),
+  childFirstName: requiredName("Unesite ime.", "Ime može imati najviše 80 znakova."),
+  childLastName: requiredName("Unesite prezime.", "Prezime može imati najviše 80 znakova."),
+  childDateOfBirth: birthDate,
+  relationship: z.enum(RELATIONSHIPS, { error: "Izaberite odnos." }),
+  contactFirstName: requiredName("Unesite ime.", "Ime može imati najviše 80 znakova."),
+  contactLastName: requiredName("Unesite prezime.", "Prezime može imati najviše 80 znakova."),
+  contactPhone: z
+    .string({ error: "Unesite telefon." })
+    .trim()
+    .min(1, "Unesite telefon.")
+    .refine((value) => normalizePhone(value) !== null, "Unesite ispravan telefon."),
+  contactEmail: z
+    .string({ error: "Unesite mejl." })
+    .trim()
+    .min(1, "Unesite mejl.")
+    .toLowerCase()
+    .pipe(z.email("Unesite ispravan mejl.")),
+  guardian: z.literal("yes", { error: "Potvrdite izjavu staratelja." }),
   consent: z.literal("yes", { error: "Prihvatite saglasnost." }),
 });
 
