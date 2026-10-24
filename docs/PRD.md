@@ -158,9 +158,9 @@ na vrata kao QR. Ko uđe tim linkom vidi samo tu ordinaciju.
 
 Pacijent bira grad u Srbiji i vidi ordinacije iz tog grada koje su završile podešavanje
 i primaju online. Prikaz je lista i mapa. Može „blizu mene“ ako dozvoli lokaciju telefona:
-tada su ordinacije poređane po udaljenosti. Može i da traži naziv u celoj zemlji.
+tada su ordinacije poređane po udaljenosti. Ako grad nije izabran, vidi najbliže u celoj zemlji. Može i da traži naziv u celoj zemlji.
 
-Na kartici su naziv, adresa i telefon. Nema tuđih termina ni imena pacijenata.
+Na kartici su naziv, adresa, grad i telefon. Nema tuđih termina ni imena pacijenata.
 Spisak gradova čine samo gradovi u kojima već ima vidljivu ordinaciju. Pretraga naziva
 ide kroz celu zemlju i ne zavisi od izabranog grada. Pin na mapi dolazi iz adrese;
 ordinacija bez pina ostaje na listi.
@@ -648,9 +648,8 @@ platforme odlazi na `dent.` i `/platforma`. Pacijent koji nije osoblje ostaje na
 
 ### 11.1 Pacijent
 
-`/` je imenik. Nema menija ordinacije, prijave ni registracije. Prvo se bira grad. Iznad je pretraga naziva. „Blizu mene“ traži lokaciju
-i ređa po udaljenosti. Zatim Lista / Mapa i kartice: naziv, adresa, telefon. Dodir
-kartice otvara ordinaciju. Na dnu je link „Za ordinacije“, ka `https://dent.<domen-aplikacije>/`. Prazan grad piše: „U ovom
+`/` je imenik. Nema menija ordinacije, prijave ni registracije. Naslov je levo, pretraga naziva desno od njega. Ispod se bira grad. „Blizu mene“ traži lokaciju i ređa po udaljenosti. Bez izabranog grada pokazuje najbliže ordinacije. Zatim Lista / Mapa i kartice: naziv, adresa, grad, telefon. Dodir
+kartice otvara ordinaciju. Na dnu je link „Za ordinacije“, ka `https://dent.<domen-aplikacije>/`, i „© {godina} DentAssist“. Prazan grad piše: „U ovom
 gradu nema ordinacija sa online zakazivanjem.“ Na širokom ekranu lista i mapa stoje
 jedna pored druge.
 

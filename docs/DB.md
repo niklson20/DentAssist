@@ -541,7 +541,7 @@ gde piše. Vraćaju samo ono što sme napolje.
 | --- | --- | --- |
 | `request_clinic_access(email, city, ip_hash)` | `anon` | upis zahteva; odbija dupli `pending` i neiskorišćenu pozivnicu |
 | `list_cities()` | `anon` | gradovi u kojima ima vidljivu ordinaciju |
-| `search_clinics(city, name, lat, lng)` | `anon` | naziv, adresa, telefon, slug, udaljenost; bez termina |
+| `search_clinics(city, name, lat, lng)` | `anon` | naziv, adresa, grad, telefon, slug, udaljenost; bez termina |
 | `get_clinic_public(slug)` | `anon` | javna strana i imena stomatologa koji su online |
 | `get_available_slots(slug, dentist_id, day)` | ulogovan nalog | početci; računa radno vreme, pauzu, blokadu, nedostupnost, razmak, najavu, horizont i zauzete statuse. `anon` je ne zove |
 | `create_booking(slug, dentist_id, starts_at, for_child, dependent_id, phone, date_of_birth, contact, reason)` | ulogovan pacijent | termin `pending_confirmation` i zahtev, ili greška ako slot nije slobodan; traži potvrđen mejl |

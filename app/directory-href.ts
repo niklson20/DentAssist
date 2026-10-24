@@ -27,6 +27,23 @@ export function directoryHref(input: {
   return query ? `/?${query}` : "/";
 }
 
+/** Street and city on one directory line: "Kosančić Ivana 18, Novi Sad". */
+export function formatDirectoryAddress(address: string, city: string): string {
+  const street = address.trim();
+  const place = city.trim();
+  if (!place) {
+    return street;
+  }
+  if (!street) {
+    return place;
+  }
+  const suffix = `, ${place}`;
+  if (street.toLocaleLowerCase("sr").endsWith(suffix.toLocaleLowerCase("sr"))) {
+    return street;
+  }
+  return `${street}${suffix}`;
+}
+
 export function formatDistanceKm(distanceKm: number | null): string | null {
   if (distanceKm === null || !Number.isFinite(distanceKm)) {
     return null;

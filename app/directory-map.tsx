@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { directoryHref, type DirectoryViewMode } from "@/app/directory-href";
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,35 @@ type DirectoryMapProps = {
 };
 
 export function DirectoryMapPanel({ clinics, className }: DirectoryMapProps) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) {
+      return;
+    }
+
+    // Below the lg breakpoint the map panel is display:none until "Mapa".
+    // Leaflet keeps the size it measured at creation, so a hidden start stays gray.
+    const update = () => {
+      const shown = frame.offsetWidth > 0 && frame.offsetHeight > 0;
+      setReady((current) => (current === shown ? current : shown));
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div className={className}>
-      <DirectoryMapCanvas clinics={clinics} className="h-full min-h-80" />
+    <div ref={frameRef} className={className}>
+      {ready ? (
+        <DirectoryMapCanvas clinics={clinics} className="h-full min-h-80" />
+      ) : (
+        <div className="h-full min-h-80 rounded-lg border border-border bg-muted/30" aria-hidden />
+      )}
     </div>
   );
 }
@@ -67,7 +93,7 @@ export function NearMeButton({ grad, pretraga }: NearMeButtonProps) {
         setPending(false);
         setError("Lokacija nije dostupna. Dozvolite pristup u podešavanjima uređaja.");
       },
-      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 },
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
     );
   }
 

@@ -4,9 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { PublicSiteNav } from "../public-site-nav";
 import { ClinicSlotsPanel } from "./clinic-slots-panel";
 import {
   dentistStorageKey,
@@ -64,6 +65,7 @@ export function ClinicProfileView({
 
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
+      <PublicSiteNav />
       <header className="border-b">
         <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-4 px-4 py-4">
           <div className="flex min-w-0 items-start gap-4">
@@ -85,12 +87,18 @@ export function ClinicProfileView({
           </div>
           {showPatientAuth ? (
             <nav className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-              <Button render={<Link href={`/ordinacije/${slug}/prijava`} />} variant="outline" size="sm">
+              <Link
+                href={`/ordinacije/${slug}/prijava`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
                 Prijava
-              </Button>
-              <Button render={<Link href={`/ordinacije/${slug}/registracija`} />} size="sm">
+              </Link>
+              <Link
+                href={`/ordinacije/${slug}/registracija`}
+                className={buttonVariants({ size: "sm" })}
+              >
                 Registracija
-              </Button>
+              </Link>
             </nav>
           ) : null}
         </div>

@@ -91,12 +91,6 @@ function appointmentDay(now: Date): string {
   return addCalendarDays(earliest, weekday === 1 ? 0 : 8 - weekday);
 }
 
-function directoryPath(href: string): string {
-  const pathname = new URL(href, appOrigin).pathname;
-  if (pathname.length > 1 && pathname.endsWith("/")) return pathname.slice(0, -1);
-  return pathname;
-}
-
 async function createConfirmedUser(
   admin: SupabaseClient,
   email: string,
@@ -319,16 +313,6 @@ async function openSlot(signedIn: SupabaseClient, slug: string, dentistId: strin
   return startsAt;
 }
 
-async function assertNoDirectoryLink(page: Page): Promise<void> {
-  const hrefs = await page.locator("a[href]").evaluateAll((nodes) =>
-    nodes.map((node) => node.getAttribute("href") ?? ""),
-  );
-  for (const href of hrefs) {
-    const path = directoryPath(href);
-    expect(path === "/" || path === "/ordinacije").toBe(false);
-  }
-}
-
 async function removeClinic(admin: SupabaseClient, clinicId: string): Promise<void> {
   const requests = await admin.from("booking_requests").select("id").eq("clinic_id", clinicId);
   raiseIf(requests.error);
@@ -493,7 +477,7 @@ test("account doors", async ({ page }) => {
       "href",
       `/ordinacije/${firstSlug}/registracija`,
     );
-    await assertNoDirectoryLink(page);
+    await expect(page.getByRole("link", { name: "Nazad u imenik" })).toHaveAttribute("href", "/");
 
     await page.goto(`${appOrigin}/ordinacije/${firstSlug}/prijava`);
     await page.getByLabel("Mejl").fill(parentEmail);

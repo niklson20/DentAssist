@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { patientAuthPath, patientReturnPath, readPatientReturnQuery } from "@/lib/auth";
 
+import { PatientAuthShell } from "../patient-auth-shell";
 import { loadClinicPublic } from "../load-clinic-public";
 import { loadPatientAccess } from "../prijava/load-patient-session";
 import { RegisterForm } from "./register-form";
@@ -23,9 +24,9 @@ export default async function Page({ params, searchParams }: PageProps) {
   const loaded = await loadClinicPublic(slug);
   if (loaded.status !== "ready") {
     return (
-      <main className="flex min-h-svh items-center justify-center p-4">
+      <PatientAuthShell>
         <p className="text-center text-sm text-muted-foreground">{CLINIC_UNAVAILABLE}</p>
-      </main>
+      </PatientAuthShell>
     );
   }
 
@@ -39,7 +40,7 @@ export default async function Page({ params, searchParams }: PageProps) {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() || null;
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-background p-4 text-foreground">
+    <PatientAuthShell>
       <RegisterForm
         slug={clinic.slug}
         clinicName={clinic.name}
@@ -51,7 +52,7 @@ export default async function Page({ params, searchParams }: PageProps) {
         clinicHref={`/ordinacije/${clinic.slug}`}
         turnstileSiteKey={siteKey}
       />
-    </main>
+    </PatientAuthShell>
   );
 }
 

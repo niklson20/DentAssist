@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export type ClinicDirectoryHit = {
   name: string;
   address: string;
+  city: string;
   phone: string;
   slug: string;
   distanceKm: number | null;
@@ -13,6 +14,7 @@ export type ClinicDirectoryHit = {
 type ClinicDirectoryRow = {
   name: string;
   address: string;
+  city: string;
   phone: string;
   slug: string;
   distance_km: number | null;
@@ -29,7 +31,7 @@ export async function listDirectoryCities(): Promise<string[]> {
     return [];
   }
 
-  return (data ?? [])
+  return ((data as Array<string | { city?: unknown }> | null) ?? [])
     .map((row) => (typeof row === "string" ? row : row.city))
     .filter((city): city is string => typeof city === "string" && city.length > 0);
 }
@@ -60,6 +62,7 @@ function mapDirectoryHit(row: ClinicDirectoryRow): ClinicDirectoryHit {
   return {
     name: row.name,
     address: row.address,
+    city: typeof row.city === "string" ? row.city : "",
     phone: row.phone,
     slug: row.slug,
     distanceKm: row.distance_km,

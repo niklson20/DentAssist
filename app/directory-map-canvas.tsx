@@ -7,16 +7,21 @@ import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 
+import { formatDirectoryAddress } from "@/app/directory-href";
 import type { ClinicDirectoryHit } from "@/lib/queries/public";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
+function markerAssetUrl(asset: string | { src: string }): string {
+  return typeof asset === "string" ? asset : asset.src;
+}
+
 const defaultIcon = L.icon({
-  iconUrl: markerIcon.src,
-  iconRetinaUrl: markerIcon2x.src,
-  shadowUrl: markerShadow.src,
+  iconUrl: markerAssetUrl(markerIcon),
+  iconRetinaUrl: markerAssetUrl(markerIcon2x),
+  shadowUrl: markerAssetUrl(markerShadow),
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -69,6 +74,7 @@ export function DirectoryMapCanvas({ clinics, className }: DirectoryMapProps) {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           {bounds ? <FitBounds bounds={bounds} /> : null}
+          <WatchMapSize />
           {pinned.map((clinic) => (
             <Marker
               key={clinic.slug}
@@ -78,7 +84,9 @@ export function DirectoryMapCanvas({ clinics, className }: DirectoryMapProps) {
               <Popup>
                 <div className="space-y-1 text-sm">
                   <p className="font-medium">{clinic.name}</p>
-                  <p className="text-muted-foreground">{clinic.address}</p>
+                  <p className="text-muted-foreground">
+                    {formatDirectoryAddress(clinic.address, clinic.city)}
+                  </p>
                   <Link
                     href={`/ordinacije/${encodeURIComponent(clinic.slug)}`}
                     className="text-primary underline-offset-4 hover:underline"
@@ -99,8 +107,23 @@ function FitBounds({ bounds }: { bounds: L.LatLngBounds }) {
   const map = useMap();
 
   useEffect(() => {
-    map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
+    map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15, animate: false });
   }, [bounds, map]);
+
+  return null;
+}
+
+function WatchMapSize() {
+  const map = useMap();
+
+  useEffect(() => {
+    const container = map.getContainer();
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [map]);
 
   return null;
 }

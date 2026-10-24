@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { patientAuthPath, patientReturnPath, readPatientReturnQuery } from "@/lib/auth";
 
+import { PatientAuthShell } from "../patient-auth-shell";
 import { CLINIC_UNAVAILABLE } from "../registracija/schema";
 import { loadClinicPublic } from "../load-clinic-public";
 import { loadPatientAccess } from "./load-patient-session";
@@ -23,9 +24,9 @@ export default async function Page({ params, searchParams }: PageProps) {
   const loaded = await loadClinicPublic(slug);
   if (loaded.status !== "ready") {
     return (
-      <main className="flex min-h-svh items-center justify-center p-4">
+      <PatientAuthShell>
         <p className="text-center text-sm text-muted-foreground">{CLINIC_UNAVAILABLE}</p>
-      </main>
+      </PatientAuthShell>
     );
   }
 
@@ -40,7 +41,7 @@ export default async function Page({ params, searchParams }: PageProps) {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center bg-background p-4 text-foreground">
+    <PatientAuthShell>
       <LoginForm
         slug={clinic.slug}
         clinicName={clinic.name}
@@ -49,7 +50,7 @@ export default async function Page({ params, searchParams }: PageProps) {
         registerHref={patientAuthPath(clinic.slug, "registracija", saved)}
         clinicHref={`/ordinacije/${clinic.slug}`}
       />
-    </main>
+    </PatientAuthShell>
   );
 }
 

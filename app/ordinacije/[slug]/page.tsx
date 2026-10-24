@@ -5,6 +5,7 @@ import { formatBelgradeDate } from "@/lib/calendar-dates";
 import { getSessionKind } from "@/lib/auth";
 
 import { buildBookingDayRange } from "./booking-days";
+import { PublicSiteNav } from "../public-site-nav";
 import { ClinicProfileView } from "./clinic-profile-view";
 import { dentistCookieName, pickInitialDentistId } from "./dentist-preference";
 import { loadAvailableSlots } from "./load-available-slots";
@@ -32,11 +33,14 @@ export default async function ClinicPublicPage({ params }: PageProps) {
 
   if (loaded.status !== "ready") {
     return (
-      <main className="flex min-h-svh items-center justify-center p-4">
-        <p className="text-center text-sm text-muted-foreground">
-          Ova ordinacija nije dostupna za online zakazivanje.
-        </p>
-      </main>
+      <div className="flex min-h-svh flex-col bg-background text-foreground">
+        <PublicSiteNav />
+        <main className="flex flex-1 items-center justify-center p-4">
+          <p className="text-center text-sm text-muted-foreground">
+            Ova ordinacija nije dostupna za online zakazivanje.
+          </p>
+        </main>
+      </div>
     );
   }
 
