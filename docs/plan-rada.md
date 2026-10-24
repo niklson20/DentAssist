@@ -83,7 +83,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 3.1 | Istek zahteva | Claude Sonnet thinking | [x] |
 | 3.2 | Podsetnici | Claude Sonnet thinking | [x] |
 | 3.3 | Statistika | Composer 2.5 Fast | [x] |
-| 3.4 | Izvoz | Composer 2.5 Fast | [ ] |
+| 3.4 | Izvoz | Composer 2.5 Fast | [x] |
 | 3.E1 | Izolacija dve ordinacije | Claude Sonnet thinking | [ ] |
 | 3.E2 | Zahtev i ponude | Claude Sonnet thinking | [ ] |
 | 3.E3 | Dete i 15. rođendan | Claude Sonnet thinking | [ ] |
