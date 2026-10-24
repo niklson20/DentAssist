@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isIsoDate } from "@/lib/calendar-dates";
+
 export const patientSearchQuerySchema = z.object({
   pretraga: z.string().trim().max(120).optional(),
 });
@@ -24,16 +26,39 @@ export function patientMatchesSearch(patient: PatientSearchRow, query: string): 
   return fields.some((field) => normalizePatientSearchTerm(field).includes(term));
 }
 
-export const newPatientFormSchema = z.object({
-  firstName: z.string().trim().min(1, "Ime je obavezno."),
-  lastName: z.string().trim().min(1, "Prezime je obavezno."),
-  phone: z
-    .string()
-    .trim()
-    .optional()
-    .transform((value) => (value && value.length > 0 ? value : null)),
-  duplicateConfirmed: z.boolean(),
-});
+const blankToNull = (value: string) => (value.length > 0 ? value : null);
+
+export function newPatientFormSchema(today: string) {
+  return z.object({
+    firstName: z.string().trim().min(1, "Ime je obavezno.").max(80, "Ime može imati najviše 80 znakova."),
+    lastName: z.string().trim().min(1, "Prezime je obavezno.").max(80, "Prezime može imati najviše 80 znakova."),
+    phone: z
+      .string()
+      .trim()
+      .max(40, "Telefon može imati najviše 40 znakova.")
+      .transform(blankToNull),
+    dateOfBirth: z
+      .string()
+      .trim()
+      .transform(blankToNull)
+      .refine((value) => value === null || isIsoDate(value), "Unesite ispravan datum rođenja.")
+      .refine((value) => value === null || value <= today, "Datum rođenja ne može biti u budućnosti."),
+    sex: z
+      .string()
+      .trim()
+      .refine((value) => value === "" || value === "male" || value === "female", "Izaberite pol.")
+      .transform((value) => (value === "male" || value === "female" ? value : null)),
+    email: z
+      .string()
+      .trim()
+      .max(200, "Mejl može imati najviše 200 znakova.")
+      .transform((value) => blankToNull(value.toLowerCase()))
+      .refine((value) => value === null || z.email().safeParse(value).success, "Unesite ispravan mejl."),
+    address: z.string().trim().max(200, "Adresa može imati najviše 200 znakova.").transform(blankToNull),
+    note: z.string().trim().max(500, "Beleška može imati najviše 500 znakova.").transform(blankToNull),
+    duplicateConfirmed: z.boolean(),
+  });
+}
 
 export const DUPLICATE_CONFIRMATION_REQUIRED =
   "U ordinaciji već postoji pacijent sa istim imenom i prezimenom. Potvrdite unos.";

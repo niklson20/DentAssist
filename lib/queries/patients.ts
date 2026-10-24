@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
+import { parsePatientJmbg } from "@/app/pacijenti/new-patient-schema";
 import {
   DUPLICATE_CONFIRMATION_REQUIRED,
   needsDuplicateNameConfirmation,
@@ -11,8 +12,12 @@ import {
 } from "@/app/pacijenti/search-schema";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireMember } from "@/lib/auth";
+import { formatBelgradeDate } from "@/lib/calendar-dates";
 import { allocateSlug } from "@/lib/slug";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const EMAIL_TAKEN = "U ordinaciji već postoji pacijent sa tim mejlom.";
+const CHECK_ENTRY = "Proverite unos.";
 
 export type PatientListItem = {
   id: string;
@@ -91,11 +96,18 @@ export async function createClinicPatient(
   input: {
     firstName: string;
     lastName: string;
-    phone: string | null;
+    phone: string;
+    dateOfBirth: string;
+    sex: string;
+    email: string;
+    address: string;
+    note: string;
+    jmbg: string | null;
     duplicateConfirmed: boolean;
   },
+  today = formatBelgradeDate(new Date()),
 ): Promise<ActionResult<{ slug: string }>> {
-  const parsed = newPatientFormSchema.safeParse(input);
+  const parsed = newPatientFormSchema(today).safeParse(input);
   if (!parsed.success) {
     const fieldErrors: Record<string, string[]> = {};
     for (const issue of parsed.error.issues) {
@@ -104,7 +116,7 @@ export async function createClinicPatient(
         fieldErrors[key] = [issue.message];
       }
     }
-    return fail("Proverite unos.", fieldErrors);
+    return fail(CHECK_ENTRY, fieldErrors);
   }
 
   const draft = parsed.data;
@@ -117,6 +129,22 @@ export async function createClinicPatient(
   }
 
   const supabase = await createSupabaseServerClient();
+  if (draft.email) {
+    const taken = await supabase
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .ilike("email", escapeIlike(draft.email))
+      .limit(1);
+    if (taken.error) {
+      console.error("create_clinic_patient email lookup rejected:", taken.error.code);
+      return fail("Karton trenutno nije dostupan. Pokušajte ponovo.");
+    }
+    if ((taken.data ?? []).length > 0) {
+      return fail(CHECK_ENTRY, { email: [EMAIL_TAKEN] });
+    }
+  }
+
   const slug = await allocatePatientSlug(supabase, clinicId, draft.firstName, draft.lastName);
   if (!slug) {
     return fail("Karton trenutno nije dostupan. Pokušajte ponovo.");
@@ -130,12 +158,23 @@ export async function createClinicPatient(
       last_name: draft.lastName,
       slug,
       phone: draft.phone,
+      email: draft.email,
+      date_of_birth: draft.dateOfBirth,
+      sex: draft.sex,
+      address: draft.address,
+      note: draft.note,
+      jmbg: input.jmbg,
     })
     .select("slug")
     .single();
 
   if (inserted.error || !inserted.data?.slug) {
-    console.error("create_clinic_patient rejected:", inserted.error?.code ?? "empty");
+    const code = inserted.error?.code ?? "empty";
+    const detail = `${inserted.error?.message ?? ""} ${inserted.error?.details ?? ""}`.toLowerCase();
+    if (code === "23505" && detail.includes("email")) {
+      return fail(CHECK_ENTRY, { email: [EMAIL_TAKEN] });
+    }
+    console.error("create_clinic_patient rejected:", code);
     return fail("Karton trenutno nije dostupan. Pokušajte ponovo.");
   }
 
@@ -171,40 +210,34 @@ function escapeIlike(term: string): string {
   return term.replace(/[%_\\]/g, (char) => `\\${char}`);
 }
 
-export async function createPatientFromList(formData: FormData): Promise<void> {
+export async function createPatientFromList(
+  _previous: ActionResult<{ slug: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ slug: string }>> {
   "use server";
 
   const member = await requireMember();
-  const firstName = String(formData.get("firstName") ?? "");
-  const lastName = String(formData.get("lastName") ?? "");
-  const phoneRaw = String(formData.get("phone") ?? "");
-  const phone = phoneRaw.trim().length > 0 ? phoneRaw : null;
-  const duplicateConfirmed = parseDuplicateConfirmation(formData.get("duplicateConfirmed"));
+  const clinical = member.role === "owner" || member.role === "dentist";
+  const jmbg = clinical ? parsePatientJmbg(String(formData.get("jmbg") ?? "")) : { ok: true as const, jmbg: null };
+  if (!jmbg.ok) {
+    return fail(CHECK_ENTRY, { jmbg: [jmbg.message] });
+  }
 
   const result = await createClinicPatient(member.clinicId, {
-    firstName,
-    lastName,
-    phone,
-    duplicateConfirmed,
+    firstName: String(formData.get("firstName") ?? ""),
+    lastName: String(formData.get("lastName") ?? ""),
+    phone: String(formData.get("phone") ?? ""),
+    dateOfBirth: String(formData.get("dateOfBirth") ?? ""),
+    sex: String(formData.get("sex") ?? ""),
+    email: String(formData.get("email") ?? ""),
+    address: String(formData.get("address") ?? ""),
+    note: String(formData.get("note") ?? ""),
+    jmbg: jmbg.jmbg,
+    duplicateConfirmed: parseDuplicateConfirmation(formData.get("duplicateConfirmed")),
   });
 
   if (!result.ok) {
-    if (result.error === DUPLICATE_CONFIRMATION_REQUIRED) {
-      const params = new URLSearchParams({
-        potvrdiIme: "1",
-        ime: firstName,
-        prezime: lastName,
-        telefon: phoneRaw,
-      });
-      redirect(`/pacijenti?${params.toString()}`);
-    }
-    const params = new URLSearchParams({
-      ime: firstName,
-      prezime: lastName,
-      telefon: phoneRaw,
-      greska: result.error,
-    });
-    redirect(`/pacijenti?${params.toString()}`);
+    return result;
   }
 
   redirect(`/pacijenti/${result.data.slug}`);
