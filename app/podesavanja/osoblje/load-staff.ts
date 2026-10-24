@@ -124,7 +124,7 @@ function parseMemberRow(row: Record<string, unknown>): StaffMemberView | null {
 
 function parseInviteRow(row: Record<string, unknown>): PendingStaffInviteView | null {
   const role = row.role;
-  if (!isStaffInviteRole(String(role))) {
+  if (typeof role !== "string" || !isStaffInviteRole(role)) {
     return null;
   }
   if (

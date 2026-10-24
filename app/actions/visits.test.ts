@@ -118,6 +118,9 @@ function createMemory() {
       if (fn !== "save_visit") throw new Error(`unexpected rpc ${fn}`);
       state.rpcCalls += 1;
       const appointmentIdArg = args.p_appointment_id;
+      if (typeof appointmentIdArg !== "string") {
+        throw new Error("appointment id fali");
+      }
       const existing = state.visits.find((row) => row.appointment_id === appointmentIdArg);
       if (existing) {
         existing.procedure_description = args.p_procedure_description;

@@ -181,7 +181,11 @@ describe("offer actions", () => {
       token: hashInviteToken(token, "pepper"),
       offer_id: first,
     });
-    expect(rpc.mock.calls.some((call) => call[1]?.token === token)).toBe(false);
+    expect(
+      (rpc.mock.calls as unknown as [string, { token?: string } | undefined][]).some(
+        (call) => call[1]?.token === token,
+      ),
+    ).toBe(false);
     expect(revalidatePath).toHaveBeenCalledWith(`/zakazivanje/${token}`);
   });
 

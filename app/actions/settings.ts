@@ -40,7 +40,7 @@ export async function saveClinicProfile(
   }
 
   const logoFile = readLogoFile(formData);
-  if (logoFile?.error) {
+  if (logoFile && "error" in logoFile) {
     return fail("Proverite unete podatke.", { logo: [logoFile.error] });
   }
 
@@ -82,7 +82,7 @@ export async function saveClinicProfile(
       return fail(SAVE_UNAVAILABLE);
     }
 
-    if (logoFile?.file) {
+    if (logoFile) {
       const stored = await storeLogo(supabase, member.clinicId, logoFile.file);
       if (!stored.ok) {
         return fail(SAVE_UNAVAILABLE);
