@@ -30,6 +30,13 @@ export function isGuideStep(value: string): value is GuideStep {
   return (GUIDE_STEP_ORDER as readonly string[]).includes(value);
 }
 
+export function forwardGuideCookie(current: GuideStep | null, requested: GuideStep): GuideStep {
+  if (current && guideStepIndex(current) > guideStepIndex(requested)) {
+    return current;
+  }
+  return requested;
+}
+
 export function resolveGuideStep(
   progress: GuideProgressSnapshot,
   cookieStep: GuideStep | null,
@@ -85,7 +92,5 @@ export function nextGuideStep(current: GuideStep, progress: GuideProgressSnapsho
 }
 
 function stepPrerequisitesMet(step: GuideStep, progress: GuideProgressSnapshot): boolean {
-  const derived = deriveGuideStep(progress);
-  const maxAllowed = Math.min(guideStepIndex(derived) + 1, GUIDE_STEP_ORDER.length - 1);
-  return guideStepIndex(step) <= maxAllowed;
+  return guideStepIndex(step) <= guideStepIndex(deriveGuideStep(progress));
 }

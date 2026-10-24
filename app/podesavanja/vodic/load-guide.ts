@@ -89,12 +89,16 @@ export async function loadGuide(clinicId: string, userId: string): Promise<Guide
 
     const workingHours = await supabase
       .from("working_hours")
-      .select("id")
+      .select("iso_dow")
       .eq("clinic_id", clinicId)
       .eq("clinic_member_id", owner.id)
       .limit(1);
 
-    const ownerWorkingHoursSaved = (workingHours.data?.length ?? 0) > 0;
+    if (workingHours.error) {
+      console.error("load_guide hours rejected:", workingHours.error.code);
+    }
+
+    const ownerWorkingHoursSaved = !workingHours.error && (workingHours.data?.length ?? 0) > 0;
     const now = Date.now();
     const pendingDentistInvite = (invitesResult.data ?? []).some((invite) => {
       if (invite.role !== "dentist") {
@@ -107,17 +111,19 @@ export async function loadGuide(clinicId: string, userId: string): Promise<Guide
       (row) => row.user_id !== userId && row.sees_patients === true,
     );
 
-    const cookieIndex = cookieStep ? guideStepIndex(cookieStep) : -1;
-    const progress: GuideProgressSnapshot = {
+    const rawTypeId = clinic.default_appointment_type_id;
+    const progress = guideProgressFromFacts({
       termsAccepted: clinic.terms_accepted_at !== null,
-      profileComplete: hasProfile(clinic.address, clinic.phone),
-      seesPatientsChosen: ownerSeesPatients || appointmentTypeCount > 0,
+      address: typeof clinic.address === "string" ? clinic.address : null,
+      phone: typeof clinic.phone === "string" ? clinic.phone : null,
       ownerSeesPatients,
+      appointmentTypeCount,
       ownerWorkingHoursSaved,
-      schedulingSaved: cookieIndex >= guideStepIndex("notice"),
-      noticeSaved: cookieIndex >= guideStepIndex("invite"),
-      inviteSatisfied: ownerSeesPatients || pendingDentistInvite || hasDentistMember,
-    };
+      defaultAppointmentTypeId: typeof rawTypeId === "string" && rawTypeId.length > 0 ? rawTypeId : null,
+      cookieStep,
+      pendingDentistInvite,
+      hasDentistMember,
+    });
 
     const step = resolveGuideStep(progress, cookieStep);
 
@@ -148,6 +154,37 @@ export async function loadGuide(clinicId: string, userId: string): Promise<Guide
     console.error("load_guide failed:", error instanceof Error ? error.name : "unknown error");
     return { status: "unavailable" };
   }
+}
+
+export type GuideProgressFacts = {
+  termsAccepted: boolean;
+  address: string | null;
+  phone: string | null;
+  ownerSeesPatients: boolean;
+  appointmentTypeCount: number;
+  ownerWorkingHoursSaved: boolean;
+  defaultAppointmentTypeId: string | null;
+  cookieStep: GuideStep | null;
+  pendingDentistInvite: boolean;
+  hasDentistMember: boolean;
+};
+
+export function guideProgressFromFacts(facts: GuideProgressFacts): GuideProgressSnapshot {
+  const cookieIndex = facts.cookieStep ? guideStepIndex(facts.cookieStep) : -1;
+  const schedulingSaved = facts.ownerSeesPatients
+    ? facts.defaultAppointmentTypeId !== null
+    : cookieIndex >= guideStepIndex("notice");
+
+  return {
+    termsAccepted: facts.termsAccepted,
+    profileComplete: hasProfile(facts.address, facts.phone),
+    seesPatientsChosen: facts.ownerSeesPatients || facts.appointmentTypeCount > 0,
+    ownerSeesPatients: facts.ownerSeesPatients,
+    ownerWorkingHoursSaved: facts.ownerWorkingHoursSaved,
+    schedulingSaved,
+    noticeSaved: cookieIndex >= guideStepIndex("invite"),
+    inviteSatisfied: facts.ownerSeesPatients || facts.pendingDentistInvite || facts.hasDentistMember,
+  };
 }
 
 function hasProfile(address: string | null, phone: string | null): boolean {
