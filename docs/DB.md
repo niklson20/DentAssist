@@ -550,6 +550,7 @@ gde piše. Vraćaju samo ono što sme napolje.
 | `decline_offers(token)` | isti uslov | traženi, sve ponude i zahtev otkazani |
 | `reschedule_by_token(token, starts_at)` | isti uslov | samo ako je brojač 0 i do početka ima više od 24 sata |
 | `cancel_by_token(token)` | isti uslov | dok je do početka više od 24 sata |
+| `booking_dependent_id(request_id)` | vlasnik ili stomatolog tog zahteva | id deteta za prihvat; recepcija, tuđa ordinacija i odrasli zahtev vraćaju null; ime se ne vraća |
 
 `create_booking` ne zove `anon`. Imena pacijenta i odnos deteta čitaju se sa naloga i
 `patient_dependents`, ne iz slobodnog teksta pozivaoca, osim telefona i datuma koji se

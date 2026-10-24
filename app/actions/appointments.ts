@@ -1841,6 +1841,10 @@ async function ensureChartLink(
   patientId: string,
 ): Promise<boolean> {
   const dependentId = await dependentFor(supabase, request);
+  if (request.forChild && dependentId === null) {
+    console.error("accept_request_dependent rejected:", "empty");
+    return false;
+  }
   const existing = await supabase
     .from("patient_chart_links")
     .select("account_id, dependent_id")
@@ -1879,27 +1883,13 @@ async function ensureChartLink(
 
 async function dependentFor(supabase: SupabaseClient, request: BookingRequestRow): Promise<string | null> {
   if (!request.forChild) return null;
-  const listed = await supabase
-    .from("patient_dependents")
-    .select("id, first_name, last_name, date_of_birth, relationship")
-    .eq("account_id", request.accountId);
+  const listed = await supabase.rpc("booking_dependent_id", { p_request_id: request.id });
   if (listed.error) {
     console.error("accept_request_dependent rejected:", "unknown");
     return null;
   }
-  for (const row of rowsOf(listed.data)) {
-    if (typeof row.id !== "string") continue;
-    const relationship = textOf(row.relationship);
-    if (
-      sameName(textOf(row.first_name), request.firstName) &&
-      sameName(textOf(row.last_name), request.lastName) &&
-      dateKey(row.date_of_birth) === request.dateOfBirth &&
-      (relationship === "" || relationship === request.contactRelationship)
-    ) {
-      return row.id;
-    }
-  }
-  return null;
+  if (typeof listed.data !== "string" || listed.data === "") return null;
+  return listed.data;
 }
 
 async function insertEmailClaim(
