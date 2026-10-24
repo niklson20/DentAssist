@@ -14,7 +14,9 @@ const UNAVAILABLE = "Čuvanje trenutno nije moguće. Pokušajte ponovo.";
 const CHART_MISSING = "Karton nije pronađen.";
 const ANAMNESIS_HIDDEN = "Anamneza nije dostupna.";
 const ALERT_HIDDEN = "Upozorenje nije dostupno.";
+const MERGE_HIDDEN = "Spajanje nije dostupno.";
 const PICK_CHART = "Izaberite karton.";
+const OTHER_CHART = "Izaberite drugi karton.";
 const PICK_CODE = "Izaberite šifru.";
 const NOTE_REQUIRED = "Unesite kratak tekst.";
 const NOTE_MAX = "Tekst može imati najviše 500 znakova.";
@@ -34,6 +36,11 @@ const alertSchema = z.object({
   patientId: z.string({ error: PICK_CHART }).trim().uuid(PICK_CHART),
   code: z.enum(ALERT_CODES, { error: PICK_CODE }),
   note: z.string().trim().min(1, NOTE_REQUIRED).max(500, NOTE_MAX),
+});
+
+const mergeSchema = z.object({
+  patientId: z.string({ error: PICK_CHART }).trim().uuid(PICK_CHART),
+  sourceId: z.string({ error: PICK_CHART }).trim().uuid(PICK_CHART),
 });
 
 export async function saveAnamnesis(
@@ -127,6 +134,54 @@ export async function saveAlert(
     return ok({ patientId: parsed.data.patientId });
   } catch (error) {
     console.error("save_alert failed:", error instanceof Error ? error.name : "unknown");
+    return fail(UNAVAILABLE);
+  }
+}
+
+export async function mergeCharts(
+  _previous: ActionResult<{ patientId: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ patientId: string }>> {
+  const member = await requireMember();
+  if (member.role !== "owner") {
+    return fail(MERGE_HIDDEN);
+  }
+
+  const parsed = mergeSchema.safeParse({
+    patientId: text(formData.get("patientId")),
+    sourceId: text(formData.get("sourceId")),
+  });
+  if (!parsed.success) {
+    return fail(CHECK, fieldErrorsFrom(parsed.error));
+  }
+  if (parsed.data.patientId === parsed.data.sourceId) {
+    return fail(CHECK, { sourceId: [OTHER_CHART] });
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const target = await findOpenChart(supabase, member.clinicId, parsed.data.patientId);
+    if (target === "missing") return fail(CHART_MISSING);
+    if (target === "unavailable") return fail(UNAVAILABLE);
+
+    const source = await findOpenChart(supabase, member.clinicId, parsed.data.sourceId);
+    if (source === "missing") return fail(CHART_MISSING);
+    if (source === "unavailable") return fail(UNAVAILABLE);
+
+    const merged = await supabase.rpc("merge_patients", {
+      target_id: parsed.data.patientId,
+      source_id: parsed.data.sourceId,
+    });
+    if (merged.error) {
+      console.error("merge_charts rejected:", merged.error.code ?? "rejected");
+      return fail(UNAVAILABLE);
+    }
+
+    revalidatePath("/danas");
+    revalidatePath("/pacijenti", "layout");
+    return ok({ patientId: parsed.data.patientId });
+  } catch (error) {
+    console.error("merge_charts failed:", error instanceof Error ? error.name : "unknown");
     return fail(UNAVAILABLE);
   }
 }
