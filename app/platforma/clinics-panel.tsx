@@ -2,12 +2,11 @@
 
 import { useActionState, useOptimistic, useTransition } from "react";
 
+import { disableClinicAccess, type PlatformClinicRow } from "@/app/actions/platform";
 import {
-  disableClinicAccess,
   formatPlatformClinicMember,
   formatPlatformClinicStatus,
-  type PlatformClinicRow,
-} from "@/app/actions/platform";
+} from "@/app/platforma/clinic-label";
 import { Button } from "@/components/ui/button";
 import type { ActionResult } from "@/lib/action-result";
 

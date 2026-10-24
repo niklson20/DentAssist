@@ -11,7 +11,6 @@ import { z } from "zod";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requirePlatformAdmin } from "@/lib/auth";
 import type { ClinicStatus, MemberRole } from "@/lib/labels";
-import { clinicStatusLabels, memberRoleLabels } from "@/lib/labels";
 import {
   CLINIC_INVITE_SUBJECT,
   clinicInviteLink,
@@ -324,14 +323,6 @@ export async function listPlatformClinics(): Promise<PlatformClinicRow[]> {
     status: row.status === "disabled" ? "disabled" : "active",
     members: membersByClinic.get(row.id) ?? [],
   }));
-}
-
-export function formatPlatformClinicMember(member: PlatformClinicMember): string {
-  return `${member.firstName} ${member.lastName} (${memberRoleLabels[member.role]})`;
-}
-
-export function formatPlatformClinicStatus(status: ClinicStatus): string {
-  return clinicStatusLabels[status];
 }
 
 export async function disableClinicAccess(
