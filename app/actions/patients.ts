@@ -6,12 +6,14 @@ import { z, type ZodError } from "zod";
 
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireMember } from "@/lib/auth";
+import { isIsoDate, needsPatientEmailTask } from "@/lib/calendar-dates";
 import { ALERT_CODES } from "@/lib/labels";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const CHECK = "Proverite unete podatke.";
 const UNAVAILABLE = "Čuvanje trenutno nije moguće. Pokušajte ponovo.";
 const CHART_MISSING = "Karton nije pronađen.";
+const EMAIL_SET = "Mejl je već upisan.";
 const ANAMNESIS_HIDDEN = "Anamneza nije dostupna.";
 const ALERT_HIDDEN = "Upozorenje nije dostupno.";
 const MERGE_HIDDEN = "Spajanje nije dostupno.";
@@ -38,9 +40,15 @@ const alertSchema = z.object({
   note: z.string().trim().min(1, NOTE_REQUIRED).max(500, NOTE_MAX),
 });
 
+const PATIENT_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 const mergeSchema = z.object({
   patientId: z.string({ error: PICK_CHART }).trim().uuid(PICK_CHART),
   sourceId: z.string({ error: PICK_CHART }).trim().uuid(PICK_CHART),
+});
+
+const dismissEmailSchema = z.object({
+  patientSlug: z.string({ error: PICK_CHART }).trim().toLowerCase().regex(PATIENT_SLUG, PICK_CHART),
 });
 
 export async function saveAnamnesis(
@@ -186,6 +194,63 @@ export async function mergeCharts(
   }
 }
 
+export async function dismissPatientEmail(
+  _previous: ActionResult<{ patientSlug: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ patientSlug: string }>> {
+  const member = await requireMember();
+  const parsed = dismissEmailSchema.safeParse({
+    patientSlug: text(formData.get("patientSlug")),
+  });
+  if (!parsed.success) {
+    return fail(CHECK, fieldErrorsFrom(parsed.error));
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const found = await supabase
+      .from("patients")
+      .select("id, email, email_declined")
+      .eq("clinic_id", member.clinicId)
+      .eq("slug", parsed.data.patientSlug)
+      .is("merged_into_id", null)
+      .maybeSingle();
+
+    if (found.error) {
+      console.error("dismiss_patient_email rejected:", found.error.code ?? "rejected");
+      return fail(UNAVAILABLE);
+    }
+
+    const patient = patientEmailState(found.data);
+    if (!patient) return fail(CHART_MISSING);
+    if (patient.email) return fail(EMAIL_SET);
+    if (patient.emailDeclined) return ok({ patientSlug: parsed.data.patientSlug });
+
+    const saved = await supabase
+      .from("patients")
+      .update({ email_declined: true })
+      .eq("clinic_id", member.clinicId)
+      .eq("id", patient.id)
+      .is("email", null)
+      .select("id")
+      .maybeSingle();
+
+    if (saved.error) {
+      console.error("dismiss_patient_email rejected:", saved.error.code ?? "rejected");
+      return fail(UNAVAILABLE);
+    }
+    if (chartId(saved.data) !== patient.id) return fail(UNAVAILABLE);
+
+    revalidatePath("/danas");
+    revalidatePath("/pacijenti", "layout");
+    revalidatePath(`/pacijenti/${parsed.data.patientSlug}`);
+    return ok({ patientSlug: parsed.data.patientSlug });
+  } catch (error) {
+    console.error("dismiss_patient_email failed:", error instanceof Error ? error.name : "unknown");
+    return fail(UNAVAILABLE);
+  }
+}
+
 async function findOpenChart(
   supabase: SupabaseClient,
   clinicId: string,
@@ -230,4 +295,130 @@ function fieldErrorsFrom(error: ZodError): Record<string, string[]> {
     (result[field] ??= []).push(issue.message);
   }
   return result;
+}
+
+type PatientEmailChart = {
+  slug: string;
+  firstName: string;
+  lastName: string;
+  hasContact: boolean;
+  dateOfBirth: string | null;
+  email: string | null;
+  emailDeclined: boolean;
+};
+
+export async function loadPatientEmailCharts(onDate: string, slug?: string): Promise<PatientEmailChart[]> {
+  const member = await requireMember();
+  const safeSlug = typeof slug === "string" ? slug.trim().toLowerCase() : undefined;
+  if (!isIsoDate(onDate) || (safeSlug !== undefined && !PATIENT_SLUG.test(safeSlug))) {
+    return [];
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const patientsQuery = supabase
+      .from("patients")
+      .select("id, slug, first_name, last_name, email, date_of_birth, email_declined")
+      .eq("clinic_id", member.clinicId)
+      .is("merged_into_id", null);
+    const patientsResult = safeSlug ? await patientsQuery.eq("slug", safeSlug) : await patientsQuery;
+    if (patientsResult.error) {
+      console.error("load_patient_email_charts rejected:", patientsResult.error.code ?? "rejected");
+      return [];
+    }
+
+    const rows = Array.isArray(patientsResult.data) ? patientsResult.data : [];
+    const ids = rows.flatMap((row) => {
+      const id = chartId(row);
+      return id ? [id] : [];
+    });
+    const contactIds = await contactIdsFor(supabase, member.clinicId, ids);
+    if (contactIds === null) return [];
+
+    const due = rows.flatMap((row) => {
+      const patient = emailChartFrom(row, contactIds);
+      if (!patient || !patientEmailTaskDue(patient, onDate)) return [];
+      return [patient];
+    });
+    due.sort((left, right) => {
+      const byLastName = left.lastName.localeCompare(right.lastName, "sr");
+      return byLastName === 0 ? left.firstName.localeCompare(right.firstName, "sr") : byLastName;
+    });
+    return due;
+  } catch (error) {
+    console.error("load_patient_email_charts failed:", error instanceof Error ? error.name : "unknown");
+    return [];
+  }
+}
+
+async function contactIdsFor(
+  supabase: SupabaseClient,
+  clinicId: string,
+  patientIds: string[],
+): Promise<Set<string> | null> {
+  if (patientIds.length === 0) return new Set();
+  const contactsResult = await supabase
+    .from("patient_contacts")
+    .select("patient_id")
+    .eq("clinic_id", clinicId)
+    .in("patient_id", patientIds);
+  if (contactsResult.error) {
+    console.error("load_patient_email_charts contacts rejected:", contactsResult.error.code ?? "rejected");
+    return null;
+  }
+  const ids = new Set<string>();
+  if (!Array.isArray(contactsResult.data)) return ids;
+  for (const row of contactsResult.data) {
+    if (!row || typeof row !== "object") continue;
+    const patientId = (row as Record<string, unknown>).patient_id;
+    if (typeof patientId === "string") ids.add(patientId);
+  }
+  return ids;
+}
+
+function emailChartFrom(row: unknown, contactIds: ReadonlySet<string>): PatientEmailChart | null {
+  if (!row || typeof row !== "object") return null;
+  const record = row as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.slug !== "string" || !PATIENT_SLUG.test(record.slug)) {
+    return null;
+  }
+  if (typeof record.first_name !== "string" || typeof record.last_name !== "string") return null;
+  const firstName = record.first_name.trim();
+  const lastName = record.last_name.trim();
+  if (!firstName || !lastName) return null;
+  const dateText = typeof record.date_of_birth === "string" ? record.date_of_birth.slice(0, 10) : "";
+  return {
+    slug: record.slug,
+    firstName,
+    lastName,
+    hasContact: contactIds.has(record.id),
+    dateOfBirth: isIsoDate(dateText) ? dateText : null,
+    email: typeof record.email === "string" && record.email.trim() ? record.email.trim() : null,
+    emailDeclined: record.email_declined === true,
+  };
+}
+
+function patientEmailTaskDue(patient: PatientEmailChart, onDate: string): boolean {
+  try {
+    return needsPatientEmailTask({
+      hasContact: patient.hasContact,
+      dateOfBirth: patient.dateOfBirth,
+      email: patient.email,
+      emailDeclined: patient.emailDeclined,
+      onDate,
+    });
+  } catch {
+    return false;
+  }
+}
+
+function patientEmailState(data: unknown): { id: string; email: string | null; emailDeclined: boolean } | null {
+  if (!data || typeof data !== "object") return null;
+  const record = data as Record<string, unknown>;
+  if (typeof record.id !== "string") return null;
+  return {
+    id: record.id,
+    email: typeof record.email === "string" && record.email.trim() ? record.email.trim() : null,
+    emailDeclined: record.email_declined === true,
+  };
 }
