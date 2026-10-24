@@ -36,6 +36,8 @@ const originalEnv = {
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   MAIL_FROM: process.env.MAIL_FROM,
+  mail_test: process.env.mail_test,
+  mail_password: process.env.mail_password,
 };
 
 describe("appointment reminders", () => {
@@ -45,6 +47,8 @@ describe("appointment reminders", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = SERVICE_ROLE_KEY;
     process.env.RESEND_API_KEY = "re_test_key";
     process.env.MAIL_FROM = "ne-odgovaraj@example.com";
+    delete process.env.mail_test;
+    delete process.env.mail_password;
     mocks.createClient.mockReset();
     mocks.send.mockReset();
     mocks.send.mockResolvedValue({ data: { id: "email_1" }, error: null });
@@ -58,6 +62,8 @@ describe("appointment reminders", () => {
     restoreEnv("SUPABASE_SERVICE_ROLE_KEY", originalEnv.SUPABASE_SERVICE_ROLE_KEY);
     restoreEnv("RESEND_API_KEY", originalEnv.RESEND_API_KEY);
     restoreEnv("MAIL_FROM", originalEnv.MAIL_FROM);
+    restoreEnv("mail_test", originalEnv.mail_test);
+    restoreEnv("mail_password", originalEnv.mail_password);
   });
 
   it("returns 401 without Authorization: Bearer CRON_SECRET", async () => {

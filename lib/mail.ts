@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createTransport } from "nodemailer";
 import { Resend } from "resend";
 
 import { formatBelgrade } from "@/lib/calendar-dates";
@@ -104,6 +105,14 @@ export async function sendMail(mail: MailMessage): Promise<void> {
   if (!mail.to.trim() || !mail.subject.trim() || !mail.text.trim()) {
     throw new Error("sendMail is not configured");
   }
+
+  const gmailUser = process.env.mail_test?.trim() ?? "";
+  const gmailPassword = process.env.mail_password?.replace(/\s+/g, "") ?? "";
+  if (gmailUser && gmailPassword) {
+    await sendWithGmail(mail, gmailUser, gmailPassword);
+    return;
+  }
+
   const apiKey = process.env.RESEND_API_KEY?.trim();
   const fromAddress = process.env.MAIL_FROM?.trim();
   if (!apiKey || !fromAddress) {
@@ -121,6 +130,42 @@ export async function sendMail(mail: MailMessage): Promise<void> {
   if (error) {
     throw new MailError(error.name);
   }
+}
+
+/** Gmail SMTP while `mail_test` and `mail_password` are set. The mailbox is that Gmail address. */
+async function sendWithGmail(mail: MailMessage, user: string, password: string): Promise<void> {
+  const from = mailFrom(mail.fromName, user);
+  const transport = createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user, pass: password },
+  });
+  try {
+    await transport.sendMail({
+      from,
+      to: mail.to.trim(),
+      subject: mail.subject,
+      text: mail.text,
+    });
+  } catch (error) {
+    throw gmailFailure(error);
+  }
+}
+
+function gmailFailure(error: unknown): MailError {
+  const response =
+    error && typeof error === "object" && "response" in error && typeof error.response === "string"
+      ? error.response
+      : error instanceof Error
+        ? error.message
+        : "";
+  if (/5\.4\.5|4\.7\.0|daily user sending (quota|limit)/i.test(response)) {
+    return new MailError("rate_limit_exceeded");
+  }
+  const line = response.split(/\r?\n/).find((part) => part.trim()) ?? "unknown";
+  console.error("Gmail SMTP failed:", line);
+  return new MailError("gmail_smtp");
 }
 
 /** „Zahtev je primljen“. The clinic is not a recipient; its phone is in the body. */

@@ -2,11 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn(),
+  gmailSend: vi.fn(),
+  createTransport: vi.fn(),
 }));
 
 vi.mock("resend", () => ({
   Resend: class Resend {
     emails = { send: mocks.send };
+  },
+}));
+
+vi.mock("nodemailer", () => ({
+  createTransport: (options: unknown) => {
+    mocks.createTransport(options);
+    return { sendMail: mocks.gmailSend };
   },
 }));
 
@@ -18,9 +27,14 @@ const when = "četvrtak, 22. oktobar 2026., 11:30";
 describe("request received mail", () => {
   beforeEach(() => {
     mocks.send.mockReset();
+    mocks.gmailSend.mockReset();
+    mocks.createTransport.mockReset();
     mocks.send.mockResolvedValue({ data: { id: "email_1" }, error: null });
+    mocks.gmailSend.mockResolvedValue({ messageId: "gmail_1" });
     vi.stubEnv("RESEND_API_KEY", "re_test_key");
     vi.stubEnv("MAIL_FROM", "ne-odgovaraj@example.com");
+    vi.stubEnv("mail_test", "");
+    vi.stubEnv("mail_password", "");
   });
 
   afterEach(() => {
@@ -126,5 +140,45 @@ describe("request received mail", () => {
 
     expect(mocks.send.mock.calls[0]?.[0].from).toBe("Ordinacija Centar <ne-odgovaraj@example.com>");
     expect(mocks.send.mock.calls[0]?.[0].to).toBe("ana@example.com");
+  });
+
+  it("sends through Gmail when mail_test and mail_password are set", async () => {
+    vi.stubEnv("mail_test", "posta@gmail.com");
+    vi.stubEnv("mail_password", "abcd efgh ijkl mnop");
+
+    await sendMail({
+      to: " ana@example.com ",
+      subject: "Otvorite ordinaciju",
+      fromName: "Ordinacija Centar",
+      text: "Link važi 7 dana.",
+    });
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.createTransport).toHaveBeenCalledWith({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: { user: "posta@gmail.com", pass: "abcdefghijklmnop" },
+    });
+    expect(mocks.gmailSend).toHaveBeenCalledWith({
+      from: "Ordinacija Centar <posta@gmail.com>",
+      to: "ana@example.com",
+      subject: "Otvorite ordinaciju",
+      text: "Link važi 7 dana.",
+    });
+  });
+
+  it("maps a Gmail daily quota failure to the rate limit code", async () => {
+    vi.stubEnv("mail_test", "posta@gmail.com");
+    vi.stubEnv("mail_password", "abcdefghijklmnop");
+    mocks.gmailSend.mockRejectedValue(Object.assign(new Error("SMTP"), { response: "550 5.4.5 Daily user sending quota exceeded" }));
+
+    await expect(
+      sendMail({
+        to: "ana@example.com",
+        subject: "Otvorite ordinaciju",
+        text: "Link važi 7 dana.",
+      }),
+    ).rejects.toMatchObject({ name: "MailError", code: "rate_limit_exceeded" });
   });
 });
