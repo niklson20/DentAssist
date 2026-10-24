@@ -3,9 +3,9 @@ import { z } from "zod";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import {
   addCalendarDays,
-  formatBelgrade,
   formatBelgradeDate,
   isIsoDate,
+  isoDayOfWeek,
   startOfBelgradeDay,
   startOfBelgradeWeek,
   startOfNextBelgradeDay,
@@ -14,7 +14,16 @@ import {
 import { APPOINTMENT_STATUSES, appointmentStatusLabel } from "@/lib/labels";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-import type { WeekDay, WeekModel, WeekVisit } from "./week-view";
+import {
+  axisBounds,
+  hourMarks,
+  layoutLane,
+  memberHasSavedHours,
+  scheduleOn,
+  schedulesFromRows,
+  slotStep,
+} from "./day-calendar";
+import type { WeekDay, WeekModel } from "./week-view";
 
 const WEEK_UNAVAILABLE = "Kalendar trenutno nije dostupan. Pokušajte ponovo.";
 
@@ -61,34 +70,66 @@ export function weekDates(isoDate: string): string[] {
 
 export function weekFromRows(input: {
   datum: string;
+  today: string;
   dentistId: string | null;
   hideCancelled: boolean;
+  slotMinutes?: number;
   members: unknown;
   appointments: unknown;
   patients: unknown;
+  hours: unknown;
 }): WeekModel | null {
   const members = parseRows(input.members, memberSchema);
   const appointments = parseRows(input.appointments, appointmentSchema);
   const patients = parseRows(input.patients, patientSchema);
-  if (!members || !appointments || !patients) {
+  const schedules = schedulesFromRows(input.hours);
+  if (!members || !appointments || !patients || !schedules) {
     return null;
   }
 
   const dentist = oneDentist(seeingDentists(members), input.dentistId);
   if (!dentist) {
-    return { dentistId: null, dentistName: null, days: [] };
+    return { dentistId: null, dentistName: null, today: input.today, span: 0, hours: [], days: [] };
   }
 
   const names = new Map(patients.map((patient) => [patient.id, `${patient.first_name} ${patient.last_name}`]));
   const visits = appointments.filter(
     (row) => row.dentist_id === dentist.id && !(input.hideCancelled && row.status === "cancelled"),
   );
-  const days: WeekDay[] = weekDates(input.datum).map((datum) => ({
+  const dates = weekDates(input.datum);
+  const anySaved = memberHasSavedHours(schedules, dentist.id);
+  const byDay = dates.map((datum) => ({
     datum,
+    schedule: scheduleOn(schedules, dentist.id, isoDayOfWeek(datum)),
     visits: visitsOn(datum, visits, names),
   }));
+  const axis = axisBounds({
+    saved: anySaved,
+    schedules: byDay.flatMap((day) => (day.schedule ? [day.schedule] : [])),
+    visits: byDay.flatMap((day) => day.visits),
+  });
+  const span = axis.empty ? 0 : axis.endHour - axis.startHour;
+  const step = slotStep(input.slotMinutes);
+  const days: WeekDay[] = byDay.map((day) => ({
+    datum: day.datum,
+    ...layoutLane({
+      schedule: day.schedule,
+      anySaved,
+      startHour: axis.startHour,
+      endHour: axis.endHour,
+      slotMinutes: step,
+      visits: day.visits,
+    }),
+  }));
 
-  return { dentistId: dentist.id, dentistName: dentist.name, days };
+  return {
+    dentistId: dentist.id,
+    dentistName: dentist.name,
+    today: input.today,
+    span,
+    hours: axis.empty ? [] : hourMarks(dates[0] ?? input.datum, axis.startHour, axis.endHour),
+    days,
+  };
 }
 
 export async function loadWeekCalendar(clinicId: string, query: CalendarQuery): Promise<ActionResult<WeekModel>> {
@@ -101,7 +142,7 @@ export async function loadWeekCalendar(clinicId: string, query: CalendarQuery): 
     const monday = startOfBelgradeWeek(query.datum);
     const start = startOfBelgradeDay(monday).toISOString();
     const end = startOfNextBelgradeDay(addCalendarDays(monday, 6)).toISOString();
-    const [membersResult, appointmentsResult] = await Promise.all([
+    const [membersResult, appointmentsResult, hoursResult, clinicResult] = await Promise.all([
       supabase
         .from("clinic_members")
         .select("id, first_name, last_name, sees_patients")
@@ -114,12 +155,21 @@ export async function loadWeekCalendar(clinicId: string, query: CalendarQuery): 
         .eq("clinic_id", clinicId)
         .gte("starts_at", start)
         .lt("starts_at", end),
+      supabase
+        .from("working_hours")
+        .select("clinic_member_id, iso_dow, is_closed, opens_at, closes_at, break_starts_at, break_ends_at")
+        .eq("clinic_id", clinicId),
+      supabase.from("clinics").select("slot_minutes").eq("id", clinicId).maybeSingle(),
     ]);
 
-    if (membersResult.error || appointmentsResult.error) {
+    if (membersResult.error || appointmentsResult.error || hoursResult.error || clinicResult.error) {
       console.error(
         "load_week_calendar rejected:",
-        membersResult.error?.code ?? appointmentsResult.error?.code ?? "unknown",
+        membersResult.error?.code ??
+          appointmentsResult.error?.code ??
+          hoursResult.error?.code ??
+          clinicResult.error?.code ??
+          "unknown",
       );
       return fail(WEEK_UNAVAILABLE);
     }
@@ -137,11 +187,14 @@ export async function loadWeekCalendar(clinicId: string, query: CalendarQuery): 
 
     const model = weekFromRows({
       datum: query.datum,
+      today: formatBelgradeDate(new Date()),
       dentistId: query.stomatolog,
       hideCancelled: query.sakrijOtkazane,
+      slotMinutes: slotStep(clinicResult.data?.slot_minutes),
       members: membersResult.data ?? [],
       appointments: appointmentsResult.data ?? [],
       patients: patientsResult.data ?? [],
+      hours: hoursResult.data ?? [],
     });
     if (!model) {
       return fail(WEEK_UNAVAILABLE);
@@ -173,22 +226,18 @@ function oneDentist(dentists: Dentist[], dentistId: string | null): Dentist | nu
   return dentists[0] ?? null;
 }
 
-function visitsOn(datum: string, visits: AppointmentRow[], names: Map<string, string>): WeekVisit[] {
+function visitsOn(datum: string, visits: AppointmentRow[], names: Map<string, string>) {
   return visits
     .filter((visit) => formatBelgradeDate(new Date(visit.starts_at)) === datum)
     .sort((left, right) => Date.parse(left.starts_at) - Date.parse(right.starts_at) || left.id.localeCompare(right.id))
     .map((visit) => ({
       id: visit.id,
+      dentistId: visit.dentist_id,
       status: visit.status,
+      startsAt: visit.starts_at,
+      endsAt: visit.ends_at,
       label: (visit.patient_id && names.get(visit.patient_id)) || appointmentStatusLabel(visit.status),
-      timeLabel: timeLabel(visit.starts_at, visit.ends_at),
     }));
-}
-
-function timeLabel(startsAt: string, endsAt: string): string {
-  const start = formatBelgrade(new Date(startsAt), { hour: "2-digit", minute: "2-digit" });
-  const end = formatBelgrade(new Date(endsAt), { hour: "2-digit", minute: "2-digit" });
-  return `${start}–${end}`;
 }
 
 function parseRows<T>(rows: unknown, schema: z.ZodType<T>): T[] | null {

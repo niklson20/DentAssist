@@ -70,7 +70,14 @@ const appointments = [
 
 describe("month view", () => {
   it("shows the appointment count and a click opens that day", () => {
-    const model = monthFromRows({ query, members, appointments });
+    const hours = [1, 2, 3, 4, 5, 6, 7].map((dow) => ({
+      clinic_member_id: ana,
+      iso_dow: dow,
+      is_closed: dow >= 6,
+      opens_at: dow >= 6 ? null : "09:00:00",
+      closes_at: dow >= 6 ? null : "17:00:00",
+    }));
+    const model = monthFromRows({ query, today: "2026-06-10", members, appointments, hours });
     expect(model).not.toBeNull();
     if (!model) {
       return;
@@ -112,20 +119,44 @@ describe("month view", () => {
     const href = june8?.href.replace(/&/g, "&amp;") ?? "";
     const start = html.indexOf(`href="${href}"`);
     expect(start).toBeGreaterThanOrEqual(0);
-    expect(html.slice(start, html.indexOf("</a>", start))).toContain("2 termina");
-    expect(html).toContain('href="/danas?prikaz=dan&amp;datum=2026-06-09&amp;sakrijOtkazane=da"');
+    const june8Cell = html.slice(start, html.indexOf("</a>", start));
+    expect(june8Cell).toContain(">2</span>");
+    expect(june8Cell).not.toContain(">2 termina<");
+    expect(html).not.toContain(">0 termina<");
+    expect(html).not.toContain(">0</span>");
+    const june9Start = html.indexOf('href="/danas?prikaz=dan&amp;datum=2026-06-09&amp;sakrijOtkazane=da"');
+    const june9Cell = html.slice(june9Start, html.indexOf("</a>", june9Start));
+    expect(june9Cell).toContain(">1</span>");
+    expect(june9Cell).not.toContain(">1 termin<");
+    expect(html.indexOf(">PON<")).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf(">PON<")).toBeLessThan(html.indexOf(">UTO<"));
+    expect(html.indexOf(">PON<")).toBeLessThan(html.indexOf('data-datum="2026-06-01"'));
+    expect(model.days.find((day) => day.datum === "2026-06-06")?.closed).toBe(true);
+    expect(model.days.find((day) => day.datum === "2026-06-08")?.closed).toBe(false);
+    const saturdayStart = html.indexOf('data-datum="2026-06-06"');
+    expect(html.slice(saturdayStart - 40, saturdayStart + 80)).toContain('data-closed="true"');
+    expect(june8Cell).toContain("ring-ring");
+    expect(june8Cell).not.toContain('data-today="true"');
+    const todayStart = html.indexOf('data-datum="2026-06-10"');
+    const todayCell = html.slice(todayStart, html.indexOf("</a>", todayStart));
+    expect(todayCell).toContain('data-today="true"');
+    expect(todayCell).toContain("bg-primary");
 
     const visible = monthFromRows({
       query: { ...query, sakrijOtkazane: false },
+      today: "2026-06-10",
       members,
       appointments,
+      hours,
     });
     expect(visible?.days.find((day) => day.datum === datum)?.countLabel).toBe("3 termina");
 
     const onlyAna = monthFromRows({
       query: { ...query, stomatolog: ana },
+      today: "2026-06-10",
       members,
       appointments,
+      hours,
     });
     const anaDay = onlyAna?.days.find((day) => day.datum === datum);
     expect(anaDay?.count).toBe(1);

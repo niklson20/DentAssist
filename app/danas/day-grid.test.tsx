@@ -69,9 +69,17 @@ const appointments = [
 const patients = [{ id: mika, first_name: "Mika", last_name: "Mikić" }];
 
 const hours = [
-  { clinic_member_id: reception, is_closed: false, opens_at: "07:00:00", closes_at: "08:00:00" },
-  { clinic_member_id: ana, is_closed: false, opens_at: "09:00:00", closes_at: "17:00:00" },
-  { clinic_member_id: boris, is_closed: true, opens_at: null, closes_at: null },
+  { clinic_member_id: reception, iso_dow: 5, is_closed: false, opens_at: "07:00:00", closes_at: "08:00:00" },
+  {
+    clinic_member_id: ana,
+    iso_dow: 5,
+    is_closed: false,
+    opens_at: "09:00:00",
+    closes_at: "17:00:00",
+    break_starts_at: "12:00:00",
+    break_ends_at: "13:00:00",
+  },
+  { clinic_member_id: boris, iso_dow: 5, is_closed: true, opens_at: null, closes_at: null },
 ];
 
 describe("day grid", () => {
@@ -96,7 +104,47 @@ describe("day grid", () => {
     expect(html.indexOf('class="calendar-grid"')).toBeLessThan(html.indexOf("calendar-grid__hours"));
     expect(html.indexOf("calendar-grid__hours")).toBeLessThan(html.indexOf("calendar-grid__columns"));
     expect(html.match(/class="calendar-grid__column"/g)).toHaveLength(2);
+    expect(html).toContain("Petak");
+    expect(html).toContain("PET");
+    expect(html).toContain("23. 10.");
+    expect(html).not.toContain("23. oktobar 2026.");
     expect(html.indexOf("Ana Anić")).toBeLessThan(html.indexOf("Boris Borić"));
+    expect(model.hours[0]?.hour).toBe(8);
+    expect(model.hours.at(-1)?.hour).toBe(16);
+    const anaColumn = model.columns.find((column) => column.id === ana);
+    const borisColumn = model.columns.find((column) => column.id === boris);
+    expect(anaColumn?.closed).toBe(false);
+    expect(anaColumn?.breaks).toHaveLength(1);
+    expect(anaColumn?.lines.some((line) => line.minute === 12 * 60)).toBe(false);
+    expect(anaColumn?.lines.some((line) => line.minute === 13 * 60)).toBe(true);
+    expect(borisColumn?.closed).toBe(true);
+    expect(borisColumn?.lines).toEqual([]);
+    const anaHtml = html.slice(
+      html.indexOf('aria-label="Petak, 23. 10., Ana Anić"'),
+      html.indexOf('aria-label="Petak, 23. 10., Boris Borić"'),
+    );
+    const borisHtml = html.slice(html.indexOf('aria-label="Petak, 23. 10., Boris Borić"'));
+    expect(anaHtml).toContain("Pauza");
+    expect(anaHtml).toContain("calendar-grid__line");
+    expect(anaHtml).not.toContain("Zatvoreno");
+    expect(borisHtml).toContain("Zatvoreno");
+    expect(borisHtml).not.toContain("calendar-grid__line");
+
+    const oneDentist = dayFromRows({
+      datum,
+      hideCancelled: false,
+      members: members.filter((member) => member.id === ana),
+      appointments,
+      patients,
+      hours,
+    });
+    expect(oneDentist).not.toBeNull();
+    if (oneDentist) {
+      const alone = renderToStaticMarkup(<DayGrid model={oneDentist} />);
+      expect(alone).toContain("Petak");
+      expect(alone).toContain("23. 10.");
+      expect(alone).not.toContain("Ana Anić");
+    }
     expect(html).not.toContain("Rade Radić");
     expect(html).toContain("Mika Mikić");
     expect(hoursList.indexOf(hourLabel(8))).toBeGreaterThanOrEqual(0);

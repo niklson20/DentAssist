@@ -32,6 +32,7 @@ const week = [
 const weekdays = ["Ponedeljak", "Utorak", "Sreda", "Četvrtak", "Petak", "Subota", "Nedelja"];
 
 const viewSource = readFileSync(path.join(process.cwd(), "app/danas/week-view.tsx"), "utf8");
+const cssSource = readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
 const loadSource = readFileSync(path.join(process.cwd(), "app/danas/load-week.ts"), "utf8");
 const pageSource = readFileSync(path.join(process.cwd(), "app/danas/page.tsx"), "utf8");
 const shellSource = readFileSync(path.join(process.cwd(), "app/danas/calendar-shell.tsx"), "utf8");
@@ -89,11 +90,22 @@ describe("week view", () => {
   it("shows one dentist and seven days from Monday", () => {
     const input = {
       datum,
+      today: "2026-06-08",
       dentistId: ana,
       hideCancelled: true,
+      slotMinutes: 15,
       members,
       appointments,
       patients,
+      hours: [1, 2, 3, 4, 5, 6, 7].map((dow) => ({
+        clinic_member_id: ana,
+        iso_dow: dow,
+        is_closed: dow >= 6,
+        opens_at: dow >= 6 ? null : "09:00:00",
+        closes_at: dow >= 6 ? null : "17:00:00",
+        break_starts_at: dow >= 6 ? null : "13:00:00",
+        break_ends_at: dow >= 6 ? null : "13:30:00",
+      })),
     };
     const model = weekFromRows(input);
     expect(model).not.toBeNull();
@@ -110,8 +122,8 @@ describe("week view", () => {
     const html = renderToStaticMarkup(<WeekView model={model} />);
     const dates = [...html.matchAll(/data-datum="(\d{4}-\d{2}-\d{2})"/g)].map((match) => match[1]);
     expect(dates).toEqual(week);
-    expect(html.match(/Ana Anić/g)).toHaveLength(1);
-    expect(html).toContain(`data-dentist="${ana}"`);
+    expect(html).not.toContain("Ana Anić");
+    expect(html).not.toContain(`data-dentist="${ana}"`);
     expect(html).not.toContain("Boris");
     expect(html).not.toContain("Rade");
     expect(html).not.toContain(boris);
@@ -136,10 +148,16 @@ describe("week view", () => {
       }
       expect(html).toContain(`data-status="${status}"`);
     }
-    expect(html).toContain("bg-primary");
-    expect(html).toContain("bg-secondary");
-    expect(html).toContain("bg-muted");
-    expect(html).toContain("text-destructive");
+    expect(html).toContain("PON");
+    expect(html).toContain("NED");
+    expect(html.match(/data-current="true"/g)).toHaveLength(1);
+    expect(html.indexOf('data-current="true"')).toBeLessThan(html.indexOf("UTO"));
+    const saturday = html.slice(html.indexOf('data-datum="2026-06-13"'), html.indexOf('data-datum="2026-06-14"'));
+    expect(saturday).toContain('data-closed="true"');
+    expect(saturday).toContain("Zatvoreno");
+    expect(saturday).not.toContain("calendar-grid__line");
+    expect(html).toContain("Pauza");
+    expect(html).toContain("Kraj Perioda");
 
     const shown = weekFromRows({ ...input, hideCancelled: false });
     expect(shown).not.toBeNull();
@@ -149,8 +167,8 @@ describe("week view", () => {
     const shownHtml = renderToStaticMarkup(<WeekView model={shown} />);
     expect(shownHtml).toContain("Otkaz Sakriven");
     expect(shownHtml).toContain('data-status="cancelled"');
-    expect(shownHtml).toContain("line-through");
-    expect(shownHtml.match(/Ana Anić/g)).toHaveLength(1);
+    expect(shownHtml).not.toContain("Ana Anić");
+    expect(cssSource).toContain("text-decoration: line-through");
 
     expect(loadSource).toContain("startOfBelgradeWeek(isoDate)");
     expect(viewSource).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);

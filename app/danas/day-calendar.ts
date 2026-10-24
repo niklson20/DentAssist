@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   BELGRADE_TIME_ZONE,
   formatBelgrade,
+  isoDayOfWeek,
   localTimeOnDate,
 } from "@/lib/calendar-dates";
 import { APPOINTMENT_STATUSES, appointmentStatusLabel, type AppointmentStatus } from "@/lib/labels";
@@ -44,9 +45,12 @@ const patientSchema = z
 const hoursSchema = z
   .object({
     clinic_member_id: z.string().uuid(),
+    iso_dow: z.number().int().min(1).max(7).nullable().optional(),
     is_closed: z.boolean(),
     opens_at: z.string().nullable(),
     closes_at: z.string().nullable(),
+    break_starts_at: z.string().nullable().optional(),
+    break_ends_at: z.string().nullable().optional(),
   })
   .strip();
 
@@ -65,16 +69,42 @@ export type DayGridVisit = {
   height: string;
 };
 
+export type GridBand = {
+  top: string;
+  height: string;
+};
+
+export type GridLine = {
+  minute: number;
+  top: string;
+  hour: boolean;
+};
+
 export type DayGridColumn = {
   id: string;
   name: string;
+  closed: boolean;
+  segments: GridBand[];
+  lines: GridLine[];
+  breaks: GridBand[];
   visits: DayGridVisit[];
 };
 
 export type DayGridModel = {
+  datum: string;
   span: number;
   hours: DayGridHour[];
   columns: DayGridColumn[];
+};
+
+export type SavedHours = {
+  memberId: string;
+  dow: number | null;
+  closed: boolean;
+  opensMin: number | null;
+  closesMin: number | null;
+  breakStartMin: number | null;
+  breakEndMin: number | null;
 };
 
 type AxisVisit = {
@@ -82,15 +112,73 @@ type AxisVisit = {
   endsAt: string;
 };
 
-type AxisHour = {
-  isClosed: boolean;
-  opensAt: string | null;
-  closesAt: string | null;
+type PlacedVisit = {
+  id: string;
+  dentistId: string;
+  status: AppointmentStatus;
+  startsAt: string;
+  endsAt: string;
+  label: string;
 };
+
+export type LaneLayout = {
+  closed: boolean;
+  segments: GridBand[];
+  lines: GridLine[];
+  breaks: GridBand[];
+  visits: DayGridVisit[];
+};
+
+type OpenWindow = {
+  startMin: number;
+  endMin: number;
+};
+
+export function schedulesFromRows(rows: unknown): SavedHours[] | null {
+  const parsed = parseRows(rows, hoursSchema);
+  if (!parsed) {
+    return null;
+  }
+  return parsed.map((row) => savedHours(row));
+}
+
+export function scheduleOn(rows: SavedHours[], memberId: string, dow: number): SavedHours | null {
+  const own = rows.filter((row) => row.memberId === memberId);
+  return own.find((row) => row.dow === dow) ?? own.find((row) => row.dow === null) ?? null;
+}
+
+export function memberHasSavedHours(rows: SavedHours[], memberId: string): boolean {
+  return rows.some((row) => row.memberId === memberId);
+}
+
+export function closedDows(rows: SavedHours[], memberId: string): Set<number> | null {
+  const own = rows.filter((row) => row.memberId === memberId && row.dow !== null);
+  if (own.length === 0) {
+    return null;
+  }
+  const present = new Set(own.map((row) => row.dow));
+  const closed = new Set<number>();
+  for (const row of own) {
+    if (row.dow !== null && row.closed) {
+      closed.add(row.dow);
+    }
+  }
+  for (let dow = 1; dow <= 7; dow += 1) {
+    if (!present.has(dow)) {
+      closed.add(dow);
+    }
+  }
+  return closed;
+}
+
+export function slotStep(value: unknown): 15 | 30 {
+  return value === 30 ? 30 : 15;
+}
 
 export function dayFromRows(input: {
   datum: string;
   hideCancelled: boolean;
+  slotMinutes?: number;
   members: unknown;
   appointments: unknown;
   patients: unknown;
@@ -129,125 +217,280 @@ export function dayFromRows(input: {
       label: (row.patient_id && patientNames.get(row.patient_id)) || appointmentStatusLabel(row.status),
     }));
 
-  const axis = dayAxisHours({
-    hours: hours
-      .filter((row) => columnIds.has(row.clinic_member_id))
-      .map((row) => ({
-        isClosed: row.is_closed,
-        opensAt: row.opens_at,
-        closesAt: row.closes_at,
-      })),
+  const schedules = hours.map((row) => savedHours(row));
+  const dow = isoDayOfWeek(input.datum);
+  const anySaved = columns.some((column) => memberHasSavedHours(schedules, column.id));
+  const axis = axisBounds({
+    saved: anySaved,
+    schedules: columns.flatMap((column) => {
+      const schedule = scheduleOn(schedules, column.id, dow);
+      return schedule ? [schedule] : [];
+    }),
     visits,
   });
+  if (columns.length === 0) {
+    return { datum: input.datum, span: 0, hours: [], columns: [] };
+  }
+  const span = axis.empty ? 0 : axis.endHour - axis.startHour;
 
-  return buildDayGrid({
+  return {
     datum: input.datum,
-    columns,
-    visits,
-    startHour: axis.startHour,
-    endHour: axis.endHour,
-  });
+    span,
+    hours: axis.empty ? [] : hourMarks(input.datum, axis.startHour, axis.endHour),
+    columns: columns.map((column) => ({
+      id: column.id,
+      name: column.name,
+      ...layoutLane({
+        schedule: scheduleOn(schedules, column.id, dow),
+        anySaved,
+        startHour: axis.startHour,
+        endHour: axis.endHour,
+        slotMinutes: slotStep(input.slotMinutes),
+        visits: visits.filter((visit) => visit.dentistId === column.id),
+      }),
+    })),
+  };
 }
 
-export function dayAxisHours(input: { hours: AxisHour[]; visits: AxisVisit[] }): {
-  startHour: number;
-  endHour: number;
-} {
+export function axisBounds(input: {
+  saved: boolean;
+  schedules: SavedHours[];
+  visits: AxisVisit[];
+}): { startHour: number; endHour: number; empty: boolean } {
   let startMin = Number.POSITIVE_INFINITY;
   let endMin = Number.NEGATIVE_INFINITY;
+  if (!input.saved) {
+    startMin = FALLBACK_START_HOUR * 60;
+    endMin = FALLBACK_END_HOUR * 60;
+  }
 
-  for (const row of input.hours) {
-    if (row.isClosed || !row.opensAt || !row.closesAt) {
+  for (const row of input.schedules) {
+    if (row.closed || row.opensMin === null || row.closesMin === null || row.closesMin <= row.opensMin) {
       continue;
     }
-    const opens = clockToMinutes(row.opensAt);
-    const closes = clockToMinutes(row.closesAt);
-    if (opens === null || closes === null || closes <= opens) {
-      continue;
-    }
-    startMin = Math.min(startMin, opens);
-    endMin = Math.max(endMin, closes);
+    startMin = Math.min(startMin, row.opensMin);
+    endMin = Math.max(endMin, row.closesMin);
   }
 
   for (const visit of input.visits) {
-    const start = belgradeClockMinutes(new Date(visit.startsAt));
-    const duration = (Date.parse(visit.endsAt) - Date.parse(visit.startsAt)) / 60000;
-    if (!Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) {
+    const range = visitRange(visit);
+    if (!range) {
       continue;
     }
-    startMin = Math.min(startMin, start);
-    endMin = Math.max(endMin, start + duration);
+    startMin = Math.min(startMin, range.startMin);
+    endMin = Math.max(endMin, range.endMin);
   }
 
   if (!Number.isFinite(startMin) || !Number.isFinite(endMin) || endMin <= startMin) {
-    return { startHour: FALLBACK_START_HOUR, endHour: FALLBACK_END_HOUR };
+    return { startHour: FALLBACK_START_HOUR, endHour: FALLBACK_START_HOUR, empty: true };
   }
 
   startMin = Math.max(0, startMin);
   endMin = Math.min(24 * 60, Math.max(endMin, startMin + 1));
   const startHour = Math.min(23, Math.floor(startMin / 60));
   const endHour = Math.max(startHour + 1, Math.min(24, Math.ceil(endMin / 60)));
-  return { startHour, endHour };
+  return { startHour, endHour, empty: false };
 }
 
-export function buildDayGrid(input: {
-  datum: string;
-  columns: { id: string; name: string }[];
-  visits: {
-    id: string;
-    dentistId: string;
-    status: AppointmentStatus;
-    startsAt: string;
-    endsAt: string;
-    label: string;
-  }[];
+export function hourMarks(datum: string, startHour: number, endHour: number): DayGridHour[] {
+  const spanMinutes = (endHour - startHour) * 60;
+  const hours: DayGridHour[] = [];
+  for (let hour = startHour; hour < endHour; hour += 1) {
+    hours.push({
+      hour,
+      label: hourLabel(datum, hour),
+      top: percent((hour - startHour) * 60, spanMinutes),
+    });
+  }
+  return hours;
+}
+
+export function layoutLane(input: {
+  schedule: SavedHours | null;
+  anySaved: boolean;
   startHour: number;
   endHour: number;
-}): DayGridModel {
-  const span = input.endHour - input.startHour;
-  if (input.columns.length === 0 || span <= 0) {
-    return { span: 0, hours: [], columns: [] };
-  }
-
-  const spanMinutes = span * 60;
-  const byDentist = new Map<string, DayGridVisit[]>();
-  for (const column of input.columns) {
-    byDentist.set(column.id, []);
-  }
-
+  slotMinutes: number;
+  visits: PlacedVisit[];
+}): LaneLayout {
+  const spanMinutes = (input.endHour - input.startHour) * 60;
+  const axisStart = input.startHour * 60;
+  const axisEnd = input.endHour * 60;
   const ordered = [...input.visits].sort(
     (left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt) || left.id.localeCompare(right.id),
   );
-
+  const visits: DayGridVisit[] = [];
   for (const visit of ordered) {
-    const bucket = byDentist.get(visit.dentistId);
-    if (!bucket) {
-      continue;
-    }
     const placed = placeVisit(visit, input.startHour, spanMinutes);
     if (placed) {
-      bucket.push(placed);
+      visits.push(placed);
     }
   }
 
-  const hours: DayGridHour[] = [];
-  for (let hour = input.startHour; hour < input.endHour; hour += 1) {
-    hours.push({
-      hour,
-      label: hourLabel(input.datum, hour),
-      top: percent((hour - input.startHour) * 60, spanMinutes),
-    });
+  const window = workWindow(input.schedule, input.anySaved);
+  if (!window || spanMinutes <= 0) {
+    return { closed: true, segments: [], lines: [], breaks: [], visits };
+  }
+
+  const clippedOpen = clipWindow(window.opensMin, window.closesMin, axisStart, axisEnd);
+  const openBand = clippedOpen ? band(clippedOpen.startMin, clippedOpen.endMin, axisStart, spanMinutes) : null;
+  const breaks: GridBand[] = [];
+  const lineWindows: OpenWindow[] = [];
+  if (
+    window.breakStartMin !== null &&
+    window.breakEndMin !== null &&
+    window.breakEndMin > window.breakStartMin
+  ) {
+    lineWindows.push(
+      { startMin: window.opensMin, endMin: window.breakStartMin },
+      { startMin: window.breakEndMin, endMin: window.closesMin },
+    );
+    if (clippedOpen) {
+      const clippedBreak = clipWindow(
+        window.breakStartMin,
+        window.breakEndMin,
+        clippedOpen.startMin,
+        clippedOpen.endMin,
+      );
+      const breakBand = clippedBreak
+        ? band(clippedBreak.startMin, clippedBreak.endMin, axisStart, spanMinutes)
+        : null;
+      if (breakBand) {
+        breaks.push(breakBand);
+      }
+    }
+  } else {
+    lineWindows.push({ startMin: window.opensMin, endMin: window.closesMin });
   }
 
   return {
-    span,
-    hours,
-    columns: input.columns.map((column) => ({
-      id: column.id,
-      name: column.name,
-      visits: byDentist.get(column.id) ?? [],
-    })),
+    closed: false,
+    segments: openBand ? [openBand] : [],
+    lines: linesFor(lineWindows, axisStart, axisEnd, spanMinutes, input.slotMinutes),
+    breaks,
+    visits,
   };
+}
+
+function savedHours(row: z.infer<typeof hoursSchema>): SavedHours {
+  const opensMin = row.opens_at ? clockToMinutes(row.opens_at) : null;
+  const closesMin = row.closes_at ? clockToMinutes(row.closes_at) : null;
+  const breakStartMin = row.break_starts_at ? clockToMinutes(row.break_starts_at) : null;
+  const breakEndMin = row.break_ends_at ? clockToMinutes(row.break_ends_at) : null;
+  const open = !row.is_closed && opensMin !== null && closesMin !== null && closesMin > opensMin;
+  const paused =
+    open &&
+    breakStartMin !== null &&
+    breakEndMin !== null &&
+    breakEndMin > breakStartMin &&
+    opensMin !== null &&
+    closesMin !== null &&
+    breakStartMin >= opensMin &&
+    breakEndMin <= closesMin;
+  return {
+    memberId: row.clinic_member_id,
+    dow: row.iso_dow ?? null,
+    closed: !open,
+    opensMin: open ? opensMin : null,
+    closesMin: open ? closesMin : null,
+    breakStartMin: paused ? breakStartMin : null,
+    breakEndMin: paused ? breakEndMin : null,
+  };
+}
+
+function workWindow(
+  schedule: SavedHours | null,
+  anySaved: boolean,
+): {
+  opensMin: number;
+  closesMin: number;
+  breakStartMin: number | null;
+  breakEndMin: number | null;
+} | null {
+  if (schedule) {
+    if (schedule.closed || schedule.opensMin === null || schedule.closesMin === null) {
+      return null;
+    }
+    return {
+      opensMin: schedule.opensMin,
+      closesMin: schedule.closesMin,
+      breakStartMin: schedule.breakStartMin,
+      breakEndMin: schedule.breakEndMin,
+    };
+  }
+  if (!anySaved) {
+    return {
+      opensMin: FALLBACK_START_HOUR * 60,
+      closesMin: FALLBACK_END_HOUR * 60,
+      breakStartMin: null,
+      breakEndMin: null,
+    };
+  }
+  return null;
+}
+
+function visitRange(visit: AxisVisit): OpenWindow | null {
+  const startMin = belgradeClockMinutes(new Date(visit.startsAt));
+  const duration = (Date.parse(visit.endsAt) - Date.parse(visit.startsAt)) / 60000;
+  if (!Number.isFinite(startMin) || !Number.isFinite(duration) || duration <= 0) {
+    return null;
+  }
+  return { startMin, endMin: startMin + duration };
+}
+
+function clipWindow(startMin: number, endMin: number, axisStart: number, axisEnd: number): OpenWindow | null {
+  const start = Math.max(startMin, axisStart);
+  const end = Math.min(endMin, axisEnd);
+  if (end <= start) {
+    return null;
+  }
+  return { startMin: start, endMin: end };
+}
+
+function band(startMin: number, endMin: number, axisStart: number, spanMinutes: number): GridBand | null {
+  let topMin = startMin - axisStart;
+  let heightMin = endMin - startMin;
+  if (topMin < 0) {
+    heightMin += topMin;
+    topMin = 0;
+  }
+  if (topMin >= spanMinutes || heightMin <= 0) {
+    return null;
+  }
+  if (topMin + heightMin > spanMinutes) {
+    heightMin = spanMinutes - topMin;
+  }
+  return {
+    top: percent(topMin, spanMinutes),
+    height: percent(heightMin, spanMinutes),
+  };
+}
+
+function linesFor(
+  windows: OpenWindow[],
+  axisStart: number,
+  axisEnd: number,
+  spanMinutes: number,
+  slotMinutes: number,
+): GridLine[] {
+  const step = slotMinutes === 30 ? 30 : 15;
+  const lines: GridLine[] = [];
+  for (let minute = Math.ceil(axisStart / step) * step; minute < axisEnd; minute += step) {
+    const inside = windows.some((window) => {
+      const start = Math.max(window.startMin, axisStart);
+      const end = Math.min(window.endMin, axisEnd);
+      return minute >= start && minute < end;
+    });
+    if (!inside) {
+      continue;
+    }
+    lines.push({
+      minute,
+      top: percent(minute - axisStart, spanMinutes),
+      hour: minute % 60 === 0,
+    });
+  }
+  return lines;
 }
 
 function placeVisit(

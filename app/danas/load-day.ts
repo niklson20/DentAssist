@@ -4,7 +4,7 @@ import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { isIsoDate, isoDayOfWeek, startOfBelgradeDay, startOfNextBelgradeDay } from "@/lib/calendar-dates";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-import { dayFromRows, type DayGridModel } from "./day-calendar";
+import { dayFromRows, slotStep, type DayGridModel } from "./day-calendar";
 
 const DAY_UNAVAILABLE = "Kalendar trenutno nije dostupan. Pokušajte ponovo.";
 
@@ -21,7 +21,7 @@ export async function loadDayCalendar(
     const supabase = await createSupabaseServerClient();
     const start = startOfBelgradeDay(datum).toISOString();
     const end = startOfNextBelgradeDay(datum).toISOString();
-    const [membersResult, appointmentsResult, hoursResult] = await Promise.all([
+    const [membersResult, appointmentsResult, hoursResult, clinicResult] = await Promise.all([
       supabase
         .from("clinic_members")
         .select("id, first_name, last_name, sees_patients")
@@ -36,15 +36,20 @@ export async function loadDayCalendar(
         .lt("starts_at", end),
       supabase
         .from("working_hours")
-        .select("clinic_member_id, is_closed, opens_at, closes_at")
+        .select("clinic_member_id, iso_dow, is_closed, opens_at, closes_at, break_starts_at, break_ends_at")
         .eq("clinic_id", clinicId)
         .eq("iso_dow", isoDayOfWeek(datum)),
+      supabase.from("clinics").select("slot_minutes").eq("id", clinicId).maybeSingle(),
     ]);
 
-    if (membersResult.error || appointmentsResult.error || hoursResult.error) {
+    if (membersResult.error || appointmentsResult.error || hoursResult.error || clinicResult.error) {
       console.error(
         "load_day_calendar rejected:",
-        membersResult.error?.code ?? appointmentsResult.error?.code ?? hoursResult.error?.code ?? "unknown",
+        membersResult.error?.code ??
+          appointmentsResult.error?.code ??
+          hoursResult.error?.code ??
+          clinicResult.error?.code ??
+          "unknown",
       );
       return fail(DAY_UNAVAILABLE);
     }
@@ -63,6 +68,7 @@ export async function loadDayCalendar(
     const model = dayFromRows({
       datum,
       hideCancelled,
+      slotMinutes: slotStep(clinicResult.data?.slot_minutes),
       members: membersResult.data ?? [],
       appointments: appointmentsResult.data ?? [],
       patients: patientsResult.data ?? [],

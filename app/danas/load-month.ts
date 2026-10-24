@@ -7,6 +7,7 @@ import {
   formatBelgradeDate,
   formatYmd,
   isIsoDate,
+  isoDayOfWeek,
   parseIsoDate,
   startOfBelgradeDay,
   startOfBelgradeWeek,
@@ -16,6 +17,7 @@ import {
 import { APPOINTMENT_STATUSES } from "@/lib/labels";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+import { closedDows, schedulesFromRows } from "./day-calendar";
 import type { MonthModel } from "./month-view";
 import { calendarPath } from "./schema";
 
@@ -72,17 +74,22 @@ export function monthDates(isoDate: string): string[] {
 
 export function monthFromRows(input: {
   query: CalendarQuery;
+  today: string;
   members: unknown;
   appointments: unknown;
+  hours: unknown;
 }): MonthModel | null {
   const members = parseRows(input.members, memberSchema);
   const appointments = parseRows(input.appointments, appointmentSchema);
-  if (!members || !appointments) {
+  const schedules = schedulesFromRows(input.hours);
+  if (!members || !appointments || !schedules) {
     return null;
   }
 
   const dates = monthDates(input.query.datum);
   const monthKey = monthKeyOf(input.query.datum);
+  const dentist = oneDentist(seeingDentists(members), input.query.stomatolog);
+  const closed = dentist ? closedDows(schedules, dentist.id) : null;
   const dentistIds = new Set(countedDentists(members, input.query.stomatolog));
   const counts = new Map<string, number>();
   for (const row of appointments) {
@@ -99,11 +106,15 @@ export function monthFromRows(input: {
   return {
     title: monthTitle(input.query.datum),
     anchor: input.query.datum,
+    today: input.today,
     days: dates.map((datum) => {
       const count = counts.get(datum) ?? 0;
       return {
         datum,
         inMonth: datum.slice(0, 7) === monthKey,
+        closed: closed?.has(isoDayOfWeek(datum)) ?? false,
+        today: datum === input.today,
+        anchor: datum === input.query.datum,
         count,
         countLabel: terminCountLabel(count),
         href: calendarPath(input.query, { prikaz: "dan", datum }),
@@ -127,7 +138,7 @@ export async function loadMonthCalendar(clinicId: string, query: CalendarQuery):
     }
     const start = startOfBelgradeDay(first).toISOString();
     const end = startOfNextBelgradeDay(last).toISOString();
-    const [membersResult, appointmentsResult] = await Promise.all([
+    const [membersResult, appointmentsResult, hoursResult] = await Promise.all([
       supabase
         .from("clinic_members")
         .select("id, first_name, last_name, sees_patients")
@@ -140,20 +151,26 @@ export async function loadMonthCalendar(clinicId: string, query: CalendarQuery):
         .eq("clinic_id", clinicId)
         .gte("starts_at", start)
         .lt("starts_at", end),
+      supabase
+        .from("working_hours")
+        .select("clinic_member_id, iso_dow, is_closed, opens_at, closes_at, break_starts_at, break_ends_at")
+        .eq("clinic_id", clinicId),
     ]);
 
-    if (membersResult.error || appointmentsResult.error) {
+    if (membersResult.error || appointmentsResult.error || hoursResult.error) {
       console.error(
         "load_month_calendar rejected:",
-        membersResult.error?.code ?? appointmentsResult.error?.code ?? "unknown",
+        membersResult.error?.code ?? appointmentsResult.error?.code ?? hoursResult.error?.code ?? "unknown",
       );
       return fail(MONTH_UNAVAILABLE);
     }
 
     const model = monthFromRows({
       query,
+      today: formatBelgradeDate(new Date()),
       members: membersResult.data ?? [],
       appointments: appointmentsResult.data ?? [],
+      hours: hoursResult.data ?? [],
     });
     if (!model) {
       return fail(MONTH_UNAVAILABLE);
@@ -163,6 +180,29 @@ export async function loadMonthCalendar(clinicId: string, query: CalendarQuery):
     console.error("load_month_calendar failed:", error instanceof Error ? error.name : "unknown");
     return fail(MONTH_UNAVAILABLE);
   }
+}
+
+function seeingDentists(members: MemberRow[]): { id: string; name: string }[] {
+  return members
+    .filter((member) => member.sees_patients)
+    .map((member) => ({
+      id: member.id,
+      name: `${member.first_name} ${member.last_name}`,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, "sr") || left.id.localeCompare(right.id));
+}
+
+function oneDentist(
+  dentists: { id: string; name: string }[],
+  dentistId: string | null,
+): { id: string; name: string } | null {
+  if (dentistId) {
+    const chosen = dentists.find((dentist) => dentist.id === dentistId);
+    if (chosen) {
+      return chosen;
+    }
+  }
+  return dentists[0] ?? null;
 }
 
 function countedDentists(members: MemberRow[], dentistId: string | null): string[] {
