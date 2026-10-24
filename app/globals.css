@@ -272,3 +272,249 @@
   text-decoration: line-through;
   opacity: 0.55;
 }
+
+/* odontogram */
+.odontogram {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  color: var(--card-foreground);
+}
+
+.odontogram button {
+  box-sizing: border-box;
+  font: inherit;
+  cursor: pointer;
+}
+
+.odontogram__arches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow-x: auto;
+}
+
+.odontogram__arch {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 34rem;
+}
+
+.odontogram__side {
+  display: flex;
+  flex: 1 1 0;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.odontogram__side[data-side="patient-right"] {
+  justify-content: flex-end;
+}
+
+.odontogram__side[data-side="patient-left"] {
+  justify-content: flex-start;
+}
+
+.odontogram__midline {
+  flex: 0 0 1px;
+  align-self: stretch;
+  background: var(--border);
+}
+
+.odontogram__tooth {
+  width: 1.85rem;
+  height: 2.15rem;
+  padding: 0;
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.odontogram__mark {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.odontogram__tooth[data-selected="true"] {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.odontogram__mark[data-status="healthy"] {
+  background: var(--card);
+  color: var(--card-foreground);
+  border-color: var(--border);
+}
+
+.odontogram__mark[data-status="unerupted"] {
+  background: transparent;
+  color: var(--muted-foreground);
+  border-color: var(--muted-foreground);
+  border-style: dashed;
+}
+
+.odontogram__mark[data-status="caries"] {
+  background: color-mix(in oklch, var(--destructive) 70%, var(--foreground));
+  color: var(--background);
+  border-color: var(--destructive);
+}
+
+.odontogram__mark[data-status="filling"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.odontogram__mark[data-status="crown"] {
+  background: color-mix(in oklch, var(--chart-1) 55%, var(--foreground));
+  color: var(--background);
+  border-color: var(--chart-1);
+}
+
+.odontogram__mark[data-status="root_canal"] {
+  background: color-mix(in oklch, var(--chart-3) 50%, var(--foreground));
+  color: var(--background);
+  border-color: var(--chart-3);
+}
+
+.odontogram__mark[data-status="missing"] {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  border-color: var(--border);
+}
+
+.odontogram__mark[data-status="implant"] {
+  background: color-mix(in oklch, var(--chart-2) 45%, var(--primary));
+  color: var(--primary-foreground);
+  border-color: var(--chart-2);
+}
+
+.odontogram__mark[data-status="to_extract"] {
+  background: color-mix(in oklch, var(--destructive) 45%, var(--chart-4));
+  color: var(--background);
+  border-color: var(--destructive);
+}
+
+.odontogram__mark[data-status="fracture"] {
+  background: color-mix(in oklch, var(--chart-5) 40%, var(--foreground));
+  color: var(--background);
+  border-color: var(--chart-5);
+}
+
+.odontogram__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.odontogram__selected {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.odontogram__statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.odontogram__status {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.odontogram__status[aria-pressed="true"] {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.odontogram__surfaces {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(6.5rem, 8rem));
+  grid-template-areas:
+    ". inner ."
+    "screen-left center screen-right"
+    ". outer .";
+  gap: 0.25rem;
+  justify-content: center;
+}
+
+.odontogram__surface {
+  min-height: 2.5rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.7rem;
+  line-height: 1.2;
+}
+
+.odontogram__surface[data-area="inner"] {
+  grid-area: inner;
+}
+
+.odontogram__surface[data-area="outer"] {
+  grid-area: outer;
+}
+
+.odontogram__surface[data-area="center"] {
+  grid-area: center;
+}
+
+.odontogram__surface[data-area="screen-left"] {
+  grid-area: screen-left;
+}
+
+.odontogram__surface[data-area="screen-right"] {
+  grid-area: screen-right;
+}
+
+.odontogram__surface[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.odontogram__log-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.odontogram__empty {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+.odontogram__changes {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.odontogram__change {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+
+.odontogram__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
