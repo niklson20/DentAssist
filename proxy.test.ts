@@ -33,6 +33,7 @@ describe("route gate", () => {
   it("protects staff paths and their children", () => {
     expect(isProtectedPath("/danas")).toBe(true);
     expect(isProtectedPath("/pacijenti/1")).toBe(true);
+    expect(isProtectedPath("/zahtevi")).toBe(true);
     expect(isProtectedPath("/podesavanja/nalog")).toBe(true);
     expect(isProtectedPath("/statistika")).toBe(true);
     expect(isProtectedPath("/platforma")).toBe(true);

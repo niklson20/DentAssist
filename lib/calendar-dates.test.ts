@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addCalendarDays,
+  addCalendarMonths,
   belgradeLocalToISO,
   fifteenthBirthday,
   formatBelgrade,
@@ -74,6 +75,14 @@ describe("weeks", () => {
 
   it("adds calendar days across month ends", () => {
     expect(addCalendarDays("2026-06-01", 30)).toBe("2026-07-01");
+  });
+
+  it("moves a month and keeps the day when that month has it", () => {
+    expect(addCalendarMonths("2026-10-24", 1)).toBe("2026-11-24");
+    expect(addCalendarMonths("2026-10-24", -1)).toBe("2026-09-24");
+    expect(addCalendarMonths("2026-01-31", 1)).toBe("2026-02-28");
+    expect(addCalendarMonths("2024-01-31", 1)).toBe("2024-02-29");
+    expect(addCalendarMonths("2026-12-15", 1)).toBe("2027-01-15");
   });
 });
 

@@ -13,7 +13,7 @@ import { REMEMBER_COOKIE, sessionCookieOptions } from "@/lib/supabase/cookies";
 
 export { crossHostRoutingEnabled, hostFromAppUrl, hostnameMatches, isLocalHost };
 
-const PROTECTED_PREFIXES = ["/danas", "/pacijenti", "/podesavanja", "/statistika", "/platforma"];
+const PROTECTED_PREFIXES = ["/danas", "/pacijenti", "/zahtevi", "/podesavanja", "/statistika", "/platforma"];
 
 const STAFF_ENTRY_PREFIXES = ["/prijava", "/za-ordinacije", "/poziv"];
 
@@ -214,6 +214,8 @@ export const config = {
     "/danas/:path*",
     "/pacijenti",
     "/pacijenti/:path*",
+    "/zahtevi",
+    "/zahtevi/:path*",
     "/podesavanja",
     "/podesavanja/:path*",
     "/statistika",

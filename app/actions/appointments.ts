@@ -881,6 +881,7 @@ export async function acceptRequest(
     });
 
     revalidatePath("/danas");
+    revalidatePath("/zahtevi");
     revalidatePath("/pacijenti");
     return ok({ id: scheduledId });
   } catch (error) {
@@ -959,6 +960,7 @@ export async function rejectRequest(
     });
 
     revalidatePath("/danas");
+    revalidatePath("/zahtevi");
     return ok({ id: cancelledId });
   } catch (error) {
     console.error("reject_request failed:", error instanceof Error ? error.name : "unknown");

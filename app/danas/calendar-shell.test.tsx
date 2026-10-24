@@ -21,7 +21,10 @@ vi.mock("@phosphor-icons/react", () => {
     CalendarBlank: Icon,
     ChartBar: Icon,
     Gear: Icon,
+    ClipboardText: Icon,
     SignOut: Icon,
+    CaretLeft: Icon,
+    CaretRight: Icon,
     SidebarIcon: Icon,
     Tooth: Icon,
     Users: Icon,
@@ -45,8 +48,9 @@ vi.mock("next/link", () => ({
     children: React.ReactNode;
     className?: string;
     "aria-current"?: "page";
+    "aria-label"?: string;
   }) => (
-    <a href={href} className={className} aria-current={props["aria-current"]}>
+    <a href={href} className={className} aria-current={props["aria-current"]} aria-label={props["aria-label"]}>
       {children}
     </a>
   ),
@@ -55,6 +59,7 @@ vi.mock("next/link", () => ({
 import { AppMenuClient } from "@/components/ui/app-menu-client";
 import { staffMenuItems, usesStaffShellMenu } from "@/components/ui/staff-menu";
 import { CalendarShell } from "./calendar-shell";
+import { DateJump } from "./date-jump";
 import Page from "./page";
 import { calendarPath, hasCanonicalCalendarParams, readCalendarQuery } from "./schema";
 
@@ -142,16 +147,39 @@ describe("today page", () => {
       }),
     );
     expect(html).toContain("Danas");
-    expect(html).toContain("Datum");
-    expect(html).toContain(`value="${today}"`);
+    expect(shellSource).not.toContain('font-semibold">Danas');
+    expect(html).not.toContain('id="datum"');
     expect(html).toContain("Dan");
     expect(html).toContain("Nedelja");
     expect(html).toContain("Mesec");
-    expect(html).toContain("Otkazani termini su sakriveni.");
-    expect(html).toContain("Prikaži otkazane");
+    expect(html).toContain("Novi termin");
+    expect(html).not.toContain("Nova blokada");
+    expect(html).not.toContain("Ponudi");
+    const views = html.indexOf('aria-label="Prikaz kalendara"');
+    const calendar = html.indexOf('aria-label="Kalendar"', views);
+    const todayLink = html.indexOf('aria-label="Idi na današnji dan"');
+    expect(todayLink).toBeGreaterThan(views);
+    expect(html).not.toContain("Zahtevi na čekanju");
+    expect(html).toContain('href="/zahtevi"');
+    expect(pageSource).toContain("mx-auto w-full max-w-5xl");
+    expect(pageSource).not.toContain("PendingColumn");
+    expect(html.indexOf("Novi termin")).toBeGreaterThan(views);
+    expect(html.indexOf("Novi termin")).toBeLessThan(calendar);
+    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=${today}&amp;sakrijOtkazane=da"`);
     expect(html).toContain(`href="/danas?prikaz=nedelja&amp;datum=${today}&amp;sakrijOtkazane=da"`);
-    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=${today}&amp;sakrijOtkazane=ne"`);
+    expect(html).toContain('aria-label="Prethodni dan"');
+    expect(html).toContain('aria-label="Sledeći dan"');
+    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=2026-10-22&amp;sakrijOtkazane=da"`);
+    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=2026-10-24&amp;sakrijOtkazane=da"`);
+    expect(html).not.toContain(">Prethodni dan<");
+    expect(html).not.toContain(">Sledeći dan<");
+    expect(html).not.toContain("Prikaži otkazane");
+    expect(html).not.toContain("Sakrij otkazane");
+    expect(html).not.toContain("Otkazani termini su sakriveni.");
     expect(html).not.toContain("Otkazani termini su vidljivi.");
+    expect(shellSource).toContain("<DateJump");
+    expect(pageSource).not.toContain("<DateJump");
+    expect(readFileSync(path.join(process.cwd(), "app/danas/date-jump.tsx"), "utf8")).not.toContain('id="datum"');
   });
 
   it("keeps the dentist in the address while moving the day and the view", () => {
@@ -167,15 +195,30 @@ describe("today page", () => {
     );
     expect(html).toContain('aria-current="page"');
     expect(html).toContain("Nedelja");
-    expect(html).toContain(`name="stomatolog" value="${dentistId}"`);
+    const jump = renderToStaticMarkup(
+      <DateJump
+        query={{
+          prikaz: "nedelja",
+          datum: "2026-06-08",
+          stomatolog: dentistId,
+          sakrijOtkazane: true,
+        }}
+      />,
+    );
+    expect(jump).not.toContain('id="datum"');
+    expect(jump).toContain(
+      `href="/danas?prikaz=nedelja&amp;datum=${today}&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
+    );
     expect(html).toContain(
       `href="/danas?prikaz=mesec&amp;datum=2026-06-08&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
     );
+    expect(html).toContain('aria-label="Prethodna nedelja"');
+    expect(html).toContain('aria-label="Sledeća nedelja"');
     expect(html).toContain(
-      `href="/danas?prikaz=nedelja&amp;datum=2026-06-07&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
+      `href="/danas?prikaz=nedelja&amp;datum=2026-06-01&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
     );
     expect(html).toContain(
-      `href="/danas?prikaz=nedelja&amp;datum=2026-06-09&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
+      `href="/danas?prikaz=nedelja&amp;datum=2026-06-15&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
     );
   });
 
@@ -189,9 +232,14 @@ describe("today page", () => {
         }),
       }),
     );
-    expect(html).toContain("Otkazani termini su vidljivi.");
-    expect(html).toContain("Sakrij otkazane");
-    expect(html).toContain('href="/danas?prikaz=mesec&amp;datum=2026-06-08&amp;sakrijOtkazane=da"');
+    expect(html).not.toContain('id="datum"');
+    expect(html).toContain('aria-label="Prethodni mesec"');
+    expect(html).toContain('aria-label="Sledeći mesec"');
+    expect(html).toContain('href="/danas?prikaz=mesec&amp;datum=2026-05-08&amp;sakrijOtkazane=ne"');
+    expect(html).toContain('href="/danas?prikaz=mesec&amp;datum=2026-07-08&amp;sakrijOtkazane=ne"');
+    expect(html).toContain(`href="/danas?prikaz=mesec&amp;datum=${today}&amp;sakrijOtkazane=ne"`);
+    expect(html).not.toContain("Prikaži otkazane");
+    expect(html).not.toContain("Sakrij otkazane");
   });
 });
 
@@ -200,13 +248,19 @@ describe("clinic menu", () => {
     expect(usesStaffShellMenu("/danas")).toBe(true);
     expect(usesStaffShellMenu("/danas/")).toBe(true);
     expect(usesStaffShellMenu("/pacijenti")).toBe(true);
+    expect(usesStaffShellMenu("/zahtevi")).toBe(true);
     expect(usesStaffShellMenu("/podesavanja/nalog")).toBe(true);
     expect(usesStaffShellMenu("/statistika")).toBe(true);
     expect(usesStaffShellMenu("/")).toBe(false);
     expect(usesStaffShellMenu("/ordinacije/zubar")).toBe(false);
     expect(usesStaffShellMenu("/platforma")).toBe(false);
     expect(usesStaffShellMenu("/danasni")).toBe(false);
-    expect(staffMenuItems("dentist").map((item) => item.label)).toEqual(["Danas", "Pacijenti", "Podešavanja"]);
+    expect(staffMenuItems("dentist").map((item) => item.label)).toEqual([
+      "Kalendar",
+      "Pacijenti",
+      "Zahtevi",
+      "Podešavanja",
+    ]);
     expect(staffMenuItems("owner").map((item) => item.href)).toContain("/statistika");
   });
 
@@ -219,10 +273,16 @@ describe("clinic menu", () => {
         </AppMenuClient>
       </TooltipProvider>,
     );
-    expect(dentist).toContain("Danas");
+    expect(dentist).toContain("Kalendar");
     expect(dentist).toContain("Pacijenti");
+    expect(dentist).toContain("Zahtevi");
+    expect(dentist.indexOf("Pacijenti")).toBeLessThan(dentist.indexOf('href="/zahtevi"'));
+    expect(dentist.indexOf('href="/zahtevi"')).toBeLessThan(dentist.indexOf("Podešavanja"));
     expect(dentist).toContain("Podešavanja");
     expect(dentist).toContain("Odjava");
+    expect(dentist).toContain("14:00");
+    expect(dentist).toContain("petak, 23. oktobar 2026.");
+    expect(dentist.indexOf("14:00")).toBeLessThan(dentist.indexOf("petak, 23. oktobar 2026."));
     expect(dentist).toContain("Sadržaj");
     expect(dentist).not.toContain("Statistika");
     expect(dentist).not.toContain("Imenik");

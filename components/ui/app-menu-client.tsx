@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useActionState } from "react";
-import { CalendarBlank, ChartBar, Gear, SignOut, Tooth, Users, type Icon } from "@phosphor-icons/react";
+import { useActionState, useEffect, useState } from "react";
+import { CalendarBlank, ChartBar, ClipboardText, Gear, SignOut, Tooth, Users, type Icon } from "@phosphor-icons/react";
 
 import { signOutStaff } from "@/app/danas/actions";
 import type { ActionResult } from "@/lib/action-result";
 import type { StaffRole } from "@/lib/auth";
+import { formatBelgrade } from "@/lib/calendar-dates";
 
 import {
   Sidebar,
@@ -28,6 +29,7 @@ import { staffMenuItems, usesStaffShellMenu } from "./staff-menu";
 const ICONS: Record<string, Icon> = {
   "/danas": CalendarBlank,
   "/pacijenti": Users,
+  "/zahtevi": ClipboardText,
   "/podesavanja": Gear,
   "/statistika": ChartBar,
 };
@@ -100,12 +102,45 @@ export function AppMenuClient({
         </SidebarFooter>
       </Sidebar>
       <div className="flex min-h-svh w-full flex-1 flex-col bg-background">
-        <header className="flex h-12 items-center border-b px-3">
+        <header className="grid h-12 grid-cols-[1fr_auto_1fr] items-center border-b px-3">
           <SidebarTrigger />
+          <BelgradeNow />
         </header>
         <div className="flex-1">{children}</div>
       </div>
     </SidebarProvider>
+  );
+}
+
+function BelgradeNow() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const date = formatBelgrade(now, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const time = formatBelgrade(now, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+
+  return (
+    <>
+      <time
+        dateTime={now.toISOString()}
+        className="text-center text-sm font-medium tabular-nums"
+        suppressHydrationWarning
+      >
+        {time}
+      </time>
+      <p className="min-w-0 truncate text-right text-sm" suppressHydrationWarning>
+        {date}
+      </p>
+    </>
   );
 }
 

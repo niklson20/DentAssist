@@ -5,6 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { belgradeLocalToISO, formatBelgrade } from "@/lib/calendar-dates";
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/danas",
+}));
 vi.mock("@/app/actions/appointments", () => ({
   createAppointment: vi.fn(async () => null),
   updateAppointment: vi.fn(async () => null),
@@ -125,20 +128,17 @@ describe("offer picker", () => {
     expect(openingTag(html, "Pošalji ponudu")).not.toMatch(/\sdisabled(?:=|\s|>)/);
   });
 
-  it("opens from Ponudi and closes without sending", () => {
+  it("stays off the calendar toolbar and does not send", () => {
     const html = renderToStaticMarkup(
       <CalendarShell query={{ prikaz: "dan", datum: DAY, stomatolog: null, sakrijOtkazane: true }} />,
     );
 
-    expect(html).toContain("Ponudi");
-    expect(html).toContain('aria-controls="ponuda"');
-    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Ponudi");
+    expect(html).not.toContain('aria-controls="ponuda"');
     expect(html).not.toContain('id="ponuda"');
     expect(html).not.toContain("Pošalji ponudu");
-    expect(shellSource).toContain("setOfferOpen(true)");
-    expect(shellSource).toContain("{offerOpen ? (");
-    expect(shellSource).toContain("<OfferPicker");
-    expect(shellSource).toContain("onClose={() => setOfferOpen(false)}");
+    expect(shellSource).not.toContain("setOfferOpen");
+    expect(shellSource).not.toContain("<OfferPicker");
     expect(shellSource).not.toContain("sendOffer");
     expect(shellSource.toLowerCase()).not.toContain("supabase");
     expect(shellSource).not.toContain("#");

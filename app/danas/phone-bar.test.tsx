@@ -3,6 +3,10 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/danas",
+}));
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -29,7 +33,6 @@ import { belgradeLocalToISO } from "@/lib/calendar-dates";
 import { CalendarShell } from "./calendar-shell";
 import { dayFromRows } from "./day-calendar";
 import { DayGrid } from "./day-grid";
-import { PendingColumn } from "./pending-column";
 import { PhoneBar } from "./phone-bar";
 import { PhoneDayList, phoneDayColumn } from "./phone-day-list";
 
@@ -91,7 +94,10 @@ describe("phone calendar", () => {
     expect(barSource).toContain('href="/pacijenti"');
     expect(barSource).toContain('href="/podesavanja"');
     expect(pageSource).toContain("PhoneDayList");
-    expect(pageSource).toContain("pendingColumn");
+    expect(pageSource).not.toContain("pendingColumn");
+    expect(pageSource).toContain("mx-auto w-full max-w-5xl");
+    expect(barSource).toContain('href="/zahtevi"');
+    expect(barSource).toContain('href="/danas"');
     expect(shellSource).not.toContain("Zahtevi za termine biće prikazani ovde");
     expect(shellSource).not.toContain("Pacijenti će biti prikazani ovde");
     expect(shellSource).not.toContain("#");
@@ -116,43 +122,20 @@ describe("phone calendar", () => {
           stomatolog: ana,
           sakrijOtkazane: true,
         }}
-        pendingColumn={
-          <PendingColumn
-            role="owner"
-            requests={[
-              {
-                id: "44444444-4444-4444-8444-444444444444",
-                timeLabel: "10:00",
-                name: "Mila Milić",
-                dentistName: "Ana Anić",
-                reason: "Kontrola",
-                deadlineLabel: "24. okt, 10:00",
-                needsChoice: false,
-              },
-            ]}
-          />
-        }
         phoneCalendar={<PhoneDayList model={model} dentistId={ana} />}
         dayCalendar={<DayGrid model={model} />}
       />,
     );
 
-    const requestsPanel = html.slice(
-      html.indexOf('id="phone-requests-panel"'),
-      html.indexOf('id="phone-calendar-panel"'),
-    );
     const calendarPanel = html.slice(
       html.indexOf('id="phone-calendar-panel"'),
       html.indexOf('aria-label="Mobilna navigacija"'),
     );
     const wideCalendar = html.slice(html.lastIndexOf('aria-label="Kalendar"'));
 
-    expect(requestsPanel).toContain("Čeka potvrdu");
-    expect(requestsPanel).toContain("Mila Milić");
-    expect(requestsPanel).toContain("Kontrola");
-    expect(requestsPanel).toContain("Prihvati");
-    expect(requestsPanel).not.toContain("Zahtevi za termine biće prikazani ovde");
-    expect(html).toContain('aria-pressed="true"');
+    expect(html).not.toContain("Zahtevi na čekanju");
+    expect(html).not.toContain('id="phone-requests-panel"');
+    expect(html).toContain('href="/zahtevi"');
     expect(html).toContain("Zahtevi");
 
     expect(calendarPanel).toContain("Ana Anić");
@@ -195,7 +178,7 @@ describe("phone calendar", () => {
   });
 
   it("opens patients, settings, and sign-out from the phone bar", () => {
-    const html = renderToStaticMarkup(<PhoneBar activeTab="requests" onTabChange={() => undefined} />);
+    const html = renderToStaticMarkup(<PhoneBar />);
     expect(html).toContain("Zahtevi");
     expect(html).toContain("Kalendar");
     expect(html).toContain("Pacijenti");

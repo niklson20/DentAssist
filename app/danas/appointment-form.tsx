@@ -49,12 +49,14 @@ export function AppointmentForm({
   today,
   defaultDentistId = null,
   termin = null,
+  embedded = false,
 }: {
   choices: AppointmentFormChoices;
   datum: string;
   today: string;
   defaultDentistId?: string | null;
   termin?: ExistingAppointment | null;
+  embedded?: boolean;
 }) {
   const [result, formAction, pending] = useActionState<ActionResult<{ id: string }> | null, FormData>(
     termin ? updateAppointment : createAppointment,
@@ -104,9 +106,15 @@ export function AppointmentForm({
       id={termin ? "izmena-termina" : "novi-termin"}
       action={formAction}
       noValidate
-      className="flex max-w-lg flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground"
+      className={
+        embedded
+          ? "flex flex-col gap-4"
+          : "flex max-w-lg flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground"
+      }
     >
-      <h2 className="text-lg font-semibold text-foreground">{termin ? "Izmena termina" : "Novi termin"}</h2>
+      {embedded ? null : (
+        <h2 className="text-lg font-semibold text-foreground">{termin ? "Izmena termina" : "Novi termin"}</h2>
+      )}
       {termin ? <input type="hidden" name="termin" value={termin.id} /> : null}
       <Field id="appointment-dentist" label="Stomatolog" message={dentistError}>
         <select

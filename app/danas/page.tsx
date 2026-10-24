@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { loadPendingRequests } from "@/app/actions/appointments";
-import { loadPatientEmailCharts } from "@/app/actions/patients";
-import { PatientEmailTask } from "@/app/pacijenti/[slug]/email-task";
 import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate, type CalendarParams } from "@/lib/calendar-dates";
 
@@ -13,13 +10,12 @@ import { loadDayCalendar } from "./load-day";
 import { loadMonthCalendar } from "./load-month";
 import { loadWeekCalendar } from "./load-week";
 import { MonthView } from "./month-view";
-import { PendingColumn } from "./pending-column";
 import { PhoneDayList } from "./phone-day-list";
 import { calendarPath, hasCanonicalCalendarParams, readCalendarQuery } from "./schema";
 import { WeekView } from "./week-view";
 
 export const metadata: Metadata = {
-  title: "Danas — DentAssist",
+  title: "Kalendar — DentAssist",
 };
 
 type PageProps = {
@@ -43,33 +39,6 @@ export default async function Page({ searchParams }: PageProps) {
     query.prikaz === "mesec"
       ? await loadMonthCalendar(member.clinicId, query)
       : null;
-  const onDate = formatBelgradeDate(new Date());
-  const [pending, emailTasks] = await Promise.all([
-    loadPendingRequests(),
-    loadPatientEmailCharts(onDate),
-  ]);
-  const pendingColumn = (
-    <div className="flex w-full shrink-0 flex-col gap-4 lg:w-80">
-      <PendingColumn
-        role={member.role}
-        requests={pending.ok ? pending.data : []}
-        error={pending.ok ? null : pending.error}
-      />
-      {emailTasks.map((patient) => (
-        <PatientEmailTask
-          key={patient.slug}
-          patientSlug={patient.slug}
-          patientName={`${patient.firstName} ${patient.lastName}`}
-          hasContact={patient.hasContact}
-          dateOfBirth={patient.dateOfBirth}
-          email={patient.email}
-          emailDeclined={patient.emailDeclined}
-          onDate={onDate}
-          showName
-        />
-      ))}
-    </div>
-  );
   const dayBody = day.ok ? (
     <DayGrid model={day.data} />
   ) : (
@@ -82,11 +51,10 @@ export default async function Page({ searchParams }: PageProps) {
   );
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-      <div className="min-w-0 flex-1">
+    <div className="mx-auto w-full max-w-5xl">
+      <div className="min-w-0">
         <CalendarShell
           query={query}
-          pendingColumn={pendingColumn}
           phoneCalendar={phoneCalendar}
           dayCalendar={dayBody}
           weekCalendar={
@@ -109,7 +77,6 @@ export default async function Page({ searchParams }: PageProps) {
           }
         />
       </div>
-      <div className="hidden md:block">{pendingColumn}</div>
     </div>
   );
 }

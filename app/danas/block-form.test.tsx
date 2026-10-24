@@ -3,6 +3,9 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/danas",
+}));
 vi.mock("@/app/actions/appointments", () => ({
   createAppointment: vi.fn(async () => null),
   createBlock: vi.fn(async () => null),
@@ -39,20 +42,16 @@ describe("block form", () => {
     expect(formSource).toContain("bg-card");
   });
 
-  it("opens from a button for the dentist and day on screen", () => {
+  it("stays off the calendar toolbar", () => {
     const html = renderToStaticMarkup(
       <CalendarShell
         query={{ prikaz: "dan", datum: DAY, stomatolog: dentistId, sakrijOtkazane: true }}
       />,
     );
-    expect(html).toContain("Nova blokada");
-    expect(html).toContain('aria-controls="nova-blokada"');
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain('id="nova-blokada"');
-    expect(shellSource).toContain("setBlockOpen(true)");
-    expect(shellSource).toContain("<BlockForm");
-    expect(shellSource).toContain("datum={query.datum}");
-    expect(shellSource).toContain("dentistId={query.stomatolog}");
+    expect(html).not.toContain("Nova blokada");
+    expect(html).not.toContain('aria-controls="nova-blokada"');
+    expect(shellSource).not.toContain("setBlockOpen");
+    expect(shellSource).not.toContain("<BlockForm");
     expect(shellSource.toLowerCase()).not.toContain("supabase");
   });
 });

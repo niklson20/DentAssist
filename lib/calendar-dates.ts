@@ -70,6 +70,15 @@ export function addCalendarDays(isoDate: string, days: number): string {
   });
 }
 
+export function addCalendarMonths(isoDate: string, months: number): string {
+  const { year, month, day } = parseIsoDate(isoDate);
+  const shifted = new Date(Date.UTC(year, month - 1 + months, 1));
+  const targetYear = shifted.getUTCFullYear();
+  const targetMonth = shifted.getUTCMonth() + 1;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
+  return formatYmd({ year: targetYear, month: targetMonth, day: Math.min(day, lastDay) });
+}
+
 export function isoDayOfWeek(isoDate: string): 1 | 2 | 3 | 4 | 5 | 6 | 7 {
   const { year, month, day } = parseIsoDate(isoDate);
   const sundayBased = new Date(Date.UTC(year, month - 1, day)).getUTCDay();

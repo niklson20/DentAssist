@@ -19,6 +19,7 @@ vi.mock("next/link", () => ({
   ),
 }));
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/danas",
   redirect: (href: string) => {
     throw new Error(`REDIRECT:${href}`);
   },
@@ -91,10 +92,13 @@ describe("appointment form", () => {
       />,
     );
     expect(html).toContain("Novi termin");
+    expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain('name="pacijent"');
-    expect(shellSource).toContain("setAppointmentOpen(true)");
+    expect(shellSource).toContain("<Dialog");
+    expect(shellSource).toContain("<DialogContent");
     expect(shellSource).toContain("<AppointmentForm");
+    expect(shellSource).toContain("embedded");
     expect(formSource.toLowerCase()).not.toContain("supabase");
     expect(shellSource.toLowerCase()).not.toContain("supabase");
     expect(formSource).not.toContain("#");

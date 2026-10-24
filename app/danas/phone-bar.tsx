@@ -1,26 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useActionState } from "react";
 
 import { signOutStaff } from "@/app/danas/actions";
 import type { ActionResult } from "@/lib/action-result";
 import { cn } from "@/lib/utils";
 
-export type PhoneTab = "requests" | "calendar";
-
 const tabClass =
-  "flex w-full items-center justify-center rounded-md px-2 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
+  "flex w-full items-center justify-center rounded-md px-2 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground";
 
-export function PhoneBar({
-  activeTab,
-  onTabChange,
-}: {
-  activeTab: PhoneTab;
-  onTabChange: (tab: PhoneTab) => void;
-}) {
+export function PhoneBar() {
+  const pathname = usePathname();
   const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(signOutStaff, null);
   const signOutError = result && !result.ok ? result.error : null;
+  const onRequests = pathname === "/zahtevi" || pathname.startsWith("/zahtevi/");
+  const onCalendar = pathname === "/danas" || pathname.startsWith("/danas/");
 
   return (
     <nav
@@ -28,24 +24,12 @@ export function PhoneBar({
       className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-background/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur"
     >
       <div className="mx-auto grid max-w-lg grid-cols-4 gap-1">
-        <button
-          type="button"
-          aria-pressed={activeTab === "requests"}
-          aria-controls="phone-requests-panel"
-          className={tabClass}
-          onClick={() => onTabChange("requests")}
-        >
+        <Link href="/zahtevi" aria-current={onRequests ? "page" : undefined} className={tabClass}>
           Zahtevi
-        </button>
-        <button
-          type="button"
-          aria-pressed={activeTab === "calendar"}
-          aria-controls="phone-calendar-panel"
-          className={tabClass}
-          onClick={() => onTabChange("calendar")}
-        >
+        </Link>
+        <Link href="/danas" aria-current={onCalendar ? "page" : undefined} className={tabClass}>
           Kalendar
-        </button>
+        </Link>
         <Link href="/pacijenti" className={tabClass}>
           Pacijenti
         </Link>

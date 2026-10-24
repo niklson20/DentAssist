@@ -6,8 +6,9 @@ export type StaffMenuItem = {
 };
 
 const ITEMS: StaffMenuItem[] = [
-  { href: "/danas", label: "Danas" },
+  { href: "/danas", label: "Kalendar" },
   { href: "/pacijenti", label: "Pacijenti" },
+  { href: "/zahtevi", label: "Zahtevi" },
   { href: "/podesavanja", label: "Podešavanja" },
 ];
 
@@ -25,6 +26,7 @@ export function usesStaffShellMenu(pathname: string): boolean {
   return (
     matches(path, "/danas") ||
     matches(path, "/pacijenti") ||
+    matches(path, "/zahtevi") ||
     matches(path, "/podesavanja") ||
     matches(path, "/statistika")
   );

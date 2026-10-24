@@ -36,10 +36,10 @@ export function PendingColumn({
 
   return (
     <aside
-      aria-label="Čeka potvrdu"
-      className="w-full shrink-0 rounded-lg border border-border bg-card p-4 text-card-foreground lg:w-80"
+      aria-label="Zahtevi na čekanju"
+      className="w-full rounded-lg border border-border bg-card p-4 text-card-foreground"
     >
-      <h2 className="text-lg font-semibold text-foreground">Čeka potvrdu</h2>
+      <h2 className="text-lg font-semibold text-foreground">Zahtevi na čekanju</h2>
       {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
       {requests.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">Nema zahteva.</p>

@@ -94,6 +94,7 @@ export async function saveAnamnesis(
     }
 
     revalidatePath("/danas");
+    revalidatePath("/zahtevi");
     revalidatePath("/pacijenti", "layout");
     return ok({ patientId: parsed.data.patientId });
   } catch (error) {
@@ -138,6 +139,7 @@ export async function saveAlert(
     }
 
     revalidatePath("/danas");
+    revalidatePath("/zahtevi");
     revalidatePath("/pacijenti", "layout");
     return ok({ patientId: parsed.data.patientId });
   } catch (error) {
@@ -186,6 +188,7 @@ export async function mergeCharts(
     }
 
     revalidatePath("/danas");
+    revalidatePath("/zahtevi");
     revalidatePath("/pacijenti", "layout");
     return ok({ patientId: parsed.data.patientId });
   } catch (error) {
@@ -242,6 +245,7 @@ export async function dismissPatientEmail(
     if (chartId(saved.data) !== patient.id) return fail(UNAVAILABLE);
 
     revalidatePath("/danas");
+    revalidatePath("/zahtevi");
     revalidatePath("/pacijenti", "layout");
     revalidatePath(`/pacijenti/${parsed.data.patientSlug}`);
     return ok({ patientSlug: parsed.data.patientSlug });

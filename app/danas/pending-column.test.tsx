@@ -11,7 +11,8 @@ vi.mock("@/app/actions/appointments", () => ({
 import { PendingColumn, type PendingRequestView } from "./pending-column";
 
 const columnSource = readFileSync(path.join(process.cwd(), "app/danas/pending-column.tsx"), "utf8");
-const pageSource = readFileSync(path.join(process.cwd(), "app/danas/page.tsx"), "utf8");
+const pageSource = readFileSync(path.join(process.cwd(), "app/zahtevi/page.tsx"), "utf8");
+const calendarSource = readFileSync(path.join(process.cwd(), "app/danas/page.tsx"), "utf8");
 
 const request: PendingRequestView = {
   id: "44444444-4444-4444-8444-444444444444",
@@ -31,7 +32,7 @@ describe("pending column", () => {
   it("shows the request and lets the owner accept or reject", () => {
     const html = column("owner");
 
-    expect(html).toContain("Čeka potvrdu");
+    expect(html).toContain("Zahtevi na čekanju");
     expect(html).toContain("10:00");
     expect(html).toContain("Ana Anić");
     expect(html).toContain("Mina Minić");
@@ -84,7 +85,10 @@ describe("pending column", () => {
   it("keeps the page and the column off Supabase", () => {
     expect(pageSource).toContain("PendingColumn");
     expect(pageSource).toContain("loadPendingRequests");
+    expect(pageSource).toContain("Zahtevi");
     expect(pageSource.toLowerCase()).not.toContain("supabase");
+    expect(calendarSource).not.toContain("PendingColumn");
+    expect(calendarSource).not.toContain("loadPendingRequests");
     expect(columnSource.toLowerCase()).not.toContain("supabase");
     expect(columnSource).toContain("ActionResult");
     expect(columnSource).toContain("border-border");
