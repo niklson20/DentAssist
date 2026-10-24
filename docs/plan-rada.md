@@ -81,7 +81,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.F8 | Spajanje | Claude Sonnet thinking | [x] |
 | 2.F9 | Mejl na dolasku | Claude Sonnet thinking | [x] |
 | 3.1 | Istek zahteva | Claude Sonnet thinking | [x] |
-| 3.2 | Podsetnici | Claude Sonnet thinking | [ ] |
+| 3.2 | Podsetnici | Claude Sonnet thinking | [x] |
 | 3.3 | Statistika | Composer 2.5 Fast | [ ] |
 | 3.4 | Izvoz | Composer 2.5 Fast | [ ] |
 | 3.E1 | Izolacija dve ordinacije | Claude Sonnet thinking | [ ] |

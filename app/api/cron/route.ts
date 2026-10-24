@@ -2,9 +2,11 @@ import { timingSafeEqual } from "node:crypto";
 
 import { createClient } from "@supabase/supabase-js";
 
+import { due_reminders } from "@/lib/mail";
+
 const JOBS = ["expire_booking_requests", "purge_booking_request_pii"] as const;
 
-/** Vercel calls this once an hour. It does not send mail. */
+/** Vercel calls this once an hour. */
 export async function GET(request: Request): Promise<Response> {
   if (!bearerMatches(request, process.env.CRON_SECRET)) {
     return new Response(null, { status: 401 });
@@ -33,6 +35,13 @@ export async function GET(request: Request): Promise<Response> {
       console.error(`${name} failed:`, error instanceof Error ? error.name : "unknown error");
       failed = true;
     }
+  }
+
+  try {
+    if (await due_reminders(supabase)) failed = true;
+  } catch (error) {
+    console.error("due_reminders failed:", error instanceof Error ? error.name : "unknown error");
+    failed = true;
   }
 
   return new Response(null, { status: failed ? 500 : 200 });

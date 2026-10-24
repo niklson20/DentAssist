@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
 import { formatBelgrade } from "@/lib/calendar-dates";
@@ -8,6 +9,8 @@ export const REQUEST_REJECTED_SUBJECT = "Zahtev nije prihvaćen";
 export const APPOINTMENT_CANCELLED_SUBJECT = "Termin je otkazan";
 export const OFFERED_TIMES_SUBJECT = "Ponuđeni termini";
 export const APPOINTMENT_MOVED_SUBJECT = "Termin je pomeren";
+export const REMINDER_TOMORROW_SUBJECT = "Podsetnik za sutra";
+export const REMINDER_SOON_SUBJECT = "Termin je za dva sata";
 
 export type MailMessage = {
   to: string;
@@ -67,6 +70,23 @@ export type OfferedTimesInput = {
   dentistName: string;
   link: string;
   deadlineAt: string;
+  phone: string;
+};
+
+export type ReminderTomorrowInput = {
+  to: string;
+  clinicName: string;
+  startsAt: string;
+  dentistName: string;
+  address: string;
+  phone: string;
+};
+
+export type ReminderSoonInput = {
+  to: string;
+  clinicName: string;
+  startsAt: string;
+  dentistName: string;
   phone: string;
 };
 
@@ -190,6 +210,250 @@ export function offeredTimesMessage(input: OfferedTimesInput): MailMessage {
   };
 }
 
+/** „Podsetnik za sutra“. The clinic is not a recipient; its phone is in the body. */
+export function reminderTomorrowMessage(input: ReminderTomorrowInput): MailMessage {
+  const clinicName = oneLine(input.clinicName);
+  const time = oneLine(formatAppointmentClock(input.startsAt));
+  const dentistName = oneLine(input.dentistName);
+  const address = oneLine(input.address);
+  const phone = oneLine(input.phone);
+  return {
+    to: input.to.trim(),
+    subject: REMINDER_TOMORROW_SUBJECT,
+    fromName: clinicName,
+    text: `Sutra: ${time}, ${dentistName}, ${address}. Telefon: ${phone}.`,
+  };
+}
+
+/** „Termin je za dva sata“. The clinic is not a recipient; its phone is in the body. */
+export function reminderSoonMessage(input: ReminderSoonInput): MailMessage {
+  const clinicName = oneLine(input.clinicName);
+  const time = oneLine(formatAppointmentClock(input.startsAt));
+  const dentistName = oneLine(input.dentistName);
+  const phone = oneLine(input.phone);
+  return {
+    to: input.to.trim(),
+    subject: REMINDER_SOON_SUBJECT,
+    fromName: clinicName,
+    text: `Termin je u ${time}, ${dentistName}. Promena se radi telefonom: ${phone}.`,
+  };
+}
+
+const REMINDER_AHEAD_MS = {
+  "24h": 24 * 60 * 60 * 1000,
+  "2h": 2 * 60 * 60 * 1000,
+} as const;
+
+type ReminderKind = keyof typeof REMINDER_AHEAD_MS;
+
+type DueReminder = {
+  appointmentId: string;
+  clinicId: string;
+  kind: ReminderKind;
+  startsAt: string;
+};
+
+/**
+ * Sends reminders chosen by the database function and records each one.
+ * Returns true when a send or a write failed.
+ */
+export async function due_reminders(supabase: SupabaseClient): Promise<boolean> {
+  let rows: DueReminder[];
+  try {
+    const listed = await supabase.rpc("due_reminders");
+    if (listed.error) {
+      console.error("due_reminders rejected:", listed.error.code ?? "unknown");
+      return true;
+    }
+    rows = dueRows(listed.data);
+  } catch (error) {
+    console.error("due_reminders failed:", error instanceof Error ? error.name : "unknown error");
+    return true;
+  }
+
+  const claimed = new Set<string>();
+  let failed = false;
+  for (const row of rows) {
+    const key = `${row.appointmentId}:${row.kind}`;
+    if (claimed.has(key)) continue;
+    claimed.add(key);
+    try {
+      await deliverReminder(supabase, row);
+    } catch (error) {
+      claimed.delete(key);
+      console.error("due_reminders failed:", error instanceof Error ? error.name : "unknown error");
+      failed = true;
+    }
+  }
+  return failed;
+}
+
+async function deliverReminder(supabase: SupabaseClient, row: DueReminder): Promise<void> {
+  const existing = await readRow(supabase, "appointment_reminders", "appointment_id", [
+    ["appointment_id", row.appointmentId],
+    ["kind", row.kind],
+  ]);
+  if (existing) return;
+
+  const appointment = await readRow(
+    supabase,
+    "appointments",
+    "patient_id, dentist_id, booking_request_id, starts_at, confirmed_at, created_at, status",
+    [
+      ["id", row.appointmentId],
+      ["clinic_id", row.clinicId],
+    ],
+  );
+  if (!appointment || textOf(appointment.status) !== "scheduled") return;
+
+  const startsAt = textOf(appointment.starts_at) || row.startsAt;
+  if (!reminderStillDue(startsAt, textOf(appointment.confirmed_at), textOf(appointment.created_at), row.kind)) {
+    return;
+  }
+
+  const clinic = await readRow(supabase, "clinics", "name, address, phone", [["id", row.clinicId]]);
+  const dentistId = textOf(appointment.dentist_id);
+  const dentist = dentistId
+    ? await readRow(supabase, "clinic_members", "first_name, last_name", [
+        ["id", dentistId],
+        ["clinic_id", row.clinicId],
+      ])
+    : null;
+  const dentistName = `${textOf(dentist?.first_name)} ${textOf(dentist?.last_name)}`.replace(/\s+/g, " ").trim();
+  const clinicName = textOf(clinic?.name);
+  const phone = textOf(clinic?.phone);
+  const address = textOf(clinic?.address);
+  const to = await reminderRecipient(
+    supabase,
+    row.clinicId,
+    textOf(appointment.patient_id),
+    textOf(appointment.booking_request_id),
+  );
+  if (!to || !clinicName || !dentistName || !phone || (row.kind === "24h" && !address)) return;
+
+  const message =
+    row.kind === "24h"
+      ? reminderTomorrowMessage({ to, clinicName, startsAt, dentistName, address, phone })
+      : reminderSoonMessage({ to, clinicName, startsAt, dentistName, phone });
+  await sendMail(message);
+
+  const saved = await supabase.from("appointment_reminders").insert({
+    appointment_id: row.appointmentId,
+    clinic_id: row.clinicId,
+    kind: row.kind,
+  });
+  if (saved.error && saved.error.code !== "23505") {
+    console.error("appointment_reminders rejected:", saved.error.code ?? "unknown");
+    throw new Error("appointment_reminders rejected");
+  }
+}
+
+function reminderStillDue(startsAt: string, confirmedAt: string, createdAt: string, kind: ReminderKind): boolean {
+  const start = new Date(startsAt).getTime();
+  const now = Date.now();
+  if (Number.isNaN(start) || start <= now) return false;
+  const moment = start - REMINDER_AHEAD_MS[kind];
+  if (now < moment) return false;
+  const confirmed = new Date(confirmedAt || createdAt).getTime();
+  if (Number.isNaN(confirmed)) return false;
+  return confirmed <= moment;
+}
+
+async function reminderRecipient(
+  supabase: SupabaseClient,
+  clinicId: string,
+  patientId: string,
+  bookingRequestId: string,
+): Promise<string | null> {
+  if (bookingRequestId) {
+    const request = await readRow(supabase, "booking_requests", "booker_email", [
+      ["id", bookingRequestId],
+      ["clinic_id", clinicId],
+    ]);
+    const booker = recipientAddress(request?.booker_email);
+    if (booker) return booker;
+  }
+  if (!patientId) return null;
+  const patient = await readRow(supabase, "patients", "email", [
+    ["id", patientId],
+    ["clinic_id", clinicId],
+  ]);
+  const patientEmail = recipientAddress(patient?.email);
+  if (patientEmail) return patientEmail;
+  const contact = await readFirst(supabase, "patient_contacts", "email", [
+    ["patient_id", patientId],
+    ["clinic_id", clinicId],
+  ]);
+  return recipientAddress(contact?.email);
+}
+
+async function readRow(
+  supabase: SupabaseClient,
+  table: string,
+  columns: string,
+  filters: Array<[string, string]>,
+): Promise<Record<string, unknown> | null> {
+  let query = supabase.from(table).select(columns);
+  for (const [column, value] of filters) {
+    query = query.eq(column, value);
+  }
+  const result = await query.maybeSingle();
+  if (result.error) {
+    console.error(`${table} rejected:`, result.error.code ?? "unknown");
+    throw new Error(`${table} rejected`);
+  }
+  return recordOf(result.data);
+}
+
+async function readFirst(
+  supabase: SupabaseClient,
+  table: string,
+  columns: string,
+  filters: Array<[string, string]>,
+): Promise<Record<string, unknown> | null> {
+  let query = supabase.from(table).select(columns);
+  for (const [column, value] of filters) {
+    query = query.eq(column, value);
+  }
+  const result = await query.limit(1);
+  if (result.error) {
+    console.error(`${table} rejected:`, result.error.code ?? "unknown");
+    throw new Error(`${table} rejected`);
+  }
+  const rows = Array.isArray(result.data) ? result.data : [];
+  return recordOf(rows[0]);
+}
+
+function dueRows(data: unknown): DueReminder[] {
+  if (!Array.isArray(data)) return [];
+  const rows: DueReminder[] = [];
+  for (const item of data) {
+    const record = recordOf(item);
+    if (!record) continue;
+    const appointmentId = textOf(record.appointment_id);
+    const clinicId = textOf(record.clinic_id);
+    const kind = textOf(record.kind);
+    const startsAt = textOf(record.starts_at);
+    if (!appointmentId || !clinicId || !startsAt || (kind !== "24h" && kind !== "2h")) continue;
+    rows.push({ appointmentId, clinicId, kind, startsAt });
+  }
+  return rows;
+}
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function textOf(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function recipientAddress(value: unknown): string | null {
+  const email = textOf(value).toLowerCase();
+  return email.includes("@") ? email : null;
+}
+
 export function formatAppointmentWhen(startsAt: string): string {
   const start = new Date(startsAt);
   if (Number.isNaN(start.getTime())) {
@@ -201,8 +465,14 @@ export function formatAppointmentWhen(startsAt: string): string {
     month: "long",
     year: "numeric",
   });
-  const time = formatBelgrade(start, { hour: "2-digit", minute: "2-digit" });
+  const time = formatAppointmentClock(startsAt);
   return `${day}, ${time}`;
+}
+
+function formatAppointmentClock(startsAt: string): string {
+  const start = new Date(startsAt);
+  if (Number.isNaN(start.getTime())) return "";
+  return formatBelgrade(start, { hour: "2-digit", minute: "2-digit" });
 }
 
 function mailFrom(fromName: string | undefined, fromAddress: string): string {
