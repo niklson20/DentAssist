@@ -74,7 +74,7 @@ Tabela je red rada, odozgo nadole. Taj red već poštuje zavisnosti, pa agent ne
 | 2.F1 | Lista pacijenata | Composer 2.5 Fast | [x] |
 | 2.F2 | Pregled kartona | Composer 2.5 Fast | [x] |
 | 2.F3 | Istorija | Composer 2.5 Fast | [x] |
-| 2.F4 | Anamneza i upozorenje | Claude Sonnet thinking | [ ] |
+| 2.F4 | Anamneza i upozorenje | Claude Sonnet thinking | [x] |
 | 2.F5 | Zapis posete | Claude Sonnet thinking | [ ] |
 | 2.F6 | Zubna mapa | Claude Sonnet thinking | [ ] |
 | 2.F7 | Dokumenti | Claude Sonnet thinking | [ ] |
