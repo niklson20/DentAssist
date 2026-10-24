@@ -1,10 +1,9 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
   sendMail: vi.fn(),
+  due_reminders: vi.fn(async () => false),
 }));
 
 vi.mock("@supabase/supabase-js", () => ({
@@ -13,6 +12,7 @@ vi.mock("@supabase/supabase-js", () => ({
 
 vi.mock("@/lib/mail", () => ({
   sendMail: mocks.sendMail,
+  due_reminders: mocks.due_reminders,
 }));
 
 import { GET } from "./route";
@@ -38,6 +38,8 @@ describe("GET /api/cron", () => {
     mocks.createClient.mockReset();
     mocks.createClient.mockReturnValue({ rpc });
     mocks.sendMail.mockReset();
+    mocks.due_reminders.mockReset();
+    mocks.due_reminders.mockImplementation(async () => false);
   });
 
   afterEach(() => {
@@ -62,6 +64,7 @@ describe("GET /api/cron", () => {
     expect(mocks.createClient).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
     expect(mocks.sendMail).not.toHaveBeenCalled();
+    expect(mocks.due_reminders).not.toHaveBeenCalled();
   });
 
   it("calls expire and purge and does not send mail", async () => {
@@ -75,9 +78,20 @@ describe("GET /api/cron", () => {
     expect(rpc).toHaveBeenNthCalledWith(2, "purge_booking_request_pii");
     expect(rpc).toHaveBeenCalledTimes(2);
     expect(mocks.sendMail).not.toHaveBeenCalled();
-    expect(readFileSync(path.join(process.cwd(), "app/api/cron/route.ts"), "utf8")).not.toMatch(
-      /sendMail|resend|due_reminders/i,
-    );
+    expect(mocks.due_reminders).toHaveBeenCalledTimes(1);
+    expect(mocks.due_reminders).toHaveBeenCalledWith({ rpc });
+  });
+
+  it("returns 500 when due_reminders returns true", async () => {
+    mocks.due_reminders.mockResolvedValueOnce(true);
+
+    const response = await GET(cronRequest(`Bearer ${SECRET}`));
+
+    expect(response.status).toBe(500);
+    expect(rpc).toHaveBeenNthCalledWith(1, "expire_booking_requests");
+    expect(rpc).toHaveBeenNthCalledWith(2, "purge_booking_request_pii");
+    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(mocks.sendMail).not.toHaveBeenCalled();
   });
 });
 

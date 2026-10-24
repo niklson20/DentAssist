@@ -158,7 +158,6 @@ describe("staff appointment mail", () => {
 
   it("sends those subjects from accept, reject, offer, and staff cancel", () => {
     const appointments = readFileSync(path.join(process.cwd(), "app/actions/appointments.ts"), "utf8");
-    const mail = readFileSync(path.join(process.cwd(), "lib/mail.ts"), "utf8");
     const accept = exportedFunction(appointments, "acceptRequest");
     const reject = exportedFunction(appointments, "rejectRequest");
     const offer = exportedFunction(appointments, "sendOffer");
@@ -188,8 +187,12 @@ describe("staff appointment mail", () => {
     expect(moved).not.toContain("offeredTimesMessage");
 
     for (const forbidden of ["Zahtev je istekao", "Podsetnik za sutra", "Termin je za dva sata"]) {
-      expect(mail).not.toContain(forbidden);
       expect(appointments).not.toContain(forbidden);
+      expect(accept).not.toContain(forbidden);
+      expect(reject).not.toContain(forbidden);
+      expect(offer).not.toContain(forbidden);
+      expect(status).not.toContain(forbidden);
+      expect(moved).not.toContain(forbidden);
     }
   });
 });
