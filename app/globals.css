@@ -155,6 +155,10 @@
   min-width: 100%;
 }
 
+.calendar-grid__body {
+  padding-bottom: 1rem;
+}
+
 .calendar-grid__headrow {
   position: sticky;
   top: 0;
@@ -199,6 +203,16 @@
   line-height: 1;
   color: var(--muted-foreground);
   text-align: right;
+}
+
+.calendar-grid__hour::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -0.5rem;
+  width: 0.5rem;
+  height: 2px;
+  background: color-mix(in oklch, var(--foreground) 55%, var(--border));
 }
 
 .calendar-grid__columns {
@@ -262,6 +276,7 @@
 }
 
 .calendar-grid__open,
+.calendar-grid__hourband,
 .calendar-grid__line,
 .calendar-grid__break,
 .calendar-grid__closed {
@@ -271,22 +286,36 @@
 }
 
 .calendar-grid__open {
+  z-index: 0;
   background: var(--card);
 }
 
-.calendar-grid__line {
+/* Each tinted band is one hour, from its label down to the next hour line. */
+.calendar-grid__hourband {
   z-index: 1;
+  pointer-events: none;
+}
+
+.calendar-grid__hourband[data-alt="true"] {
+  background: color-mix(in oklch, var(--muted) 72%, transparent);
+}
+
+.calendar-grid__line {
+  z-index: 2;
   height: 1px;
-  background: color-mix(in oklch, var(--border) 70%, transparent);
+  background: color-mix(in oklch, var(--border) 45%, transparent);
   pointer-events: none;
 }
 
 .calendar-grid__line[data-hour="true"] {
-  background: var(--border);
+  z-index: 3;
+  height: 2px;
+  margin-top: -1px;
+  background: color-mix(in oklch, var(--foreground) 55%, var(--border));
 }
 
 .calendar-grid__break {
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -337,7 +366,7 @@
 
 .calendar-grid__visit {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   right: 0.25rem;
   left: 0.25rem;
   overflow: hidden;

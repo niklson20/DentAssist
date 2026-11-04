@@ -295,12 +295,16 @@ export function axisBounds(input: {
 export function hourMarks(datum: string, startHour: number, endHour: number): DayGridHour[] {
   const spanMinutes = (endHour - startHour) * 60;
   const hours: DayGridHour[] = [];
-  for (let hour = startHour; hour < endHour; hour += 1) {
+  const lastLabeled = Math.min(endHour, 23);
+  for (let hour = startHour; hour <= lastLabeled; hour += 1) {
     hours.push({
       hour,
       label: hourLabel(datum, hour),
       top: percent((hour - startHour) * 60, spanMinutes),
     });
+  }
+  if (endHour === 24) {
+    hours.push({ hour: 24, label: "", top: "100%" });
   }
   return hours;
 }

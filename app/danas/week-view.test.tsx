@@ -158,6 +158,16 @@ describe("week view", () => {
     expect(saturday).not.toContain("calendar-grid__line");
     expect(html).toContain("Pauza");
     expect(html).toContain("Kraj Perioda");
+    const monday = html.slice(html.indexOf('data-datum="2026-06-08"'), html.indexOf('data-datum="2026-06-09"'));
+    const mondayLines = monday.match(/class="calendar-grid__line"/g) ?? [];
+    const mondayHours = monday.match(/data-hour="true"/g) ?? [];
+    expect(mondayLines.length).toBeGreaterThan(0);
+    expect(mondayHours).toHaveLength(mondayLines.length);
+    expect(monday).toContain("calendar-grid__hourband");
+    expect(monday).toContain('data-alt="true"');
+    expect(cssSource).toContain(".calendar-grid__hourband");
+    expect(cssSource).toContain("height: 2px");
+    expect(viewSource).toContain("slotLines={false}");
 
     const shown = weekFromRows({ ...input, hideCancelled: false });
     expect(shown).not.toBeNull();

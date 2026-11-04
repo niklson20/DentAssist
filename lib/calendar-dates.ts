@@ -232,7 +232,7 @@ function parseView(value: string | undefined): CalendarView {
   if (value === "dan" || value === "nedelja" || value === "mesec") {
     return value;
   }
-  return "dan";
+  return "nedelja";
 }
 
 function parseHideCancelled(value: string | undefined): boolean {

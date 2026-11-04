@@ -87,14 +87,14 @@ describe("calendar query", () => {
   it("hides cancelled visits as soon as the screen opens", () => {
     expect(formatBelgradeDate(new Date())).toBe(today);
     expect(readCalendarQuery({}, today)).toEqual({
-      prikaz: "dan",
+      prikaz: "nedelja",
       datum: today,
       stomatolog: null,
       sakrijOtkazane: true,
     });
     expect(hasCanonicalCalendarParams({}, readCalendarQuery({}, today))).toBe(false);
     expect(calendarPath(readCalendarQuery({}, today))).toBe(
-      `/danas?prikaz=dan&datum=${today}&sakrijOtkazane=da`,
+      `/danas?prikaz=nedelja&datum=${today}&sakrijOtkazane=da`,
     );
   });
 
@@ -132,7 +132,7 @@ describe("today page", () => {
 
   it("opens on a dated address with cancelled visits hidden", async () => {
     await expect(Page({ searchParams: Promise.resolve({}) })).rejects.toThrow(
-      `REDIRECT:/danas?prikaz=dan&datum=${today}&sakrijOtkazane=da`,
+      `REDIRECT:/danas?prikaz=nedelja&datum=${today}&sakrijOtkazane=da`,
     );
   });
 

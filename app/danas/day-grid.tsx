@@ -26,11 +26,13 @@ export function TimeGrid({
   hours,
   lanes,
   laneMin,
+  slotLines = true,
 }: {
   span: number;
   hours: DayGridHour[];
   lanes: TimeLane[];
   laneMin: string;
+  slotLines?: boolean;
 }) {
   const style = {
     "--calendar-span": String(span),
@@ -57,11 +59,13 @@ export function TimeGrid({
       <div className="calendar-grid__body">
         <div className="calendar-grid__hours">
           <ol className="calendar-grid__hours-list" aria-label="Sati">
-            {hours.map((hour) => (
-              <li key={hour.hour} className="calendar-grid__hour" style={{ top: hour.top }}>
-                {hour.label}
-              </li>
-            ))}
+            {hours.map((hour) =>
+              hour.label ? (
+                <li key={hour.hour} className="calendar-grid__hour" style={{ top: hour.top }}>
+                  {hour.label}
+                </li>
+              ) : null,
+            )}
           </ol>
         </div>
         <div className="calendar-grid__columns">
@@ -81,14 +85,23 @@ export function TimeGrid({
                     style={{ top: segment.top, height: segment.height }}
                   />
                 ))}
-                {lane.lines.map((line) => (
-                  <div
-                    key={line.minute}
-                    className="calendar-grid__line"
-                    data-hour={line.hour ? "true" : undefined}
-                    style={{ top: line.top }}
-                  />
-                ))}
+                {lane.closed
+                  ? null
+                  : hourBands(hours).map((band) => (
+                      <div
+                        key={band.hour}
+                        className="calendar-grid__hourband"
+                        data-alt={band.alt ? "true" : undefined}
+                        style={{ top: band.top, height: band.height }}
+                      />
+                    ))}
+                {slotLines && !lane.closed
+                  ? lane.lines
+                      .filter((line) => !line.hour)
+                      .map((line) => (
+                        <div key={line.minute} className="calendar-grid__line" style={{ top: line.top }} />
+                      ))
+                  : null}
                 {lane.breaks.map((pause) => (
                   <div
                     key={`${pause.top}-${pause.height}`}
@@ -98,6 +111,16 @@ export function TimeGrid({
                     Pauza
                   </div>
                 ))}
+                {lane.closed
+                  ? null
+                  : hours.map((hour) => (
+                      <div
+                        key={hour.hour}
+                        className="calendar-grid__line"
+                        data-hour="true"
+                        style={{ top: hour.top }}
+                      />
+                    ))}
                 {lane.closed ? <p className="calendar-grid__closed">Zatvoreno</p> : null}
                 {lane.visits.map((visit) => {
                   const warning = warningNote(visit);
@@ -158,6 +181,29 @@ export function DayGrid({ model }: { model: DayGridModel }) {
       }))}
     />
   );
+}
+
+function hourBands(hours: DayGridHour[]): { hour: number; top: string; height: string; alt: boolean }[] {
+  const bands: { hour: number; top: string; height: string; alt: boolean }[] = [];
+  for (let index = 0; index < hours.length - 1; index += 1) {
+    const hour = hours[index];
+    const next = hours[index + 1];
+    if (!hour || !next) {
+      continue;
+    }
+    const start = Number.parseFloat(hour.top);
+    const end = Number.parseFloat(next.top);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      continue;
+    }
+    bands.push({
+      hour: hour.hour,
+      top: hour.top,
+      height: `${Math.round((end - start) * 1000) / 1000}%`,
+      alt: hour.hour % 2 === 1,
+    });
+  }
+  return bands;
 }
 
 function headingLabels(datum: string): { long: string; short: string; dateLabel: string } {

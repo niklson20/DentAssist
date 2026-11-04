@@ -29,6 +29,7 @@ export function WeekView({ model }: { model: WeekModel }) {
     <TimeGrid
       span={model.span}
       hours={model.hours}
+      slotLines={false}
       laneMin="5.5rem"
       lanes={model.days.map((day) => {
         const labels = weekdayLabels(day.datum);

@@ -141,7 +141,7 @@ describe("needsPatientEmailTask", () => {
 describe("parseCalendarState", () => {
   it("hides cancelled appointments until the query says otherwise", () => {
     expect(parseCalendarState({}, "2026-06-01")).toEqual({
-      prikaz: "dan",
+      prikaz: "nedelja",
       datum: "2026-06-01",
       stomatolog: null,
       sakrijOtkazane: true,
@@ -162,7 +162,7 @@ describe("parseCalendarState", () => {
 
   it("falls back when the view or date is not usable", () => {
     expect(parseCalendarState({ prikaz: "godina", datum: "2026-02-31" }, "2026-06-01")).toEqual({
-      prikaz: "dan",
+      prikaz: "nedelja",
       datum: "2026-06-01",
       stomatolog: null,
       sakrijOtkazane: true,

@@ -110,7 +110,7 @@ describe("day grid", () => {
     expect(html).not.toContain("23. oktobar 2026.");
     expect(html.indexOf("Ana Anić")).toBeLessThan(html.indexOf("Boris Borić"));
     expect(model.hours[0]?.hour).toBe(8);
-    expect(model.hours.at(-1)?.hour).toBe(16);
+    expect(model.hours.at(-1)?.hour).toBe(17);
     const anaColumn = model.columns.find((column) => column.id === ana);
     const borisColumn = model.columns.find((column) => column.id === boris);
     expect(anaColumn?.closed).toBe(false);
