@@ -477,7 +477,7 @@ test("account doors", async ({ page }) => {
       "href",
       `/ordinacije/${firstSlug}/registracija`,
     );
-    await expect(page.getByRole("link", { name: "Nazad u imenik" })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("link", { name: "Nazad u imenik" })).toHaveCount(0);
 
     await page.goto(`${appOrigin}/ordinacije/${firstSlug}/prijava`);
     await page.getByLabel("Mejl").fill(parentEmail);

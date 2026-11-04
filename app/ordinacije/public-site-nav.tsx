@@ -1,11 +1,9 @@
 import Link from "next/link";
 
-import { buttonVariants } from "@/components/ui/button";
-
-export function PublicSiteNav({ showDirectoryLink = true }: { showDirectoryLink?: boolean }) {
+export function PublicSiteNav() {
   return (
     <header className="border-b border-border bg-background">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-3 px-4">
+      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-4">
         <Link href="/" className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden
@@ -17,11 +15,6 @@ export function PublicSiteNav({ showDirectoryLink = true }: { showDirectoryLink?
           </span>
           <span className="truncate text-sm font-medium">DentAssist</span>
         </Link>
-        {showDirectoryLink ? (
-          <Link href="/" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            Nazad u imenik
-          </Link>
-        ) : null}
       </div>
     </header>
   );

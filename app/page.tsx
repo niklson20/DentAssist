@@ -73,7 +73,7 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
 
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
-      <PublicSiteNav showDirectoryLink={false} />
+      <PublicSiteNav />
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8">
         <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
           <header className="min-w-0 space-y-2 lg:flex-1">
