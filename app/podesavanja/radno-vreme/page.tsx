@@ -39,7 +39,6 @@ export default async function Page({ searchParams }: PageProps) {
     <>
       <header>
         <h1 className="text-2xl font-semibold">Radno vreme</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Dani, sati i pauza.</p>
       </header>
 
       {loaded.status === "no_dentists" ? (
