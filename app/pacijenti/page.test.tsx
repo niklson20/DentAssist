@@ -11,6 +11,11 @@ const { requireMember, searchClinicPatients } = vi.hoisted(() => ({
   searchClinicPatients: vi.fn(),
 }));
 
+vi.mock("next/navigation", () => ({
+  redirect: (href: string) => {
+    throw new Error(`REDIRECT:${href}`);
+  },
+}));
 vi.mock("@/lib/auth", () => ({ requireMember }));
 vi.mock("@/lib/queries/patients", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/queries/patients")>();
@@ -59,6 +64,9 @@ describe("patient list search schema", () => {
       patientsSource.indexOf("export async function listClinicPatientNames"),
     );
     expect(searchFn.toLowerCase()).not.toContain("jmbg");
+    expect(searchFn).not.toContain(".limit(");
+    expect(searchFn).toContain(".range(");
+    expect(searchFn).toContain('order("last_name"');
   });
 
   it("keeps chart fields on the new patient form and rejects a future birth date", () => {
@@ -119,31 +127,81 @@ describe("patient list search schema", () => {
 describe("patient list page", () => {
   it("keeps Supabase out of the page shell", async () => {
     expect(pageSource.toLowerCase()).not.toContain("supabase");
-    searchClinicPatients.mockResolvedValue([]);
+    searchClinicPatients.mockResolvedValue({ patients: [], total: 0, page: 1 });
     const html = renderToStaticMarkup(
       await Page({ searchParams: Promise.resolve({ pretraga: "0612" }) }),
     );
     expect(html).toContain("Pacijenti");
     expect(html).toContain("Novi pacijent");
+    expect(html).toContain("Nema poklapanja.");
     expect(html).not.toContain("Sačuvaj karton");
-    expect(searchClinicPatients).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", "0612");
+    expect(searchClinicPatients).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", "0612", 1);
+  });
+
+  it("lists every clinic patient by last name before a search", async () => {
+    searchClinicPatients.mockResolvedValue({
+      patients: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          firstName: "Pera",
+          lastName: "Anić",
+          slug: "pera-anic",
+          phone: null,
+        },
+      ],
+      total: 1,
+      page: 1,
+    });
+    const html = renderToStaticMarkup(await Page({ searchParams: Promise.resolve({}) }));
+    expect(searchClinicPatients).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", "", 1);
+    expect(html).toContain("Svi pacijenti, po prezimenu.");
+    expect(html).toContain("Anić Pera");
+    expect(html).not.toContain("Unesite ime, prezime ili telefon.");
   });
 
   it("renders search hits from the query layer", async () => {
-    searchClinicPatients.mockResolvedValue([
-      {
-        id: "22222222-2222-4222-8222-222222222222",
-        firstName: "Pera",
-        lastName: "Perić",
-        slug: "pera-peric",
-        phone: "061111111",
-      },
-    ]);
+    searchClinicPatients.mockResolvedValue({
+      patients: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          firstName: "Pera",
+          lastName: "Perić",
+          slug: "pera-peric",
+          phone: "061111111",
+        },
+      ],
+      total: 1,
+      page: 1,
+    });
     const html = renderToStaticMarkup(
       await Page({ searchParams: Promise.resolve({ pretraga: "061111" }) }),
     );
-    expect(html).toContain("Pera Perić");
+    expect(html).toContain("Perić Pera");
     expect(html).toContain("061111111");
+    expect(html).toContain("1–1 od 1.");
+  });
+
+  it("pages the full list and every search match", async () => {
+    const pera = {
+      id: "22222222-2222-4222-8222-222222222222",
+      firstName: "Pera",
+      lastName: "Perić",
+      slug: "pera-peric",
+      phone: "061111111",
+    };
+    searchClinicPatients.mockResolvedValue({ patients: [pera], total: 120, page: 2 });
+    const html = renderToStaticMarkup(
+      await Page({ searchParams: Promise.resolve({ pretraga: "peri", stranica: "2" }) }),
+    );
+    expect(searchClinicPatients).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111", "peri", 2);
+    expect(html).toContain("Strana 2 od 6");
+    expect(html).toContain('href="/pacijenti?pretraga=peri"');
+    expect(html).toContain('href="/pacijenti?pretraga=peri&amp;stranica=3"');
+    expect(html).toContain("21–40 od 120.");
+
+    await expect(Page({ searchParams: Promise.resolve({ stranica: "9" }) })).rejects.toThrow(
+      "REDIRECT:/pacijenti?stranica=6",
+    );
   });
 
   it("shows duplicate confirmation when the server asks for it", () => {

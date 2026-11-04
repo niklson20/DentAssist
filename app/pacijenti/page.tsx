@@ -1,13 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { NewPatientDialog, type NewPatientDraft } from "@/app/pacijenti/new-patient-dialog";
 import { patientSearchQuerySchema } from "@/app/pacijenti/search-schema";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
-import { createPatientFromList, searchClinicPatients, type PatientListItem } from "@/lib/queries/patients";
+import { cn } from "@/lib/utils";
+import {
+  createPatientFromList,
+  PATIENT_PAGE_SIZE,
+  searchClinicPatients,
+  type PatientListItem,
+} from "@/lib/queries/patients";
 
 export const metadata: Metadata = {
   title: "Pacijenti — DentAssist",
@@ -16,6 +23,7 @@ export const metadata: Metadata = {
 type PageProps = {
   searchParams: Promise<{
     pretraga?: string;
+    stranica?: string;
     ime?: string;
     prezime?: string;
     telefon?: string;
@@ -34,7 +42,12 @@ export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams;
   const parsed = patientSearchQuerySchema.safeParse({ pretraga: params.pretraga });
   const searchQuery = parsed.success ? (parsed.data.pretraga ?? "") : "";
-  const patients = searchQuery ? await searchClinicPatients(member.clinicId, searchQuery) : [];
+  const requestedPage = readPage(params.stranica);
+  const listed = await searchClinicPatients(member.clinicId, searchQuery, requestedPage);
+  const pageCount = listed.total === 0 ? 0 : Math.ceil(listed.total / PATIENT_PAGE_SIZE);
+  if (pageCount > 0 && requestedPage > pageCount) {
+    redirect(patientListPath(searchQuery, pageCount));
+  }
   const draft: NewPatientDraft = {
     firstName: params.ime?.trim() ?? "",
     lastName: params.prezime?.trim() ?? "",
@@ -51,10 +64,7 @@ export default async function Page({ searchParams }: PageProps) {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 py-8">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Pacijenti</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Pretraga kartona i unos novog pacijenta.</p>
-        </div>
+        <h1 className="text-2xl font-semibold text-foreground">Pacijenti</h1>
         <NewPatientDialog
           action={createPatientFromList}
           clinical={member.role === "owner" || member.role === "dentist"}
@@ -62,7 +72,7 @@ export default async function Page({ searchParams }: PageProps) {
           draft={draft}
         />
       </header>
-      <PatientListPanel searchQuery={searchQuery} patients={patients} />
+      <PatientListPanel searchQuery={searchQuery} patients={listed.patients} page={listed.page} total={listed.total} />
     </main>
   );
 }
@@ -70,14 +80,21 @@ export default async function Page({ searchParams }: PageProps) {
 function PatientListPanel({
   searchQuery,
   patients,
+  page,
+  total,
 }: {
   searchQuery: string;
   patients: PatientListItem[];
+  page: number;
+  total: number;
 }) {
+  const pageCount = total === 0 ? 0 : Math.ceil(total / PATIENT_PAGE_SIZE);
+  const from = total === 0 ? 0 : (page - 1) * PATIENT_PAGE_SIZE + 1;
+  const to = Math.min(page * PATIENT_PAGE_SIZE, total);
+
   return (
     <div className="flex flex-col gap-8">
       <section className="space-y-3">
-        <h2 className="text-sm font-medium text-foreground">Pretraga</h2>
         <form className="flex flex-col gap-3 sm:flex-row" method="get">
           <Input
             name="pretraga"
@@ -89,38 +106,88 @@ function PatientListPanel({
           />
           <Button type="submit">Pretraži</Button>
         </form>
-        {searchQuery ? (
-          <p className="text-sm text-muted-foreground">Rezultati za „{searchQuery}“.</p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Unesite ime, prezime ili telefon.</p>
-        )}
+        <p className="text-sm text-muted-foreground">
+          {searchQuery ? `Rezultati za „${searchQuery}“.` : "Svi pacijenti, po prezimenu."}
+          {total > 0 ? ` ${from}–${to} od ${total}.` : ""}
+        </p>
       </section>
 
-      {searchQuery ? (
-        <section className="rounded-lg border border-border bg-card text-card-foreground">
-          {patients.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Nema poklapanja.</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {patients.map((patient) => (
-                <li key={patient.id}>
-                  <Link
-                    href={`/pacijenti/${patient.slug}`}
-                    className="flex flex-col gap-0.5 px-4 py-3 text-primary hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <span className="font-medium text-foreground">
-                      {patient.firstName} {patient.lastName}
-                    </span>
-                    {patient.phone ? (
-                      <span className="text-sm text-muted-foreground">{patient.phone}</span>
-                    ) : null}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
+      <section className="rounded-lg border border-border bg-card text-card-foreground">
+        {patients.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            {searchQuery ? "Nema poklapanja." : "Nema pacijenata."}
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {patients.map((patient) => (
+              <li key={patient.id}>
+                <Link
+                  href={`/pacijenti/${patient.slug}`}
+                  className="flex flex-col gap-0.5 px-4 py-3 text-primary hover:bg-accent hover:text-accent-foreground"
+                >
+                  <span className="font-medium text-foreground">
+                    {patient.lastName} {patient.firstName}
+                  </span>
+                  {patient.phone ? (
+                    <span className="text-sm text-muted-foreground">{patient.phone}</span>
+                  ) : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        {pageCount > 1 ? (
+          <nav aria-label="Stranice pacijenata" className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
+            {page > 1 ? (
+              <Link
+                href={patientListPath(searchQuery, page - 1)}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+              >
+                Prethodna
+              </Link>
+            ) : (
+              <Button type="button" variant="outline" size="sm" disabled>
+                Prethodna
+              </Button>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Strana {page} od {pageCount}
+            </p>
+            {page < pageCount ? (
+              <Link
+                href={patientListPath(searchQuery, page + 1)}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+              >
+                Sledeća
+              </Link>
+            ) : (
+              <Button type="button" variant="outline" size="sm" disabled>
+                Sledeća
+              </Button>
+            )}
+          </nav>
+        ) : null}
+      </section>
     </div>
   );
+}
+
+function patientListPath(query: string, page: number): string {
+  const params = new URLSearchParams();
+  if (query) {
+    params.set("pretraga", query);
+  }
+  if (page > 1) {
+    params.set("stranica", String(page));
+  }
+  const search = params.toString();
+  return search ? `/pacijenti?${search}` : "/pacijenti";
+}
+
+function readPage(value: string | undefined): number {
+  if (!value || !/^[1-9]\d*$/.test(value)) {
+    return 1;
+  }
+  const page = Number(value);
+  return Number.isSafeInteger(page) ? page : 1;
 }

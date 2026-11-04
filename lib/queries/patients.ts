@@ -19,12 +19,20 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 const EMAIL_TAKEN = "U ordinaciji već postoji pacijent sa tim mejlom.";
 const CHECK_ENTRY = "Proverite unos.";
 
+export const PATIENT_PAGE_SIZE = 20;
+
 export type PatientListItem = {
   id: string;
   firstName: string;
   lastName: string;
   slug: string;
   phone: string | null;
+};
+
+export type PatientListPage = {
+  patients: PatientListItem[];
+  total: number;
+  page: number;
 };
 
 type PatientRow = {
@@ -35,32 +43,47 @@ type PatientRow = {
   phone: string | null;
 };
 
-export async function searchClinicPatients(clinicId: string, query: string): Promise<PatientListItem[]> {
+export async function searchClinicPatients(
+  clinicId: string,
+  query: string,
+  page = 1,
+): Promise<PatientListPage> {
   const parsed = patientSearchQuerySchema.safeParse({ pretraga: query });
   const term = parsed.success ? (parsed.data.pretraga ?? "").trim() : "";
-  if (!term) {
-    return [];
-  }
+  const requested = Number.isInteger(page) && page > 0 ? page : 1;
+  const from = (requested - 1) * PATIENT_PAGE_SIZE;
+  const to = from + PATIENT_PAGE_SIZE - 1;
 
   const supabase = await createSupabaseServerClient();
-  const pattern = `%${escapeIlike(term)}%`;
-  const { data, error } = await supabase
+  let request = supabase
     .from("patients")
-    .select("id, first_name, last_name, slug, phone")
+    .select("id, first_name, last_name, slug, phone", { count: "exact" })
     .eq("clinic_id", clinicId)
     .is("merged_into_id", null)
-    .or(`first_name.ilike.${pattern},last_name.ilike.${pattern},phone.ilike.${pattern}`)
-    .order("last_name")
-    .order("first_name")
-    .limit(50);
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (term) {
+    const pattern = `%${escapeIlike(term)}%`;
+    request = request.or(
+      `first_name.ilike.${pattern},last_name.ilike.${pattern},phone.ilike.${pattern}`,
+    );
+  }
+
+  const { data, error, count } = await request.range(from, to);
 
   if (error) {
     console.error("search_clinic_patients rejected:", error.code);
-    return [];
+    return { patients: [], total: 0, page: requested };
   }
 
   const rows = (data ?? []).map(mapPatientRow);
-  return rows.filter((row) => patientMatchesSearch(row, term));
+  return {
+    patients: term ? rows.filter((row) => patientMatchesSearch(row, term)) : rows,
+    total: count ?? rows.length,
+    page: requested,
+  };
 }
 
 export async function listClinicPatientNames(
