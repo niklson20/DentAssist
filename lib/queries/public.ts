@@ -1,3 +1,4 @@
+import { directoryNearMeMaxDistanceKm } from "@/app/directory-href";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ClinicDirectoryHit = {
@@ -43,6 +44,13 @@ export async function searchDirectoryClinics(input: {
   lng?: number;
 }): Promise<ClinicDirectoryHit[]> {
   const supabase = await createSupabaseServerClient();
+  const maxDistanceKm = directoryNearMeMaxDistanceKm({
+    lat: input.lat,
+    lng: input.lng,
+    city: input.city,
+    name: input.name,
+  });
+
   const { data, error } = await supabase.rpc("search_clinics", {
     city: input.city?.trim() || null,
     name: input.name?.trim() || null,
@@ -55,7 +63,13 @@ export async function searchDirectoryClinics(input: {
     return [];
   }
 
-  return ((data as ClinicDirectoryRow[] | null) ?? []).map(mapDirectoryHit);
+  let hits = ((data as ClinicDirectoryRow[] | null) ?? []).map(mapDirectoryHit);
+  if (maxDistanceKm !== null) {
+    hits = hits.filter(
+      (hit) => hit.distanceKm !== null && hit.distanceKm <= maxDistanceKm,
+    );
+  }
+  return hits;
 }
 
 function mapDirectoryHit(row: ClinicDirectoryRow): ClinicDirectoryHit {

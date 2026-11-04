@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { directoryHref, type DirectoryViewMode } from "@/app/directory-href";
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,61 @@ export function DirectoryMapPanel({ clinics, className }: DirectoryMapProps) {
       ) : (
         <div className="h-full min-h-80 rounded-lg border border-border bg-muted/30" aria-hidden />
       )}
+    </div>
+  );
+}
+
+type DirectoryCoords = { lat: number; lng: number };
+
+type DirectoryCityFilterProps = {
+  cities: string[];
+  selectedCity: string;
+  coords?: DirectoryCoords | null;
+  pretraga?: string;
+};
+
+export function DirectoryCityFilter({
+  cities,
+  selectedCity,
+  coords,
+  pretraga,
+}: DirectoryCityFilterProps) {
+  const router = useRouter();
+
+  const filterActive = Boolean(selectedCity || pretraga || coords);
+
+  function onCityChange(event: ChangeEvent<HTMLSelectElement>) {
+    const city = event.target.value;
+    router.push(
+      directoryHref({
+        grad: city || undefined,
+        coords: city ? coords : null,
+      }),
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <select
+        aria-label="Grad"
+        value={selectedCity}
+        onChange={onCityChange}
+        disabled={cities.length === 0}
+        className="h-9 w-44 rounded-md border border-input bg-transparent px-2.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+      >
+        <option value="">Svi gradovi</option>
+        {cities.map((city) => (
+          <option key={city} value={city}>
+            {city}
+          </option>
+        ))}
+      </select>
+      <NearMeButton grad={selectedCity || undefined} pretraga={pretraga} />
+      {filterActive ? (
+        <Button type="button" variant="ghost" onClick={() => router.push("/")}>
+          Poništi filter
+        </Button>
+      ) : null}
     </div>
   );
 }
