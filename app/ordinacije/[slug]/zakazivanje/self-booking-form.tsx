@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 
 import { submitChildBooking, submitSelfBooking } from "@/app/actions/booking";
 import { Button } from "@/components/ui/button";
@@ -101,8 +101,7 @@ export function SelfBookingScreen({
 
   if (who === "child") {
     return (
-      <div className="flex flex-col gap-4">
-        {choice}
+      <BookingWithChoice choice={choice}>
         <ChildBookingForm
           slug={slug}
           clinicName={clinicName}
@@ -125,13 +124,12 @@ export function SelfBookingScreen({
           }}
           notice={ageSwitch ? CHILD_ROUTE_TEXT : null}
         />
-      </div>
+      </BookingWithChoice>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {choice}
+    <BookingWithChoice choice={choice}>
       {selfLinked ? (
         <LinkedRequest
           slug={slug}
@@ -154,6 +152,15 @@ export function SelfBookingScreen({
           onDateOfBirth={onSelfDob}
         />
       )}
+    </BookingWithChoice>
+  );
+}
+
+function BookingWithChoice({ choice, children }: { choice: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-4 min-[1000px]:w-max min-[1000px]:shrink-0 min-[1000px]:flex-row min-[1000px]:items-start min-[1000px]:self-start">
+      {choice ? <div className="min-[1000px]:order-2 min-[1000px]:shrink-0">{choice}</div> : null}
+      <div className="w-full min-w-0 min-[1000px]:order-1 min-[1000px]:w-[480px] min-[1000px]:shrink-0">{children}</div>
     </div>
   );
 }
@@ -194,6 +201,9 @@ export function ChildBookingForm({
   const [childLastName, setChildLastName] = useState(initial?.lastName ?? "");
   const [identityDob, setIdentityDob] = useState(initial?.dateOfBirth ?? childDateOfBirth);
   const [relationship, setRelationship] = useState(initial?.relationship ?? "");
+  const [contactFirstName, setContactFirstName] = useState(profile.firstName);
+  const [contactLastName, setContactLastName] = useState(profile.lastName);
+  const [contactPhone, setContactPhone] = useState(profile.phone ?? "");
   const selected = bookable.find((child) => child.id === dependentId) ?? null;
   const [result, formAction, pending] = useActionState<BookingResult, FormData>(submitChildBooking, null);
   const followUp = bookingFollowUp(result, slug);
@@ -219,7 +229,12 @@ export function ChildBookingForm({
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground" noValidate>
+    <form
+      action={formAction}
+      className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground"
+      noValidate
+      onReset={(event) => event.preventDefault()}
+    >
       <h2 className="text-lg font-semibold">Zakazivanje za dete</h2>
       <SlotSummary dentistLabel={dentistLabel} slotLabel={slotLabel} />
       {notice ? <p className="text-sm">{notice}</p> : null}
@@ -292,7 +307,8 @@ export function ChildBookingForm({
             label="Ime"
             name="contactFirstName"
             autoComplete="given-name"
-            defaultValue={profile.firstName}
+            value={contactFirstName}
+            onChange={setContactFirstName}
             error={error?.fieldErrors?.contactFirstName?.[0]}
           />
           <Field
@@ -300,7 +316,8 @@ export function ChildBookingForm({
             label="Prezime"
             name="contactLastName"
             autoComplete="family-name"
-            defaultValue={profile.lastName}
+            value={contactLastName}
+            onChange={setContactLastName}
             error={error?.fieldErrors?.contactLastName?.[0]}
           />
           <Field
@@ -309,7 +326,8 @@ export function ChildBookingForm({
             name="contactPhone"
             type="tel"
             autoComplete="tel"
-            defaultValue={profile.phone ?? ""}
+            value={contactPhone}
+            onChange={setContactPhone}
             error={error?.fieldErrors?.contactPhone?.[0]}
           />
           <Field
@@ -360,7 +378,7 @@ function WhoChoice({ who, onSelf, onChild }: { who: "self" | "child"; onSelf: ()
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="text-sm font-medium">Za koga je termin</legend>
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex items-center gap-2 text-sm whitespace-nowrap">
         <input
           type="radio"
           name="bookingFor"
@@ -371,7 +389,7 @@ function WhoChoice({ who, onSelf, onChild }: { who: "self" | "child"; onSelf: ()
         />
         Za mene
       </label>
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex items-center gap-2 text-sm whitespace-nowrap">
         <input
           type="radio"
           name="bookingFor"
@@ -445,6 +463,9 @@ function IdentityForm({
   dateOfBirth: string;
   onDateOfBirth: (value: string) => void;
 }) {
+  const [firstName, setFirstName] = useState(profile.firstName);
+  const [lastName, setLastName] = useState(profile.lastName);
+  const [phone, setPhone] = useState(profile.phone ?? "");
   const [result, formAction, pending] = useActionState<BookingResult, FormData>(submitSelfBooking, null);
   const followUp = bookingFollowUp(result, slug);
   if (followUp) {
@@ -465,7 +486,8 @@ function IdentityForm({
         label="Ime"
         name="firstName"
         autoComplete="given-name"
-        defaultValue={profile.firstName}
+        value={firstName}
+        onChange={setFirstName}
         error={error?.fieldErrors?.firstName?.[0]}
       />
       <Field
@@ -473,7 +495,8 @@ function IdentityForm({
         label="Prezime"
         name="lastName"
         autoComplete="family-name"
-        defaultValue={profile.lastName}
+        value={lastName}
+        onChange={setLastName}
         error={error?.fieldErrors?.lastName?.[0]}
       />
       <DateField
@@ -489,7 +512,8 @@ function IdentityForm({
         name="phone"
         type="tel"
         autoComplete="tel"
-        defaultValue={profile.phone ?? ""}
+        value={phone}
+        onChange={setPhone}
         error={error?.fieldErrors?.phone?.[0]}
       />
       <Field
@@ -692,7 +716,7 @@ function CheckField({ id, name, label, error }: { id: string; name: string; labe
           type="checkbox"
           name={name}
           value="yes"
-          className="mt-0.5 size-4 rounded border-input accent-primary"
+          className="mt-0.5 size-4 shrink-0 rounded border-input accent-primary"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${id}-error` : undefined}
         />
