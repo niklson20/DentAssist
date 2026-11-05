@@ -88,7 +88,7 @@ describe("pending column", () => {
 
   it("keeps the page and the column off Supabase", () => {
     expect(pageSource).toContain("PendingColumn");
-    expect(pageSource).toContain("loadPendingRequests");
+    expect(pageSource).toContain("loadRequestSection");
     expect(pageSource).toContain("Zahtevi");
     expect(pageSource.toLowerCase()).not.toContain("supabase");
     expect(calendarSource).not.toContain("PendingColumn");

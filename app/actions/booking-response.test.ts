@@ -12,7 +12,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: mocks.createClient,
 }));
 
-import { acceptRequest, loadPendingRequests, rejectRequest } from "./appointments";
+import { acceptRequest, loadPendingRequests, loadRequestSection, rejectRequest } from "./appointments";
 
 const clinicId = "11111111-1111-4111-8111-111111111111";
 const actorId = "22222222-2222-4222-8222-222222222222";
@@ -32,6 +32,37 @@ const foreignName = "Milan";
 const foreignLastName = "Marković";
 
 type Row = Record<string, unknown>;
+
+function orMatches(row: Row, expression: string): boolean {
+  const parts: string[] = [];
+  let current = "";
+  let quoted = false;
+  for (const char of expression) {
+    if (char === '"') {
+      quoted = !quoted;
+      current += char;
+      continue;
+    }
+    if (char === "," && !quoted) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+    current += char;
+  }
+  if (current) parts.push(current);
+  return parts.some((part) => {
+    const match = /^(\w+)\.(eq|gt|gte|lt|lte)\.(?:"([^"]*)"|(.+))$/.exec(part.trim());
+    if (!match) return false;
+    const actual = row[match[1] ?? ""] == null ? "" : String(row[match[1] ?? ""]);
+    const expected = match[3] ?? match[4] ?? "";
+    if (match[2] === "eq") return actual === expected;
+    if (match[2] === "gt") return actual > expected;
+    if (match[2] === "gte") return actual >= expected;
+    if (match[2] === "lt") return actual < expected;
+    return actual <= expected;
+  });
+}
 
 function form(values: Record<string, string>): FormData {
   const data = new FormData();
@@ -59,7 +90,10 @@ function requestRow(overrides: Row = {}): Row {
     patient_id: null,
     appointment_id: appointmentId,
     status: "pending",
-    expires_at: "2026-10-30T08:00:00.000Z",
+    expires_at: "2026-12-30T08:00:00.000Z",
+    created_at: "2026-10-23T08:00:00.000Z",
+    patient_note: null,
+    pii_purged_at: null,
     ...overrides,
   };
 }
@@ -86,19 +120,41 @@ function createMemory(seed: Record<string, Row[]> = {}) {
   function from(table: string) {
     const rows = (tables[table] ??= []);
     const filters: Array<(row: Row) => boolean> = [];
+    const sorts: Array<{ column: string; ascending: boolean }> = [];
     let patch: Row | null = null;
     let inserted: Row | null = null;
+    let rangeFrom: number | null = null;
+    let rangeTo: number | null = null;
+    let headOnly = false;
     const matched = () => rows.filter((row) => filters.every((filter) => filter(row)));
     const builder = {
-      select() {
+      select(_columns?: unknown, options?: { count?: string; head?: boolean }) {
+        headOnly = options?.head === true;
         return builder;
       },
       eq(column: string, value: unknown) {
         filters.push((row) => row[column] === value);
         return builder;
       },
+      gt(column: string, value: unknown) {
+        filters.push((row) => String(row[column] ?? "") > String(value));
+        return builder;
+      },
       in(column: string, values: unknown[]) {
         filters.push((row) => values.includes(row[column]));
+        return builder;
+      },
+      or(expression: string) {
+        filters.push((row) => orMatches(row, expression));
+        return builder;
+      },
+      order(column: string, options?: { ascending?: boolean }) {
+        sorts.push({ column, ascending: options?.ascending !== false });
+        return builder;
+      },
+      range(from: number, to: number) {
+        rangeFrom = from;
+        rangeTo = to;
         return builder;
       },
       insert(row: Row) {
@@ -130,14 +186,34 @@ function createMemory(seed: Record<string, Row[]> = {}) {
         });
       },
       then(
-        onFulfilled: (value: { data: Row[]; error: null }) => unknown,
+        onFulfilled: (value: { data: Row[] | null; error: null; count: number }) => unknown,
         onRejected?: (reason: unknown) => unknown,
       ) {
-        const found = matched();
+        const foundAll = matched();
         if (patch) {
-          for (const row of found) Object.assign(row, patch);
+          for (const row of foundAll) Object.assign(row, patch);
         }
-        return Promise.resolve({ data: found.map((row) => ({ ...row })), error: null }).then(onFulfilled, onRejected);
+        let found = foundAll.slice();
+        if (sorts.length > 0) {
+          found.sort((left, right) => {
+            for (const sort of sorts) {
+              const av = left[sort.column];
+              const bv = right[sort.column];
+              if (av === bv) continue;
+              const as = av == null ? "" : String(av);
+              const bs = bv == null ? "" : String(bv);
+              if (as < bs) return sort.ascending ? -1 : 1;
+              if (as > bs) return sort.ascending ? 1 : -1;
+            }
+            return 0;
+          });
+        }
+        const count = found.length;
+        if (rangeFrom != null && rangeTo != null) {
+          found = found.slice(rangeFrom, rangeTo + 1);
+        }
+        const data = headOnly ? null : found.map((row) => ({ ...row }));
+        return Promise.resolve({ data, error: null, count }).then(onFulfilled, onRejected);
       },
     };
     return builder;
@@ -482,5 +558,130 @@ describe("loadPendingRequests", () => {
     if (!dentist.ok) return;
     expect(dentist.data.map((item) => item.name)).toEqual(["Ana Anić"]);
     expect(JSON.stringify(dentist)).not.toContain(foreignName);
+  });
+});
+
+const acceptedId = "c0c0c0c0-c0c0-4c0c-8c0c-c0c0c0c0c0c0";
+const rejectedId = "d1d1d1d1-d1d1-4d1d-8d1d-d1d1d1d1d1d1";
+const expiredId = "e2e2e2e2-e2e2-4e2e-8e2e-e2e2e2e2e2e2";
+
+describe("loadRequestSection", () => {
+  it("counts every status for the owner and only the dentist's own rows", async () => {
+    const memory = staffMemory(
+      [],
+      [
+        requestRow({
+          id: otherRequestId,
+          dentist_id: otherDentistId,
+          appointment_id: otherAppointmentId,
+          account_id: otherAccountId,
+          status: "declined_by_patient",
+          created_at: "2026-10-22T08:00:00.000Z",
+        }),
+        requestRow({
+          id: rejectedId,
+          status: "rejected",
+          patient_note: "Pun termin",
+          created_at: "2026-10-21T08:00:00.000Z",
+        }),
+        requestRow({
+          id: acceptedId,
+          status: "accepted",
+          created_at: "2026-10-20T08:00:00.000Z",
+        }),
+        requestRow({
+          id: expiredId,
+          status: "expired",
+          patient_first_name: null,
+          patient_last_name: null,
+          booker_email: null,
+          patient_date_of_birth: null,
+          pii_purged_at: "2026-10-01T00:00:00.000Z",
+        }),
+      ],
+    );
+    mocks.createClient.mockResolvedValue(memory);
+    mocks.requireMember.mockResolvedValue({ userId: ownerUserId, clinicId, role: "owner" });
+
+    const pending = await loadRequestSection("pending", 1);
+    expect(pending.ok).toBe(true);
+    if (!pending.ok) return;
+    expect(pending.data.counts).toEqual({ pending: 1, accepted: 1, rejected: 2, expired: 1 });
+    expect(pending.data.requests.map((item) => item.name)).toEqual(["Ana Anić"]);
+
+    const rejected = await loadRequestSection("rejected", 1);
+    expect(rejected.ok).toBe(true);
+    if (!rejected.ok) return;
+    expect(rejected.data.requests.map((item) => item.rejectedBy)).toEqual(["patient", "staff"]);
+    expect(rejected.data.requests[1]?.note).toBe("Pun termin");
+    expect(rejected.data.requests.every((item) => item.needsChoice === false)).toBe(true);
+
+    const expired = await loadRequestSection("expired", 1);
+    expect(expired.ok).toBe(true);
+    if (!expired.ok) return;
+    expect(expired.data.requests.map((item) => item.name)).toEqual(["Identitet uklonjen"]);
+
+    mocks.requireMember.mockResolvedValue({ userId: dentistUserId, clinicId, role: "dentist" });
+    const dentist = await loadRequestSection("rejected", 1);
+    expect(dentist.ok).toBe(true);
+    if (!dentist.ok) return;
+    expect(dentist.data.counts).toEqual({ pending: 1, accepted: 1, rejected: 1, expired: 1 });
+    expect(dentist.data.requests.map((item) => item.rejectedBy)).toEqual(["staff"]);
+  });
+
+  it("returns at most 20 pending rows, soonest deadline first", async () => {
+    const extra = Array.from({ length: 20 }, (_, index) =>
+      requestRow({
+        id: `aa000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        expires_at: `2027-01-${String(index + 1).padStart(2, "0")}T08:00:00.000Z`,
+        patient_first_name: `Ana${index}`,
+      }),
+    );
+    const memory = staffMemory([], extra);
+    mocks.createClient.mockResolvedValue(memory);
+    mocks.requireMember.mockResolvedValue({ userId: ownerUserId, clinicId, role: "owner" });
+
+    const first = await loadRequestSection("pending", 1);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.data.total).toBe(21);
+    expect(first.data.requests).toHaveLength(20);
+    expect(first.data.requests[0]?.name).toBe("Ana Anić");
+    expect(first.data.requests[1]?.name).toBe("Ana0 Anić");
+
+    const second = await loadRequestSection("pending", 2);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.data.requests).toHaveLength(1);
+    expect(second.data.requests[0]?.name).toBe("Ana19 Anić");
+  });
+
+  it("moves a pending request whose deadline has passed into expired", async () => {
+    const memory = staffMemory(
+      [],
+      [
+        requestRow({
+          id: "f3f3f3f3-f3f3-4f3f-8f3f-f3f3f3f3f3f3",
+          status: "pending",
+          expires_at: "2026-10-30T08:00:00.000Z",
+          created_at: "2026-10-29T08:00:00.000Z",
+          patient_first_name: "Iva",
+        }),
+      ],
+    );
+    mocks.createClient.mockResolvedValue(memory);
+    mocks.requireMember.mockResolvedValue({ userId: ownerUserId, clinicId, role: "owner" });
+
+    const pending = await loadRequestSection("pending", 1);
+    expect(pending.ok).toBe(true);
+    if (!pending.ok) return;
+    expect(pending.data.counts).toEqual({ pending: 1, accepted: 0, rejected: 0, expired: 1 });
+    expect(pending.data.requests.map((item) => item.name)).toEqual(["Ana Anić"]);
+
+    const expired = await loadRequestSection("expired", 1);
+    expect(expired.ok).toBe(true);
+    if (!expired.ok) return;
+    expect(expired.data.requests.map((item) => item.name)).toEqual(["Iva Anić"]);
+    expect(expired.data.requests[0]?.deadlineLabel).not.toBe("");
   });
 });

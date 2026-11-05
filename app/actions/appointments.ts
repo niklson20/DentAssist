@@ -35,6 +35,11 @@ import {
   readAppointmentFacts,
 } from "@/lib/queries/appointments";
 import { appointmentsOverlap } from "@/lib/slots";
+import {
+  REQUEST_PAGE_SIZE,
+  requestSectionStatuses,
+  type RequestSection,
+} from "@/lib/request-section";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const CHECK = "Proverite unete podatke.";
@@ -638,6 +643,19 @@ type PendingRequestView = {
   needsChoice: boolean;
 };
 
+export type RequestListItem = PendingRequestView & {
+  rejectedBy: "staff" | "patient" | null;
+  note: string | null;
+};
+
+export type RequestSectionPage = {
+  section: RequestSection;
+  page: number;
+  total: number;
+  counts: Record<RequestSection, number>;
+  requests: RequestListItem[];
+};
+
 type AcceptDecision = "prihvati" | "isti" | "drugi";
 
 type AcceptPayload = { id: string } | { chartChoice: true };
@@ -778,6 +796,155 @@ export async function loadPendingRequests(): Promise<ActionResult<PendingRequest
     return ok(views);
   } catch (error) {
     console.error("pending_requests failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SAVE_UNAVAILABLE);
+  }
+}
+
+const REQUEST_LIST_COLUMNS =
+  "id, dentist_id, account_id, booker_email, for_child, patient_first_name, patient_last_name, patient_date_of_birth, patient_phone, contact_relationship, contact_first_name, contact_last_name, contact_phone, reason, patient_id, appointment_id, status, expires_at, created_at, patient_note, pii_purged_at";
+
+export async function loadRequestSection(
+  section: RequestSection,
+  page: number,
+): Promise<ActionResult<RequestSectionPage>> {
+  const member = await requireMember();
+  const requested = Number.isInteger(page) && page > 0 ? page : 1;
+  const empty = emptyRequestSection(section, requested);
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const actor = await clinicActor(supabase, member);
+    if (!actor) return fail(SAVE_UNAVAILABLE);
+
+    const dentistId = member.role === "dentist" ? actor.id : null;
+    const from = (requested - 1) * REQUEST_PAGE_SIZE;
+    const to = from + REQUEST_PAGE_SIZE - 1;
+    const now = new Date().toISOString();
+
+    let pageQuery = applyRequestSection(
+      supabase
+        .from("booking_requests")
+        .select(REQUEST_LIST_COLUMNS, { count: "exact" })
+        .eq("clinic_id", member.clinicId),
+      section,
+      now,
+    );
+    if (dentistId) pageQuery = pageQuery.eq("dentist_id", dentistId);
+    if (section === "pending") {
+      pageQuery = pageQuery.order("expires_at", { ascending: true }).order("id", { ascending: true });
+    } else {
+      pageQuery = pageQuery.order("created_at", { ascending: false }).order("id", { ascending: false });
+    }
+
+    const [pendingCount, acceptedCount, rejectedCount, expiredCount, memberResult, pageResult] =
+      await Promise.all([
+        countRequests(supabase, member.clinicId, dentistId, "pending", now),
+        countRequests(supabase, member.clinicId, dentistId, "accepted", now),
+        countRequests(supabase, member.clinicId, dentistId, "rejected", now),
+        countRequests(supabase, member.clinicId, dentistId, "expired", now),
+        supabase.from("clinic_members").select("id, first_name, last_name").eq("clinic_id", member.clinicId),
+        pageQuery.range(from, to),
+      ]);
+
+    if (
+      pendingCount === null ||
+      acceptedCount === null ||
+      rejectedCount === null ||
+      expiredCount === null ||
+      memberResult.error ||
+      pageResult.error
+    ) {
+      console.error("request_section rejected:", "unknown");
+      if (member.role === "reception") return ok(empty);
+      return fail(SAVE_UNAVAILABLE);
+    }
+
+    const counts = {
+      pending: pendingCount,
+      accepted: acceptedCount,
+      rejected: rejectedCount,
+      expired: expiredCount,
+    };
+    const total = counts[section];
+    const names = dentistNames(memberResult.data);
+    const records = rowsOf(pageResult.data);
+    const listed = records
+      .map((row) => listRequestFrom(row))
+      .filter((row): row is ListRequestRow => row !== null)
+      .filter((row) => member.role !== "dentist" || row.dentistId === actor.id);
+
+    const appointmentIds = listed
+      .map((row) => row.appointmentId)
+      .filter((id): id is string => typeof id === "string");
+    const starts = new Map<string, string>();
+    let charts: ChartRecord[] = [];
+    let contacts: ContactRecord[] = [];
+
+    if (listed.length > 0) {
+      const extra: Promise<unknown>[] = [];
+      extra.push(
+        appointmentIds.length === 0
+          ? Promise.resolve({ data: [], error: null })
+          : supabase
+              .from("appointments")
+              .select("id, starts_at")
+              .eq("clinic_id", member.clinicId)
+              .in("id", appointmentIds),
+      );
+      if (section === "pending") {
+        extra.push(
+          supabase
+            .from("patients")
+            .select("id, first_name, last_name, email, date_of_birth, merged_into_id, slug")
+            .eq("clinic_id", member.clinicId),
+          supabase
+            .from("patient_contacts")
+            .select("patient_id, email, confirmed_at")
+            .eq("clinic_id", member.clinicId),
+        );
+      }
+
+      const extras = await Promise.all(extra);
+      const appointmentResult = extras[0] as { data: unknown; error: { message?: string } | null };
+      if (appointmentResult.error) {
+        console.error("request_section_appointments rejected:", "unknown");
+        return fail(SAVE_UNAVAILABLE);
+      }
+      for (const row of rowsOf(appointmentResult.data)) {
+        if (typeof row.id === "string" && typeof row.starts_at === "string") {
+          starts.set(row.id, row.starts_at);
+        }
+      }
+      if (section === "pending") {
+        const patientResult = extras[1] as { data: unknown; error: { message?: string } | null };
+        const contactResult = extras[2] as { data: unknown; error: { message?: string } | null };
+        if (patientResult.error || contactResult.error) {
+          console.error("request_section_match rejected:", "unknown");
+          return fail(SAVE_UNAVAILABLE);
+        }
+        charts = chartRows(patientResult.data);
+        contacts = contactRows(contactResult.data);
+      }
+    }
+
+    const byId = new Map(records.map((row) => [typeof row.id === "string" ? row.id : "", row]));
+    const requests = listed.map((row) => {
+      const original = byId.get(row.id);
+      const booking = original ? bookingRequestFrom(original) : null;
+      const needsChoice =
+        section === "pending" && booking ? matchChart(booking, charts, contacts).kind === "choice" : false;
+      return listView(row, names.get(row.dentistId) ?? "—", row.appointmentId ? starts.get(row.appointmentId) ?? null : null, needsChoice);
+    });
+
+    return ok({
+      section,
+      page: requested,
+      total,
+      counts,
+      requests,
+    });
+  } catch (error) {
+    console.error("request_section failed:", error instanceof Error ? error.name : "unknown");
     return fail(SAVE_UNAVAILABLE);
   }
 }
@@ -1916,6 +2083,136 @@ async function insertEmailClaim(
     return false;
   }
   return true;
+}
+
+type ListRequestRow = {
+  id: string;
+  dentistId: string;
+  appointmentId: string | null;
+  status: string;
+  expiresAt: string;
+  firstName: string;
+  lastName: string;
+  reason: string | null;
+  patientNote: string | null;
+  purged: boolean;
+};
+
+function emptyRequestSection(section: RequestSection, page: number): RequestSectionPage {
+  return {
+    section,
+    page,
+    total: 0,
+    counts: { pending: 0, accepted: 0, rejected: 0, expired: 0 },
+    requests: [],
+  };
+}
+
+function applyRequestSection<
+  Query extends {
+    eq: (column: string, value: string) => Query;
+    in: (column: string, values: string[]) => Query;
+    gt: (column: string, value: string) => Query;
+    or: (filters: string) => Query;
+  },
+>(query: Query, section: RequestSection, now: string): Query {
+  if (section === "pending") {
+    return query.eq("status", "pending").gt("expires_at", now);
+  }
+  if (section === "expired") {
+    return query.in("status", ["pending", "expired"]).or(`status.eq.expired,expires_at.lte."${now}"`);
+  }
+  return query.in("status", [...requestSectionStatuses(section)]);
+}
+
+async function countRequests(
+  supabase: SupabaseClient,
+  clinicId: string,
+  dentistId: string | null,
+  section: RequestSection,
+  now: string,
+): Promise<number | null> {
+  let query = applyRequestSection(
+    supabase.from("booking_requests").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId),
+    section,
+    now,
+  );
+  if (dentistId) query = query.eq("dentist_id", dentistId);
+  const { count, error } = await query;
+  if (error) {
+    console.error("request_section_count rejected:", "unknown");
+    return null;
+  }
+  return count ?? 0;
+}
+
+function dentistNames(value: unknown): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const row of rowsOf(value)) {
+    if (typeof row.id !== "string") continue;
+    const name = `${textOf(row.first_name)} ${textOf(row.last_name)}`.replace(/\s+/g, " ").trim();
+    if (name) names.set(row.id, name);
+  }
+  return names;
+}
+
+function listRequestFrom(row: Record<string, unknown>): ListRequestRow | null {
+  if (typeof row.id !== "string" || typeof row.dentist_id !== "string" || typeof row.status !== "string") {
+    return null;
+  }
+  if (typeof row.expires_at !== "string") return null;
+  const firstName = textOf(row.patient_first_name);
+  const lastName = textOf(row.patient_last_name);
+  const purgedAt = row.pii_purged_at;
+  const purged = (typeof purgedAt === "string" && purgedAt !== "") || (firstName === "" && lastName === "");
+  return {
+    id: row.id,
+    dentistId: row.dentist_id,
+    appointmentId: typeof row.appointment_id === "string" ? row.appointment_id : null,
+    status: row.status,
+    expiresAt: row.expires_at,
+    firstName,
+    lastName,
+    reason: textOf(row.reason) || null,
+    patientNote: textOf(row.patient_note) || null,
+    purged,
+  };
+}
+
+function listView(
+  row: ListRequestRow,
+  dentistName: string,
+  startsAt: string | null,
+  needsChoice: boolean,
+): RequestListItem {
+  const start = startsAt ? new Date(startsAt) : null;
+  const deadline = new Date(row.expiresAt);
+  const timeLabel =
+    start && !Number.isNaN(start.getTime())
+      ? formatBelgrade(start, { hour: "2-digit", minute: "2-digit" })
+      : "—";
+  const deadlineLabel = Number.isNaN(deadline.getTime())
+    ? "—"
+    : formatBelgrade(deadline, {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+  const name = row.purged
+    ? "Identitet uklonjen"
+    : `${row.firstName} ${row.lastName}`.replace(/\s+/g, " ").trim() || "Identitet uklonjen";
+  return {
+    id: row.id,
+    timeLabel,
+    name,
+    dentistName,
+    reason: row.reason ?? "Nije naveden",
+    deadlineLabel,
+    needsChoice,
+    rejectedBy: row.status === "rejected" ? "staff" : row.status === "declined_by_patient" ? "patient" : null,
+    note: row.patientNote,
+  };
 }
 
 function pendingView(
