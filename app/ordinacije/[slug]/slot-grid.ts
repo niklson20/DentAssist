@@ -9,30 +9,42 @@ export type SlotClock = {
 
 export type SlotHourGrid = {
   hours: number[];
-  minutes: number[];
+  rowCount: number;
+  minutesByHour: Map<number, number[]>;
   cells: Map<string, SlotClock>;
 };
 
 export function buildSlotHourGrid(startsAt: readonly string[]): SlotHourGrid {
   const cells = new Map<string, SlotClock>();
-  const hourSet = new Set<number>();
-  const minuteSet = new Set<number>();
+  const minutesByHour = new Map<number, number[]>();
 
   for (const value of startsAt) {
     const clock = slotClock(value);
     if (!clock) {
       continue;
     }
-    hourSet.add(clock.hour);
-    minuteSet.add(clock.minute);
     cells.set(slotCellKey(clock.hour, clock.minute), clock);
+    const list = minutesByHour.get(clock.hour) ?? [];
+    if (!list.includes(clock.minute)) {
+      list.push(clock.minute);
+      minutesByHour.set(clock.hour, list);
+    }
   }
 
-  return {
-    hours: [...hourSet].sort((left, right) => left - right),
-    minutes: [...minuteSet].sort((left, right) => left - right),
-    cells,
-  };
+  const hours = [...minutesByHour.keys()].sort((left, right) => left - right);
+  for (const hour of hours) {
+    const list = minutesByHour.get(hour);
+    if (list) {
+      list.sort((left, right) => left - right);
+    }
+  }
+
+  let rowCount = 0;
+  for (const list of minutesByHour.values()) {
+    rowCount = Math.max(rowCount, list.length);
+  }
+
+  return { hours, rowCount, minutesByHour, cells };
 }
 
 export function slotCellKey(hour: number, minute: number): string {

@@ -114,16 +114,22 @@ function SlotHourButtons({
     return null;
   }
 
+  const slotCellClass = "h-8 w-[5.3125rem] shrink-0";
+
   return (
     <div
-      className="grid gap-2"
-      style={{ gridTemplateColumns: `repeat(${grid.hours.length}, minmax(4.25rem, 1fr))` }}
+      className="grid w-fit max-w-full gap-2"
+      style={{ gridTemplateColumns: `repeat(${grid.hours.length}, 5.3125rem)` }}
     >
-      {grid.minutes.flatMap((minute) =>
+      {Array.from({ length: grid.rowCount }, (_, row) =>
         grid.hours.map((hour) => {
+          const minute = grid.minutesByHour.get(hour)?.[row];
+          if (minute === undefined) {
+            return <div key={`${hour}-${row}`} className={slotCellClass} aria-hidden="true" />;
+          }
           const cell = grid.cells.get(slotCellKey(hour, minute));
           if (!cell) {
-            return <div key={slotCellKey(hour, minute)} className="h-9" aria-hidden="true" />;
+            return <div key={slotCellKey(hour, minute)} className={slotCellClass} aria-hidden="true" />;
           }
           const active = cell.startsAt === selectedStart;
           return (
@@ -132,7 +138,7 @@ function SlotHourButtons({
               type="button"
               size="sm"
               variant={active ? "default" : "outline"}
-              className={cn("w-full tabular-nums", !active && "bg-background")}
+              className={cn(slotCellClass, "tabular-nums", !active && "bg-background")}
               aria-pressed={active}
               onClick={() => onSelect(cell.startsAt)}
             >
