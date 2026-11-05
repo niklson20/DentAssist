@@ -8,6 +8,12 @@ const bufferMinutesSchema = z.coerce
   .number({ error: "Izaberite razmak." })
   .refine((value) => [0, 5, 10, 15].includes(value), "Izaberite razmak.");
 
+export const DESCRIPTION_MAX_LENGTH = 500;
+
+function singleLineBreaks(value: string): string {
+  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
 export const clinicProfileSchema = z
   .object({
     name: z
@@ -26,7 +32,12 @@ export const clinicProfileSchema = z
       .min(1, "Unesite adresu.")
       .max(300, "Adresa je predugačka."),
     phone: z.string({ error: "Unesite telefon." }).trim().min(1, "Unesite telefon."),
-    description: z.string().max(500, "Tekst je predugačak.").optional().default(""),
+    description: z
+      .string()
+      .overwrite(singleLineBreaks)
+      .max(DESCRIPTION_MAX_LENGTH, "Tekst je predugačak.")
+      .optional()
+      .default(""),
     onlineBookingEnabled: z.boolean(),
     slotMinutes: slotMinutesSchema,
     bufferMinutes: bufferMinutesSchema,

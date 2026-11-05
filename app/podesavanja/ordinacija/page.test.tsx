@@ -68,9 +68,23 @@ describe("clinic profile page", () => {
     const html = renderToStaticMarkup(await Page());
     expect(requireOwner).toHaveBeenCalledOnce();
     expect(html).toContain("https://dentassist.rs/ordinacije/ordinacija-centar");
+    expect(html).toContain("Izaberi logo");
+    expect(html).toContain("Kopiraj");
+    expect(html).toContain("Otvori");
+    expect(html).toContain("Stranica ostaje javna, bez zakazivanja.");
     expect(html).toContain('name="maxAheadDays"');
+    expect(html).toContain('id="description"');
+    expect(html).toContain('maxLength="500"');
+    expect(html).toContain("5/500");
     expect(html).toContain('name="slotMinutes"');
     expect(html).toContain('value="45"');
+    expect(html).toContain("Kako se slažu termini");
+    expect(html).toContain("Termini počinju na svakih 15 minuta.");
+    expect(html).toContain("Nema pauze posle termina.");
+    expect(html).toContain("Kad pacijent sme da zakaže");
+    expect(html).toContain(
+      "Pacijent bira termin od 30 minuta, najranije za 1 sat i najdalje 45 dana unapred.",
+    );
   });
 
   it("asks for a PIN before loading the clinic", async () => {
