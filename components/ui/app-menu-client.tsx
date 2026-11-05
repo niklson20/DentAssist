@@ -102,7 +102,7 @@ export function AppMenuClient({
         </SidebarFooter>
       </Sidebar>
       <div className="flex min-h-svh w-full flex-1 flex-col bg-background">
-        <header className="grid h-12 grid-cols-[1fr_auto_1fr] items-center border-b px-3">
+        <header className="sticky top-0 z-20 grid h-12 grid-cols-[1fr_auto_1fr] items-center border-b bg-background px-3">
           <SidebarTrigger />
           <BelgradeNow />
         </header>
