@@ -92,7 +92,6 @@ describe("week view", () => {
       datum,
       today: "2026-06-08",
       dentistId: ana,
-      hideCancelled: true,
       slotMinutes: 15,
       members,
       appointments,
@@ -131,8 +130,8 @@ describe("week view", () => {
     expect(html).toContain("Kraj Perioda");
     expect(html).not.toContain("Van Opsega");
     expect(html).not.toContain("Pera Perić");
-    expect(html).not.toContain("Otkaz Sakriven");
-    expect(html).not.toContain('data-status="cancelled"');
+    expect(html).toContain("Otkaz Sakriven");
+    expect(html).toContain('data-status="cancelled"');
     expect(html).not.toContain("2026-06-07");
     expect(html).not.toContain("2026-06-15");
 
@@ -143,9 +142,6 @@ describe("week view", () => {
       cursor = atIndex;
     }
     for (const status of APPOINTMENT_STATUSES) {
-      if (status === "cancelled") {
-        continue;
-      }
       expect(html).toContain(`data-status="${status}"`);
     }
     expect(html).toContain("PON");
@@ -168,16 +164,9 @@ describe("week view", () => {
     expect(cssSource).toContain(".calendar-grid__hourband");
     expect(cssSource).toContain("height: 2px");
     expect(viewSource).toContain("slotLines={false}");
-
-    const shown = weekFromRows({ ...input, hideCancelled: false });
-    expect(shown).not.toBeNull();
-    if (!shown) {
-      return;
-    }
-    const shownHtml = renderToStaticMarkup(<WeekView model={shown} />);
-    expect(shownHtml).toContain("Otkaz Sakriven");
-    expect(shownHtml).toContain('data-status="cancelled"');
-    expect(shownHtml).not.toContain("Ana Anić");
+    expect(viewSource).toContain("dates={model.days.map((day) => day.datum)}");
+    expect(cssSource).toContain(".calendar-grid__now");
+    expect(cssSource).toContain('[data-hide-cancelled="true"] [data-status="cancelled"]');
     expect(cssSource).toContain("text-decoration: line-through");
 
     expect(loadSource).toContain("startOfBelgradeWeek(isoDate)");

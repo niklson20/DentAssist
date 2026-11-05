@@ -32,12 +32,16 @@ describe("pending column", () => {
   it("shows the request and lets the owner accept or reject", () => {
     const html = column("owner");
 
-    expect(html).toContain("Zahtevi na čekanju");
+    expect(html).toContain("Na čekanju");
     expect(html).toContain("10:00");
     expect(html).toContain("Ana Anić");
+    expect(html).toContain("Stomatolog");
     expect(html).toContain("Mina Minić");
+    expect(html).toContain("Razlog");
     expect(html).toContain("Kontrola");
-    expect(html).toContain("Rok: 24. okt, 10:00");
+    expect(html).toContain("Odgovor do");
+    expect(html).toContain("24. okt, 10:00");
+    expect(html).toContain("Poruka pacijentu");
     expect(html).toContain("Prihvati");
     expect(html).toContain("Odbij");
     expect(html).toContain('name="odluka" value="prihvati"');

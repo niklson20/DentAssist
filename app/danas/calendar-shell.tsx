@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { calendarPath } from "@/app/danas/schema";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 import { AppointmentForm, type AppointmentFormChoices } from "./appointment-form";
 import { DateJump } from "./date-jump";
+import { HideCancelledProvider } from "./hide-cancelled";
 import { PhoneBar } from "./phone-bar";
 
 const EMPTY_APPOINTMENT_CHOICES: AppointmentFormChoices = {
@@ -71,14 +72,32 @@ export function CalendarShell({
     month: "long",
     year: "numeric",
   });
+  const [hidden, setHidden] = useState(query.sakrijOtkazane);
+  useEffect(() => {
+    setHidden(query.sakrijOtkazane);
+  }, [query.sakrijOtkazane]);
+  const liveQuery = { ...query, sakrijOtkazane: hidden };
+
+  function toggleHidden(next: boolean) {
+    setHidden(next);
+    window.history.replaceState(window.history.state, "", calendarPath({ ...query, sakrijOtkazane: next }));
+  }
 
   return (
-    <>
+    <HideCancelledProvider hidden={hidden}>
       <main className="flex min-h-dvh flex-col gap-6 p-4 pb-24 md:hidden">
-        <section id="phone-calendar-panel" aria-label="Kalendar" className="flex flex-col gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Kalendar</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{dateLabel}</p>
+        <section
+          id="phone-calendar-panel"
+          aria-label="Kalendar"
+          data-hide-cancelled={hidden ? "true" : undefined}
+          className="flex flex-col gap-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold">Kalendar</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{dateLabel}</p>
+            </div>
+            <HideCancelledToggle checked={hidden} onChange={toggleHidden} />
           </div>
           {phoneCalendar}
         </section>
@@ -88,7 +107,7 @@ export function CalendarShell({
       <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href={calendarPath(query, { datum: shiftDatum(query, -1) })}
+            href={calendarPath(liveQuery, { datum: shiftDatum(liveQuery, -1) })}
             aria-label={STEP_LABEL[query.prikaz].previous}
             className={cn(buttonVariants({ variant: "outline", size: "icon-sm" }))}
           >
@@ -100,7 +119,7 @@ export function CalendarShell({
               return (
                 <Link
                   key={view.id}
-                  href={calendarPath(query, { prikaz: view.id })}
+                  href={calendarPath(liveQuery, { prikaz: view.id })}
                   aria-current={current ? "page" : undefined}
                   className={cn(buttonVariants({ variant: current ? "default" : "outline", size: "sm" }))}
                 >
@@ -110,15 +129,16 @@ export function CalendarShell({
             })}
           </nav>
           <Link
-            href={calendarPath(query, { datum: shiftDatum(query, 1) })}
+            href={calendarPath(liveQuery, { datum: shiftDatum(liveQuery, 1) })}
             aria-label={STEP_LABEL[query.prikaz].next}
             className={cn(buttonVariants({ variant: "outline", size: "icon-sm" }))}
           >
             <StepArrow direction="next" />
           </Link>
         </div>
-        <DateJump query={query} />
-        <div className="flex justify-end">
+        <DateJump query={liveQuery} />
+        <div className="flex items-center justify-end gap-3">
+          <HideCancelledToggle checked={hidden} onChange={toggleHidden} />
           <Dialog>
             <DialogTrigger render={<Button type="button" size="sm" />}>Novi termin</DialogTrigger>
             <DialogContent>
@@ -138,11 +158,29 @@ export function CalendarShell({
           </Dialog>
         </div>
       </div>
-      <section aria-label="Kalendar" className="min-h-64 rounded-lg border border-border bg-card">
+      <section
+        aria-label="Kalendar"
+        data-hide-cancelled={hidden ? "true" : undefined}
+        className="min-h-64 rounded-lg border border-border bg-card"
+      >
         {query.prikaz === "dan" ? dayCalendar : query.prikaz === "nedelja" ? weekCalendar : monthCalendar}
       </section>
       </main>
-    </>
+    </HideCancelledProvider>
+  );
+}
+
+function HideCancelledToggle({ checked, onChange }: { checked: boolean; onChange: (next: boolean) => void }) {
+  return (
+    <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap text-sm">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="size-4 rounded border-input accent-primary"
+      />
+      Sakrij otkazane
+    </label>
   );
 }
 

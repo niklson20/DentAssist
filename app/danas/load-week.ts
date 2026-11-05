@@ -72,7 +72,6 @@ export function weekFromRows(input: {
   datum: string;
   today: string;
   dentistId: string | null;
-  hideCancelled: boolean;
   slotMinutes?: number;
   members: unknown;
   appointments: unknown;
@@ -93,9 +92,7 @@ export function weekFromRows(input: {
   }
 
   const names = new Map(patients.map((patient) => [patient.id, `${patient.first_name} ${patient.last_name}`]));
-  const visits = appointments.filter(
-    (row) => row.dentist_id === dentist.id && !(input.hideCancelled && row.status === "cancelled"),
-  );
+  const visits = appointments.filter((row) => row.dentist_id === dentist.id);
   const dates = weekDates(input.datum);
   const anySaved = memberHasSavedHours(schedules, dentist.id);
   const byDay = dates.map((datum) => ({
@@ -189,7 +186,6 @@ export async function loadWeekCalendar(clinicId: string, query: CalendarQuery): 
       datum: query.datum,
       today: formatBelgradeDate(new Date()),
       dentistId: query.stomatolog,
-      hideCancelled: query.sakrijOtkazane,
       slotMinutes: slotStep(clinicResult.data?.slot_minutes),
       members: membersResult.data ?? [],
       appointments: appointmentsResult.data ?? [],

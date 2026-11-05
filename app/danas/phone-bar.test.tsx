@@ -53,7 +53,6 @@ function at(hour: number, minute: number): string {
 
 const model = dayFromRows({
   datum,
-  hideCancelled: true,
   members: [
     { id: boris, first_name: "Boris", last_name: "Borić", sees_patients: true },
     { id: ana, first_name: "Ana", last_name: "Anić", sees_patients: true },

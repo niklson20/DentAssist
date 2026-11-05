@@ -8,11 +8,7 @@ import { dayFromRows, slotStep, type DayGridModel } from "./day-calendar";
 
 const DAY_UNAVAILABLE = "Kalendar trenutno nije dostupan. Pokušajte ponovo.";
 
-export async function loadDayCalendar(
-  clinicId: string,
-  datum: string,
-  hideCancelled: boolean,
-): Promise<ActionResult<DayGridModel>> {
+export async function loadDayCalendar(clinicId: string, datum: string): Promise<ActionResult<DayGridModel>> {
   if (!z.string().uuid().safeParse(clinicId).success || !isIsoDate(datum)) {
     return fail(DAY_UNAVAILABLE);
   }
@@ -67,7 +63,6 @@ export async function loadDayCalendar(
 
     const model = dayFromRows({
       datum,
-      hideCancelled,
       slotMinutes: slotStep(clinicResult.data?.slot_minutes),
       members: membersResult.data ?? [],
       appointments: appointmentsResult.data ?? [],

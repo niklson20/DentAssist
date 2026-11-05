@@ -47,10 +47,17 @@ vi.mock("next/link", () => ({
     href: string;
     children: React.ReactNode;
     className?: string;
-    "aria-current"?: "page";
+    "aria-current"?: "page" | "date";
     "aria-label"?: string;
+    "aria-pressed"?: boolean;
   }) => (
-    <a href={href} className={className} aria-current={props["aria-current"]} aria-label={props["aria-label"]}>
+    <a
+      href={href}
+      className={className}
+      aria-current={props["aria-current"]}
+      aria-label={props["aria-label"]}
+      aria-pressed={props["aria-pressed"]}
+    >
       {children}
     </a>
   ),
@@ -174,7 +181,12 @@ describe("today page", () => {
     expect(html).not.toContain(">Prethodni dan<");
     expect(html).not.toContain(">Sledeći dan<");
     expect(html).not.toContain("Prikaži otkazane");
-    expect(html).not.toContain("Sakrij otkazane");
+    expect(html).toContain("Sakrij otkazane");
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain('checked=""');
+    expect(html).toContain('data-hide-cancelled="true"');
+    expect(html.indexOf("Sakrij otkazane")).toBeLessThan(html.indexOf("Novi termin"));
+    expect(shellSource).toContain("replaceState");
     expect(html).not.toContain("Otkazani termini su sakriveni.");
     expect(html).not.toContain("Otkazani termini su vidljivi.");
     expect(shellSource).toContain("<DateJump");
@@ -239,7 +251,9 @@ describe("today page", () => {
     expect(html).toContain('href="/danas?prikaz=mesec&amp;datum=2026-07-08&amp;sakrijOtkazane=ne"');
     expect(html).toContain(`href="/danas?prikaz=mesec&amp;datum=${today}&amp;sakrijOtkazane=ne"`);
     expect(html).not.toContain("Prikaži otkazane");
-    expect(html).not.toContain("Sakrij otkazane");
+    expect(html).toContain("Sakrij otkazane");
+    expect(html).not.toContain('data-hide-cancelled="true"');
+    expect(html.slice(html.indexOf('type="checkbox"'), html.indexOf("Sakrij otkazane"))).not.toContain("checked");
   });
 });
 

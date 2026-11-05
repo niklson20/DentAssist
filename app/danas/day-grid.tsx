@@ -4,6 +4,7 @@ import { isIsoDate } from "@/lib/calendar-dates";
 import { appointmentStatusLabel } from "@/lib/labels";
 
 import type { DayGridHour, DayGridModel, DayGridVisit, GridBand, GridLine } from "./day-calendar";
+import { NowLine } from "./now-line";
 import { shortDateLabel, weekdayLabels } from "./weekday-labels";
 
 export type TimeLane = {
@@ -26,12 +27,14 @@ export function TimeGrid({
   hours,
   lanes,
   laneMin,
+  dates,
   slotLines = true,
 }: {
   span: number;
   hours: DayGridHour[];
   lanes: TimeLane[];
   laneMin: string;
+  dates: string[];
   slotLines?: boolean;
 }) {
   const style = {
@@ -145,6 +148,7 @@ export function TimeGrid({
               </div>
             </section>
           ))}
+          {span > 0 && hours[0] ? <NowLine dates={dates} startHour={hours[0].hour} span={span} /> : null}
         </div>
       </div>
     </div>
@@ -164,6 +168,7 @@ export function DayGrid({ model }: { model: DayGridModel }) {
       span={model.span}
       hours={model.hours}
       laneMin="14rem"
+      dates={[model.datum]}
       lanes={model.columns.map((column) => ({
         id: column.id,
         ariaLabel: severalDentists

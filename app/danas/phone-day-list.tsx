@@ -1,7 +1,10 @@
+"use client";
+
 import { appointmentStatusLabel, type AppointmentStatus } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
 import type { DayGridColumn, DayGridModel } from "./day-calendar";
+import { useHideCancelled } from "./hide-cancelled";
 
 /** Pending uses destructive, the warning mix from the day grid. Offered uses primary. */
 const STATUS_CLASS: Record<AppointmentStatus, string> = {
@@ -31,20 +34,22 @@ export function PhoneDayList({
   dentistId: string | null;
 }) {
   const column = phoneDayColumn(model, dentistId);
+  const hidden = useHideCancelled();
   if (!column) {
     return <p className="p-4 text-sm text-muted-foreground">Nema stomatologa koji prima pacijente.</p>;
   }
+  const visits = hidden ? column.visits.filter((visit) => visit.status !== "cancelled") : column.visits;
 
   return (
     <section aria-label={column.name} className="rounded-lg border border-border bg-card text-card-foreground">
       <h2 className="border-b border-border px-4 py-3 text-sm font-semibold" data-dentist={column.id}>
         {column.name}
       </h2>
-      {column.visits.length === 0 ? (
+      {visits.length === 0 ? (
         <p className="p-4 text-sm text-muted-foreground">Nema termina.</p>
       ) : (
         <ul className="flex flex-col gap-2 p-3">
-          {column.visits.map((visit) => (
+          {visits.map((visit) => (
             <li
               key={visit.id}
               data-status={visit.status}

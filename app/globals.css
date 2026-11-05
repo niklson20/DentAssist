@@ -216,6 +216,7 @@
 }
 
 .calendar-grid__columns {
+  position: relative;
   display: flex;
   flex: 1 0 auto;
   min-width: calc(100% - var(--calendar-gutter));
@@ -312,6 +313,18 @@
   height: 2px;
   margin-top: -1px;
   background: color-mix(in oklch, var(--foreground) 55%, var(--border));
+}
+
+.calendar-grid__now {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  left: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--primary);
+  pointer-events: none;
+  top: calc(var(--now-fraction) * var(--calendar-span) * var(--calendar-hour));
 }
 
 .calendar-grid__break {
@@ -419,6 +432,10 @@
   color: var(--muted-foreground);
   text-decoration: line-through;
   opacity: 0.55;
+}
+
+[data-hide-cancelled="true"] [data-status="cancelled"] {
+  display: none;
 }
 
 /* odontogram */

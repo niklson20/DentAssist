@@ -31,6 +31,7 @@ export function WeekView({ model }: { model: WeekModel }) {
       hours={model.hours}
       slotLines={false}
       laneMin="5.5rem"
+      dates={model.days.map((day) => day.datum)}
       lanes={model.days.map((day) => {
         const labels = weekdayLabels(day.datum);
         const dateLabel = shortDateLabel(day.datum);

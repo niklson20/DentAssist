@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
+import { useHideCancelled } from "./hide-cancelled";
 import { WEEKDAY_LONG, WEEKDAY_SHORT } from "./weekday-labels";
 
 export type MonthDay = {
@@ -11,7 +14,9 @@ export type MonthDay = {
   today: boolean;
   anchor: boolean;
   count: number;
+  total: number;
   countLabel: string;
+  totalLabel: string;
   href: string;
 };
 
@@ -23,6 +28,8 @@ export type MonthModel = {
 };
 
 export function MonthView({ model }: { model: MonthModel }) {
+  const hidden = useHideCancelled();
+
   return (
     <section aria-label="Mesec" className="bg-card text-card-foreground">
       <h2 className="border-b border-border px-4 py-3 text-base font-semibold">{model.title}</h2>
@@ -34,16 +41,18 @@ export function MonthView({ model }: { model: MonthModel }) {
         ))}
         {model.days.map((day, index) => {
           const weekday = WEEKDAY_LONG[index % 7] ?? WEEKDAY_LONG[0];
+          const count = hidden ? day.count : day.total;
+          const countLabel = hidden ? day.countLabel : day.totalLabel;
           return (
             <Link
               key={day.datum}
-              href={day.href}
+              href={withHideCancelled(day.href, hidden)}
               data-datum={day.datum}
               data-closed={day.closed ? "true" : undefined}
               data-today={day.today ? "true" : undefined}
               data-anchor={day.anchor ? "true" : undefined}
               aria-current={day.anchor ? "date" : undefined}
-              aria-label={`${weekday} ${dayNumber(day.datum)}, ${day.countLabel}`}
+              aria-label={`${weekday} ${dayNumber(day.datum)}, ${countLabel}`}
               className={cn(
                 "flex min-h-20 flex-col gap-1 border-b border-r border-border p-2 text-sm",
                 day.inMonth ? "text-foreground" : "text-muted-foreground",
@@ -59,7 +68,7 @@ export function MonthView({ model }: { model: MonthModel }) {
               >
                 {dayNumber(day.datum)}
               </span>
-              {day.count > 0 ? <span>{day.count}</span> : null}
+              {count > 0 ? <span>{count}</span> : null}
             </Link>
           );
         })}
@@ -70,4 +79,13 @@ export function MonthView({ model }: { model: MonthModel }) {
 
 function dayNumber(datum: string): string {
   return String(Number(datum.slice(8, 10)));
+}
+
+function withHideCancelled(href: string, hidden: boolean): string {
+  const next = hidden ? "da" : "ne";
+  if (href.includes("sakrijOtkazane=")) {
+    return href.replace(/sakrijOtkazane=(da|ne)/, `sakrijOtkazane=${next}`);
+  }
+  const join = href.includes("?") ? "&" : "?";
+  return `${href}${join}sakrijOtkazane=${next}`;
 }

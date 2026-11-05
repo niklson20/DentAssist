@@ -9,6 +9,7 @@ import type { AppointmentStatus } from "@/lib/labels";
 
 import { monthFromRows } from "./load-month";
 import { MonthView } from "./month-view";
+import { HideCancelledProvider } from "./hide-cancelled";
 import { calendarPath } from "./schema";
 
 vi.mock("next/link", () => ({
@@ -101,7 +102,9 @@ describe("month view", () => {
     const june8 = model.days.find((day) => day.datum === datum);
     const june9 = model.days.find((day) => day.datum === "2026-06-09");
     expect(june8?.count).toBe(2);
+    expect(june8?.total).toBe(3);
     expect(june8?.countLabel).toBe("2 termina");
+    expect(june8?.totalLabel).toBe("3 termina");
     expect(june8?.href).toBe(calendarPath(query, { prikaz: "dan", datum }));
     expect(june9?.count).toBe(1);
     expect(june9?.countLabel).toBe("1 termin");
@@ -142,14 +145,14 @@ describe("month view", () => {
     expect(todayCell).toContain('data-today="true"');
     expect(todayCell).toContain("bg-primary");
 
-    const visible = monthFromRows({
-      query: { ...query, sakrijOtkazane: false },
-      today: "2026-06-10",
-      members,
-      appointments,
-      hours,
-    });
-    expect(visible?.days.find((day) => day.datum === datum)?.countLabel).toBe("3 termina");
+    const shown = renderToStaticMarkup(
+      <HideCancelledProvider hidden={false}>
+        <MonthView model={model} />
+      </HideCancelledProvider>,
+    );
+    const shownStart = shown.indexOf('href="/danas?prikaz=dan&amp;datum=2026-06-08&amp;sakrijOtkazane=ne"');
+    const shownCell = shown.slice(shownStart, shown.indexOf("</a>", shownStart));
+    expect(shownCell).toContain(">3</span>");
 
     const onlyAna = monthFromRows({
       query: { ...query, stomatolog: ana },

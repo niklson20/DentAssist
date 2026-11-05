@@ -177,7 +177,6 @@ export function slotStep(value: unknown): 15 | 30 {
 
 export function dayFromRows(input: {
   datum: string;
-  hideCancelled: boolean;
   slotMinutes?: number;
   members: unknown;
   appointments: unknown;
@@ -207,7 +206,6 @@ export function dayFromRows(input: {
 
   const visits = appointments
     .filter((row) => columnIds.has(row.dentist_id))
-    .filter((row) => !(input.hideCancelled && row.status === "cancelled"))
     .map((row) => ({
       id: row.id,
       dentistId: row.dentist_id,

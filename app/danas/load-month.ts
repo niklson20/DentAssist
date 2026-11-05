@@ -91,16 +91,17 @@ export function monthFromRows(input: {
   const dentist = oneDentist(seeingDentists(members), input.query.stomatolog);
   const closed = dentist ? closedDows(schedules, dentist.id) : null;
   const dentistIds = new Set(countedDentists(members, input.query.stomatolog));
-  const counts = new Map<string, number>();
+  const openCounts = new Map<string, number>();
+  const totalCounts = new Map<string, number>();
   for (const row of appointments) {
     if (!dentistIds.has(row.dentist_id)) {
       continue;
     }
-    if (input.query.sakrijOtkazane && row.status === "cancelled") {
-      continue;
-    }
     const datum = formatBelgradeDate(new Date(row.starts_at));
-    counts.set(datum, (counts.get(datum) ?? 0) + 1);
+    totalCounts.set(datum, (totalCounts.get(datum) ?? 0) + 1);
+    if (row.status !== "cancelled") {
+      openCounts.set(datum, (openCounts.get(datum) ?? 0) + 1);
+    }
   }
 
   return {
@@ -108,7 +109,8 @@ export function monthFromRows(input: {
     anchor: input.query.datum,
     today: input.today,
     days: dates.map((datum) => {
-      const count = counts.get(datum) ?? 0;
+      const count = openCounts.get(datum) ?? 0;
+      const total = totalCounts.get(datum) ?? 0;
       return {
         datum,
         inMonth: datum.slice(0, 7) === monthKey,
@@ -116,7 +118,9 @@ export function monthFromRows(input: {
         today: datum === input.today,
         anchor: datum === input.query.datum,
         count,
+        total,
         countLabel: terminCountLabel(count),
+        totalLabel: terminCountLabel(total),
         href: calendarPath(input.query, { prikaz: "dan", datum }),
       };
     }),

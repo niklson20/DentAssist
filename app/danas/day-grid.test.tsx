@@ -86,7 +86,6 @@ describe("day grid", () => {
   it("shows dentist columns, a vertical hour axis that stays while columns scroll, and status colors from theme tokens", () => {
     const model = dayFromRows({
       datum,
-      hideCancelled: false,
       members,
       appointments,
       patients,
@@ -132,7 +131,6 @@ describe("day grid", () => {
 
     const oneDentist = dayFromRows({
       datum,
-      hideCancelled: false,
       members: members.filter((member) => member.id === ana),
       appointments,
       patients,
@@ -159,22 +157,6 @@ describe("day grid", () => {
       expect(html).toContain(`data-status="${status}"`);
     }
 
-    const hidden = dayFromRows({
-      datum,
-      hideCancelled: true,
-      members,
-      appointments,
-      patients,
-      hours,
-    });
-    expect(hidden).not.toBeNull();
-    if (!hidden) {
-      return;
-    }
-    const hiddenHtml = renderToStaticMarkup(<DayGrid model={hidden} />);
-    expect(hiddenHtml).not.toContain('data-status="cancelled"');
-    expect(hiddenHtml).toContain('data-status="scheduled"');
-
     const blockStart = cssSource.indexOf("/* calendar-grid */");
     expect(blockStart).toBeGreaterThanOrEqual(0);
     const block = cssSource.slice(blockStart);
@@ -183,6 +165,11 @@ describe("day grid", () => {
     expect(block).toContain("left: 0");
     expect(block).toContain("flex-direction: column");
     expect(block).toContain("text-decoration: line-through");
+    expect(block).toContain('[data-hide-cancelled="true"] [data-status="cancelled"]');
+    expect(block).toContain(".calendar-grid__now");
+    expect(block).toContain("var(--primary)");
+    expect(gridSource).toContain("<NowLine");
+    expect(gridSource).toContain("dates={[model.datum]}");
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     for (const status of APPOINTMENT_STATUSES) {
       expect(block).toContain(`[data-status="${status}"]`);
@@ -195,7 +182,8 @@ describe("day grid", () => {
     expect(gridSource).not.toContain("line-through");
     expect(pageSource).toContain("loadDayCalendar");
     expect(pageSource).toContain("DayGrid");
-    expect(pageSource).toContain("query.sakrijOtkazane");
+    expect(pageSource).not.toContain("query.sakrijOtkazane");
+    expect(shellSource).toContain("data-hide-cancelled");
     expect(pageSource.toLowerCase()).not.toContain("supabase");
     expect(shellSource).toContain('query.prikaz === "dan"');
     expect(shellSource).toContain("dayCalendar");

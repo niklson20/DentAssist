@@ -1944,7 +1944,7 @@ function pendingView(
     timeLabel,
     name: `${request.firstName} ${request.lastName}`.replace(/\s+/g, " ").trim(),
     dentistName,
-    reason: request.reason ?? "Nije unet",
+    reason: request.reason ?? "Nije naveden",
     deadlineLabel,
     needsChoice: matchChart(request, charts, contacts).kind === "choice",
   };

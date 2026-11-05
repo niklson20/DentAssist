@@ -30,7 +30,7 @@ export default async function Page({ searchParams }: PageProps) {
     redirect(calendarPath(query));
   }
 
-  const day = await loadDayCalendar(member.clinicId, query.datum, query.sakrijOtkazane);
+  const day = await loadDayCalendar(member.clinicId, query.datum);
   const week =
     query.prikaz === "nedelja"
       ? await loadWeekCalendar(member.clinicId, query)

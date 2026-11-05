@@ -4,6 +4,7 @@ import { useActionState, useId } from "react";
 
 import { acceptRequest, rejectRequest } from "@/app/actions/appointments";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { ActionResult } from "@/lib/action-result";
 
 export type PendingRequestView = {
@@ -20,9 +21,6 @@ type StaffRole = "owner" | "dentist" | "reception";
 
 type AcceptPayload = { id: string } | { chartChoice: true };
 
-const areaClass =
-  "min-h-16 w-full rounded-md border border-input bg-transparent px-2.5 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
-
 export function PendingColumn({
   role,
   requests,
@@ -37,9 +35,9 @@ export function PendingColumn({
   return (
     <aside
       aria-label="Zahtevi na čekanju"
-      className="w-full rounded-lg border border-border bg-card p-4 text-card-foreground"
+      className="w-full rounded-lg border border-border bg-card p-3 text-card-foreground"
     >
-      <h2 className="text-lg font-semibold text-foreground">Zahtevi na čekanju</h2>
+      <h2 className="text-sm font-semibold text-foreground">Na čekanju</h2>
       {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
       {requests.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">Nema zahteva.</p>
@@ -73,16 +71,23 @@ function RequestCard({ request, canRespond }: { request: PendingRequestView; can
   const messageId = useId();
 
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-border bg-background p-3">
-      <p className="text-sm font-medium text-foreground">{request.timeLabel}</p>
-      <p className="text-sm text-foreground">{request.name}</p>
-      <p className="text-sm text-muted-foreground">{request.dentistName}</p>
-      <p className="text-sm text-foreground">{request.reason}</p>
-      <p className="text-sm text-muted-foreground">Rok: {request.deadlineLabel}</p>
+    <li className="flex flex-col gap-2 rounded-md border border-border bg-background px-3 py-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="min-w-0 truncate text-sm font-medium text-foreground">{request.name}</p>
+        <p className="shrink-0 text-sm tabular-nums text-muted-foreground">{request.timeLabel}</p>
+      </div>
+      <dl className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-x-2 text-sm">
+        <dt className="text-muted-foreground">Stomatolog</dt>
+        <dd className="truncate text-foreground">{request.dentistName}</dd>
+        <dt className="text-muted-foreground">Razlog</dt>
+        <dd className="truncate text-foreground">{request.reason}</dd>
+        <dt className="text-muted-foreground">Odgovor do</dt>
+        <dd className="text-foreground">{request.deadlineLabel}</dd>
+      </dl>
       {canRespond && !finished ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {choosing ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex w-full flex-wrap gap-2">
               <form action={acceptAction}>
                 <input type="hidden" name="zahtev" value={request.id} />
                 <input type="hidden" name="odluka" value="isti" />
@@ -107,13 +112,20 @@ function RequestCard({ request, canRespond }: { request: PendingRequestView; can
               </Button>
             </form>
           )}
-          <form action={rejectAction} className="flex flex-col gap-2">
+          <form action={rejectAction} className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
             <input type="hidden" name="zahtev" value={request.id} />
-            <label className="flex flex-col gap-1.5 text-sm font-medium text-foreground" htmlFor={messageId}>
-              Poruka
-              <textarea id={messageId} name="poruka" rows={2} maxLength={300} className={areaClass} />
+            <label className="sr-only" htmlFor={messageId}>
+              Poruka pacijentu
             </label>
-            {messageError ? <p className="text-sm text-destructive">{messageError}</p> : null}
+            <Input
+              id={messageId}
+              name="poruka"
+              maxLength={300}
+              placeholder="Poruka pacijentu"
+              aria-invalid={messageError ? true : undefined}
+              className="h-8 min-w-36 flex-1"
+            />
+            {messageError ? <p className="w-full text-sm text-destructive">{messageError}</p> : null}
             <Button type="submit" size="sm" variant="outline" disabled={rejectPending}>
               Odbij
             </Button>
