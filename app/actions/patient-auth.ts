@@ -30,6 +30,7 @@ const EMAIL_SENDS_PER_HOUR = 3;
 const NETWORK_SENDS_BEFORE_TURNSTILE = 10;
 
 const CHECK = "Proverite unete podatke.";
+const SIGN_OUT_FAILED = "Odjava nije uspela. Pokušajte ponovo.";
 const UNAVAILABLE = "Prijava trenutno nije moguća. Pokušajte ponovo.";
 const REGISTER_UNAVAILABLE = "Registracija trenutno nije moguća. Pokušajte ponovo.";
 const CODE_UNAVAILABLE = "Kod trenutno ne može da se pošalje. Pokušajte ponovo.";
@@ -62,6 +63,32 @@ type SendCodeResult =
 type RegisterOutcome =
   | { type: "redirect"; path: string }
   | { type: "result"; result: ActionResult<{ step: "code" }> };
+
+export async function signOutPatient(
+  _previous: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const rawSlug = formData.get("slug");
+  const slug = normalizeClinicSlug(typeof rawSlug === "string" ? rawSlug : undefined);
+  if (!slug) {
+    return fail(SIGN_OUT_FAILED);
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) {
+      console.error("Patient sign-out rejected:", error.code ?? error.status ?? "unknown");
+      return fail(SIGN_OUT_FAILED);
+    }
+    await clearGate();
+  } catch (error) {
+    console.error("Patient sign-out failed:", error instanceof Error ? error.name : "unknown");
+    return fail(SIGN_OUT_FAILED);
+  }
+
+  redirect(`/ordinacije/${slug}`);
+}
 
 export async function signInPatient(
   _previous: ActionResult | null,

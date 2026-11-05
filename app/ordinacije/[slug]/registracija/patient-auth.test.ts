@@ -61,6 +61,7 @@ import {
   registerPatient,
   resendPatientEmailCode,
   signInPatient,
+  signOutPatient,
 } from "@/app/actions/patient-auth";
 import { patientAuthPath, patientReturnPath } from "@/lib/auth";
 import { verifyInviteCode } from "@/lib/clinic-invite";
@@ -82,6 +83,8 @@ const db = {
   account: null as Account,
   insertError: null as { code?: string; message: string } | null,
   signInError: null as { code?: string; status?: number } | null,
+  signOutError: null as { code?: string; status?: number } | null,
+  signOutScope: null as string | null,
   tables: [] as string[],
   rpcs: [] as { name: string; args: Record<string, unknown> }[],
   quota: { status: "ok", email_sends: 0, network_sends: 0 } as Record<string, unknown>,
@@ -103,7 +106,11 @@ function client() {
         db.user = { id: "user-1", email };
         return { error: null };
       },
-      signOut: async () => {
+      signOut: async (options?: { scope?: string }) => {
+        db.signOutScope = options?.scope ?? null;
+        if (db.signOutError) {
+          return { error: db.signOutError };
+        }
         db.user = null;
         return { error: null };
       },
@@ -186,6 +193,8 @@ beforeEach(() => {
   db.account = null;
   db.insertError = null;
   db.signInError = null;
+  db.signOutError = null;
+  db.signOutScope = null;
   db.tables = [];
   db.rpcs = [];
   db.quota = { status: "ok", email_sends: 0, network_sends: 0 };
@@ -442,5 +451,34 @@ describe("resend", () => {
     expect(result).toEqual({ ok: true, data: { step: "code" } });
     expect(mocks.createConfirmedUser).not.toHaveBeenCalled();
     expect(mocks.sendMail).toHaveBeenCalledOnce();
+  });
+});
+
+describe("signOutPatient", () => {
+  it("clears the local session and returns to the clinic page", async () => {
+    db.user = { id: "user-1", email: "ana@example.com" };
+    await expect(signOutPatient(null, form({ slug: "Belino" }))).rejects.toThrow("REDIRECT:/ordinacije/belino");
+    expect(db.signOutScope).toBe("local");
+    expect(db.user).toBeNull();
+    const gate = mocks.cookieSet.mock.calls.find(([name]) => name === SESSION_GATE_COOKIE);
+    expect(gate?.[1]).toBe("");
+    expect(gate?.[2].maxAge).toBe(0);
+  });
+
+  it("does not sign out when the clinic slug is not a real slug", async () => {
+    db.user = { id: "user-1", email: "ana@example.com" };
+    const result = await signOutPatient(null, form({ slug: "https://evil.example" }));
+    expect(result).toEqual({ ok: false, error: "Odjava nije uspela. Pokušajte ponovo." });
+    expect(db.signOutScope).toBeNull();
+    expect(db.user).not.toBeNull();
+  });
+
+  it("keeps the session when the provider rejects the sign-out", async () => {
+    db.user = { id: "user-1", email: "ana@example.com" };
+    db.signOutError = { code: "unexpected" };
+    const result = await signOutPatient(null, form({ slug: "belino" }));
+    expect(result).toEqual({ ok: false, error: "Odjava nije uspela. Pokušajte ponovo." });
+    expect(db.user).not.toBeNull();
+    expect(mocks.cookieSet).not.toHaveBeenCalled();
   });
 });

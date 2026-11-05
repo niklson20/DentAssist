@@ -3,17 +3,16 @@
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 
-import { Button } from "@/components/ui/button";
-import { formatBelgrade } from "@/lib/calendar-dates";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import { formatBookingDayLabel } from "./booking-days";
 import { fetchAvailableSlots } from "./slots-actions";
+import { buildSlotHourGrid, slotCellKey } from "./slot-grid";
 
 type ClinicSlotsPanelProps = {
   slug: string;
   dentistId: string;
-  defaultDurationMin: number;
   todayIso: string;
   bookingDays: string[];
   initialDay: string;
@@ -23,7 +22,6 @@ type ClinicSlotsPanelProps = {
 export function ClinicSlotsPanel({
   slug,
   dentistId,
-  defaultDurationMin,
   todayIso,
   bookingDays,
   initialDay,
@@ -44,7 +42,7 @@ export function ClinicSlotsPanel({
   const continueHref =
     selectedStart && dentistId
       ? `/ordinacije/${slug}/zakazivanje?stomatolog=${encodeURIComponent(dentistId)}&pocetak=${encodeURIComponent(selectedStart)}`
-      : "#";
+      : null;
 
   return (
     <section className="flex flex-1 flex-col gap-4">
@@ -83,44 +81,66 @@ export function ClinicSlotsPanel({
         ) : slots.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nema slobodnih termina ovog dana.</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {slots.map((startsAt) => {
-              const active = startsAt === selectedStart;
-              return (
-                <Button
-                  key={startsAt}
-                  type="button"
-                  size="sm"
-                  variant={active ? "default" : "outline"}
-                  className={cn(!active && "bg-background")}
-                  aria-pressed={active}
-                  onClick={() => setSelectedStart(startsAt)}
-                >
-                  {formatSlotRange(startsAt, defaultDurationMin)}
-                </Button>
-              );
-            })}
-          </div>
+          <SlotHourButtons slots={slots} selectedStart={selectedStart} onSelect={setSelectedStart} />
         )}
       </div>
 
       <div className="mt-auto border-t pt-4">
-        <Button
-          className="w-full"
-          disabled={!selectedStart || !dentistId}
-          render={<Link href={continueHref} aria-disabled={!selectedStart} />}
-        >
-          Nastavi
-        </Button>
+        {continueHref ? (
+          <Link href={continueHref} className={cn(buttonVariants(), "w-fit")}>
+            Nastavi
+          </Link>
+        ) : (
+          <Button className="w-fit" disabled>
+            Nastavi
+          </Button>
+        )}
       </div>
     </section>
   );
 }
 
-function formatSlotRange(startsAtIso: string, durationMin: number): string {
-  const start = new Date(startsAtIso);
-  const end = new Date(start.getTime() + durationMin * 60 * 1000);
-  const startLabel = formatBelgrade(start, { hour: "2-digit", minute: "2-digit" });
-  const endLabel = formatBelgrade(end, { hour: "2-digit", minute: "2-digit" });
-  return `${startLabel}–${endLabel}`;
+function SlotHourButtons({
+  slots,
+  selectedStart,
+  onSelect,
+}: {
+  slots: string[];
+  selectedStart: string | null;
+  onSelect: (startsAt: string) => void;
+}) {
+  const grid = buildSlotHourGrid(slots);
+  if (grid.hours.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="grid gap-2"
+      style={{ gridTemplateColumns: `repeat(${grid.hours.length}, minmax(4.25rem, 1fr))` }}
+    >
+      {grid.minutes.flatMap((minute) =>
+        grid.hours.map((hour) => {
+          const cell = grid.cells.get(slotCellKey(hour, minute));
+          if (!cell) {
+            return <div key={slotCellKey(hour, minute)} className="h-9" aria-hidden="true" />;
+          }
+          const active = cell.startsAt === selectedStart;
+          return (
+            <Button
+              key={cell.startsAt}
+              type="button"
+              size="sm"
+              variant={active ? "default" : "outline"}
+              className={cn("w-full tabular-nums", !active && "bg-background")}
+              aria-pressed={active}
+              onClick={() => onSelect(cell.startsAt)}
+            >
+              {cell.label}
+            </Button>
+          );
+        }),
+      )}
+    </div>
+  );
 }

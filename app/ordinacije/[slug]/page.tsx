@@ -5,7 +5,9 @@ import { formatBelgradeDate } from "@/lib/calendar-dates";
 import { getSessionKind } from "@/lib/auth";
 
 import { buildBookingDayRange } from "./booking-days";
+import { PublicSiteFooter, publicSiteFooterClearance } from "../public-site-footer";
 import { PublicSiteNav } from "../public-site-nav";
+import { resolveStaffEntryUrl } from "../staff-entry-url";
 import { ClinicProfileView } from "./clinic-profile-view";
 import { dentistCookieName, pickInitialDentistId } from "./dentist-preference";
 import { loadAvailableSlots } from "./load-available-slots";
@@ -33,18 +35,20 @@ export default async function ClinicPublicPage({ params }: PageProps) {
 
   if (loaded.status !== "ready") {
     return (
-      <div className="flex min-h-svh flex-col bg-background text-foreground">
+      <div className="relative flex min-h-svh flex-col bg-background text-foreground">
         <PublicSiteNav />
-        <main className="flex flex-1 items-center justify-center p-4">
+        <main className={`flex flex-1 items-center justify-center px-4 pt-4 ${publicSiteFooterClearance}`}>
           <p className="text-center text-sm text-muted-foreground">
             Ova ordinacija nije dostupna za online zakazivanje.
           </p>
         </main>
+        <PublicSiteFooter staffEntryUrl={await resolveStaffEntryUrl()} />
       </div>
     );
   }
 
   const clinic = loaded.clinic;
+  const staffEntryUrl = await resolveStaffEntryUrl();
   const sessionKind = await getSessionKind();
   const isPatient = sessionKind === "patient";
   const cookieStore = await cookies();
@@ -65,14 +69,14 @@ export default async function ClinicPublicPage({ params }: PageProps) {
       phone={clinic.phone}
       description={clinic.description}
       logoUrl={clinic.logoUrl}
-      dentists={clinic.dentists}
+      dentists={isPatient ? clinic.dentists : []}
       initialDentistId={preferredDentistId}
       showPatientAuth={!isPatient}
       showSlotsHint={!isPatient}
       bookingDays={bookingDays}
       todayIso={todayIso}
-      defaultDurationMin={clinic.defaultDurationMin}
       initialSlots={initialSlots}
+      staffEntryUrl={staffEntryUrl}
     />
   );
 }

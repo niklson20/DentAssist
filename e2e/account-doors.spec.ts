@@ -468,6 +468,8 @@ test("account doors", async ({ page }) => {
     await page.goto(`${appOrigin}/ordinacije/${firstSlug}`);
     await expect(page.getByRole("heading", { name: firstName })).toBeVisible();
     await expect(page.getByText("Prijavite se da vidite slobodne termine")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Stomatolozi" })).toHaveCount(0);
+    await expect(page.getByText("Mila Ordinacija")).toHaveCount(0);
     await expect(page.getByText("Pošalji zahtev")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Prijava" })).toHaveAttribute(
       "href",
@@ -484,6 +486,7 @@ test("account doors", async ({ page }) => {
     await page.getByLabel("Lozinka").fill(password);
     await page.getByRole("button", { name: "Prijavi se" }).click();
     await expect(page.getByRole("heading", { name: firstName })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Mila Ordinacija" })).toBeVisible();
 
     await page.goto(`${appOrigin}/ordinacije/${firstSlug}/termini`);
     await expect(page.getByRole("heading", { name: "Termini" })).toBeVisible();
