@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import Link from "next/link";
 
 import {
@@ -12,15 +11,15 @@ import {
   type DirectoryViewMode,
 } from "@/app/directory-href";
 import { DirectoryCityFilter, DirectoryMapPanel, ViewModeTabs } from "@/app/directory-map";
+import { PublicSiteFooter, publicSiteFooterClearance } from "@/app/ordinacije/public-site-footer";
 import { PublicSiteNav } from "@/app/ordinacije/public-site-nav";
+import { resolveStaffEntryUrl } from "@/app/ordinacije/staff-entry-url";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   listDirectoryCities,
   searchDirectoryClinics,
 } from "@/lib/queries/public";
-import { staffEntryHref } from "@/lib/staff-entry";
-
 export const metadata: Metadata = {
   title: "Imenik — DentAssist",
   description: "Pronađite stomatološku ordinaciju sa online zakazivanjem",
@@ -72,9 +71,11 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
   }
 
   return (
-    <div className="flex min-h-svh flex-col bg-background text-foreground">
+    <div className="relative flex min-h-svh flex-col bg-background text-foreground">
       <PublicSiteNav />
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 py-8">
+      <main
+        className={`mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 pt-8 ${publicSiteFooterClearance}`}
+      >
         <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
           <header className="min-w-0 space-y-2 lg:flex-1">
             <h1 className="text-2xl font-semibold tracking-tight">Imenik ordinacija</h1>
@@ -207,17 +208,7 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
         ) : null}
       </main>
 
-      <footer className="border-t border-border px-4 py-6">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Link
-            href={staffEntryUrl}
-            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Za ordinacije
-          </Link>
-          <p className="text-sm text-muted-foreground">© {copyrightYear()} DentAssist</p>
-        </div>
-      </footer>
+      <PublicSiteFooter staffEntryUrl={staffEntryUrl} />
     </div>
   );
 }
@@ -259,13 +250,6 @@ function DirectoryPagination({
   );
 }
 
-function copyrightYear(): string {
-  return new Intl.DateTimeFormat("en", {
-    timeZone: "Europe/Belgrade",
-    year: "numeric",
-  }).format(new Date());
-}
-
 function parseCoords(latRaw?: string, lngRaw?: string): { lat: number; lng: number } | null {
   if (!latRaw || !lngRaw) {
     return null;
@@ -279,18 +263,4 @@ function parseCoords(latRaw?: string, lngRaw?: string): { lat: number; lng: numb
     return null;
   }
   return { lat, lng };
-}
-
-async function resolveStaffEntryUrl(): Promise<string> {
-  const store = await headers();
-  const host = store.get("x-forwarded-host") ?? store.get("host");
-  const proto =
-    store.get("x-forwarded-proto") ??
-    (host?.startsWith("localhost") || host?.startsWith("127.0.0.1") ? "http" : "https");
-
-  return staffEntryHref({
-    staffUrl: process.env.STAFF_URL,
-    appUrl: process.env.APP_URL,
-    requestOrigin: host ? `${proto}://${host}` : null,
-  });
 }

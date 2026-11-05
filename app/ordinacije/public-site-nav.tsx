@@ -1,9 +1,10 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 
-export function PublicSiteNav() {
+export function PublicSiteNav({ children }: { children?: ReactNode }) {
   return (
-    <header className="border-b border-border bg-background">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-4">
+    <header className="sticky top-0 z-20 border-b border-border bg-background">
+      <div className="mx-auto flex min-h-14 w-full max-w-6xl items-center justify-between gap-3 px-4">
         <Link href="/" className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden
@@ -15,6 +16,7 @@ export function PublicSiteNav() {
           </span>
           <span className="truncate text-sm font-medium">DentAssist</span>
         </Link>
+        {children}
       </div>
     </header>
   );
