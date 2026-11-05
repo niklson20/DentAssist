@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { staffEntryHref } from "@/lib/staff-entry";
+import { patientDirectoryHref, staffEntryHref } from "@/lib/staff-entry";
 
 describe("staffEntryHref", () => {
   it("opens login when the staff site is the local directory", () => {
@@ -39,5 +39,42 @@ describe("staffEntryHref", () => {
       }),
     ).toBe("http://localhost:3000/prijava");
     expect(staffEntryHref({})).toBe("/prijava");
+  });
+});
+
+describe("patientDirectoryHref", () => {
+  it("opens the directory on the current origin in local dev", () => {
+    expect(
+      patientDirectoryHref({
+        staffUrl: "http://localhost:3000",
+        appUrl: "http://localhost:3000",
+        requestOrigin: "http://localhost:3000",
+      }),
+    ).toBe("/");
+  });
+
+  it("opens the directory on the same host", () => {
+    expect(
+      patientDirectoryHref({
+        staffUrl: "https://dentassist.rs/",
+        appUrl: "https://dentassist.rs",
+        requestOrigin: "https://dentassist.rs",
+      }),
+    ).toBe("/");
+  });
+
+  it("opens the public host when the staff site is separate", () => {
+    expect(
+      patientDirectoryHref({
+        staffUrl: "https://dent.dentassist.rs",
+        appUrl: "https://dentassist.rs",
+        requestOrigin: "https://dent.dentassist.rs",
+      }),
+    ).toBe("https://dentassist.rs");
+  });
+
+  it("opens the directory when the public host is unset", () => {
+    expect(patientDirectoryHref({ requestOrigin: "http://localhost:3000" })).toBe("/");
+    expect(patientDirectoryHref({})).toBe("/");
   });
 });
