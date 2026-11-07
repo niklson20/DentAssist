@@ -3,6 +3,7 @@
 import { appointmentStatusLabel, type AppointmentStatus } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
+import { AppointmentCard } from "./appointment-card";
 import type { DayGridColumn, DayGridModel } from "./day-calendar";
 import { useHideCancelled } from "./hide-cancelled";
 
@@ -50,15 +51,17 @@ export function PhoneDayList({
       ) : (
         <ul className="flex flex-col gap-2 p-3">
           {visits.map((visit) => (
-            <li
+            <AppointmentCard
               key={visit.id}
-              data-status={visit.status}
+              appointmentId={visit.id}
+              status={visit.status}
+              style={{}}
               className={cn("rounded-md border px-3 py-2 text-sm", STATUS_CLASS[visit.status])}
             >
               <p>{visit.timeLabel}</p>
               <p>{visit.label}</p>
-              <p className="sr-only">{appointmentStatusLabel(visit.status)}</p>
-            </li>
+              <span className="sr-only">{appointmentStatusLabel(visit.status)}. Otvori detalje termina</span>
+            </AppointmentCard>
           ))}
         </ul>
       )}

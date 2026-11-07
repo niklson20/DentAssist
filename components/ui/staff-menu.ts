@@ -8,7 +8,7 @@ export type StaffMenuItem = {
 const ITEMS: StaffMenuItem[] = [
   { href: "/danas", label: "Kalendar" },
   { href: "/pacijenti", label: "Pacijenti" },
-  { href: "/zahtevi", label: "Zahtevi" },
+  { href: "/zahtevi", label: "Termini" },
   { href: "/podesavanja", label: "Podešavanja" },
 ];
 

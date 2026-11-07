@@ -48,7 +48,7 @@ describe("settings page", () => {
   it("lists every section for the owner", async () => {
     requireMember.mockResolvedValue({ ...member, role: "owner" });
     const html = renderToStaticMarkup(await Page());
-    expect(html).toContain("Odeljci ordinacije.");
+    expect(html).not.toContain("Odeljci ordinacije.");
     expect(html).toContain('href="/podesavanja/ordinacija"');
     expect(html).toContain('href="/podesavanja/osoblje"');
     expect(html).toContain('href="/podesavanja/radno-vreme"');

@@ -73,7 +73,7 @@ describe("zahtevi page", () => {
     expect(loadRequestSection).toHaveBeenCalledWith("pending", 1);
     expect(html).toContain("Na čekanju (1)");
     expect(html).toContain("Prihvaćeni (2)");
-    expect(html).toContain("Odbijeni (3)");
+    expect(html).toContain("Otkazani (3)");
     expect(html).toContain("Istekli (4)");
     expect(html).toContain('href="/zahtevi"');
     expect(html).toContain('href="/zahtevi?sekcija=prihvaceni"');

@@ -6,6 +6,7 @@ import { formatBelgradeDate, type CalendarParams } from "@/lib/calendar-dates";
 
 import { CalendarShell } from "./calendar-shell";
 import { DayGrid } from "./day-grid";
+import { loadAppointmentChoices } from "./load-appointment-choices";
 import { loadDayCalendar } from "./load-day";
 import { loadMonthCalendar } from "./load-month";
 import { loadWeekCalendar } from "./load-week";
@@ -31,6 +32,7 @@ export default async function Page({ searchParams }: PageProps) {
   }
 
   const day = await loadDayCalendar(member.clinicId, query.datum);
+  const appointmentChoices = await loadAppointmentChoices(member.clinicId);
   const week =
     query.prikaz === "nedelja"
       ? await loadWeekCalendar(member.clinicId, query)
@@ -55,6 +57,7 @@ export default async function Page({ searchParams }: PageProps) {
       <div className="min-w-0">
         <CalendarShell
           query={query}
+          appointmentChoices={appointmentChoices ?? undefined}
           phoneCalendar={phoneCalendar}
           dayCalendar={dayBody}
           weekCalendar={

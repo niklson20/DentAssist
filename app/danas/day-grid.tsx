@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { isIsoDate } from "@/lib/calendar-dates";
 import { appointmentStatusLabel } from "@/lib/labels";
 
+import { AppointmentCard } from "./appointment-card";
 import type { DayGridHour, DayGridModel, DayGridVisit, GridBand, GridLine } from "./day-calendar";
 import { NowLine } from "./now-line";
 import { shortDateLabel, weekdayLabels } from "./weekday-labels";
@@ -128,12 +129,14 @@ export function TimeGrid({
                 {lane.visits.map((visit) => {
                   const warning = warningNote(visit);
                   return (
-                    <article
+                    <AppointmentCard
                       key={visit.id}
+                      appointmentId={visit.id}
+                      status={visit.status}
                       className="calendar-grid__visit"
-                      data-status={visit.status}
                       style={{ top: visit.top, height: visit.height }}
                     >
+                      <span className="sr-only">{appointmentStatusLabel(visit.status)}. Otvori detalje termina</span>
                       <p className="calendar-grid__visit-line">{visit.timeLabel}</p>
                       <p className="calendar-grid__visit-line">{visit.label}</p>
                       {warning ? (
@@ -141,8 +144,7 @@ export function TimeGrid({
                           {warning}
                         </p>
                       ) : null}
-                      <p className="sr-only">{appointmentStatusLabel(visit.status)}</p>
-                    </article>
+                    </AppointmentCard>
                   );
                 })}
               </div>

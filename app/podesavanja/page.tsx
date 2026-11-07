@@ -37,9 +37,7 @@ export default async function Page() {
     <>
       <header>
         <h1 className="text-2xl font-semibold">Podešavanja</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {member.role === "reception" ? "Vaš nalog." : "Odeljci ordinacije."}
-        </p>
+        {member.role === "reception" ? <p className="mt-1 text-sm text-muted-foreground">Vaš nalog.</p> : null}
       </header>
       <nav aria-label="Odeljci podešavanja">
         <SettingsSectionList sections={sections} />

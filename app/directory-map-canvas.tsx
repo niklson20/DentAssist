@@ -87,6 +87,13 @@ export function DirectoryMapCanvas({ clinics, className }: DirectoryMapProps) {
                   <p className="text-muted-foreground">
                     {formatDirectoryAddress(clinic.address, clinic.city)}
                   </p>
+                  {clinic.phone ? (
+                    <p>
+                      <a href={`tel:${clinic.phone}`} className="text-primary underline-offset-4 hover:underline">
+                        {clinic.phone}
+                      </a>
+                    </p>
+                  ) : null}
                   <Link
                     href={`/ordinacije/${encodeURIComponent(clinic.slug)}`}
                     className="text-primary underline-offset-4 hover:underline"

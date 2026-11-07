@@ -14,7 +14,7 @@ export const REQUEST_SECTION_QUERY: Record<RequestSection, string | null> = {
 export const REQUEST_SECTION_LABELS: Record<RequestSection, string> = {
   pending: "Na čekanju",
   accepted: "Prihvaćeni",
-  rejected: "Odbijeni",
+  rejected: "Otkazani",
   expired: "Istekli",
 };
 

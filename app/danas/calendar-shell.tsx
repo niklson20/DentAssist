@@ -73,6 +73,7 @@ export function CalendarShell({
     year: "numeric",
   });
   const [hidden, setHidden] = useState(query.sakrijOtkazane);
+  const [createAppointmentOpen, setCreateAppointmentOpen] = useState(false);
   useEffect(() => {
     setHidden(query.sakrijOtkazane);
   }, [query.sakrijOtkazane]);
@@ -139,7 +140,7 @@ export function CalendarShell({
         <DateJump query={liveQuery} />
         <div className="flex items-center justify-end gap-3">
           <HideCancelledToggle checked={hidden} onChange={toggleHidden} />
-          <Dialog>
+          <Dialog open={createAppointmentOpen} onOpenChange={setCreateAppointmentOpen}>
             <DialogTrigger render={<Button type="button" size="sm" />}>Novi termin</DialogTrigger>
             <DialogContent>
               <div className="flex items-start justify-between gap-3">
@@ -153,6 +154,7 @@ export function CalendarShell({
                 datum={query.datum}
                 today={formatBelgradeDate(new Date())}
                 defaultDentistId={query.stomatolog}
+                onCreated={() => setCreateAppointmentOpen(false)}
               />
             </DialogContent>
           </Dialog>

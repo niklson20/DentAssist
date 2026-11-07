@@ -389,6 +389,9 @@
   border-radius: var(--radius);
   font-size: 0.75rem;
   line-height: 1.2;
+  font-family: inherit;
+  text-align: left;
+  color: inherit;
 }
 
 .calendar-grid__visit-line {

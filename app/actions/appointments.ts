@@ -45,6 +45,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 const CHECK = "Proverite unete podatke.";
 const SAVE_UNAVAILABLE = "Čuvanje trenutno nije moguće. Pokušajte ponovo.";
 const EARLIER_DAY = "Raniji dan ne može.";
+const PAST_START = "Početak termina ne može biti u prošlosti.";
 const DENTIST_UNAVAILABLE = "Stomatolog je nedostupan.";
 const DENTIST_BUSY = "Stomatolog već ima termin u tom vremenu.";
 const CONTACT_REQUIRED =
@@ -201,6 +202,9 @@ export async function createAppointment(
   }
 
   const startsAt = parseBelgradeLocal(parsed.data.pocetak);
+  if (startsAt.getTime() <= Date.now()) {
+    return fail(CHECK, { pocetak: [PAST_START] });
+  }
   const endsAt = new Date(startsAt.getTime() + parsed.data.trajanje * 60_000);
 
   try {
@@ -323,6 +327,9 @@ export async function updateAppointment(
   }
 
   const startsAt = parseBelgradeLocal(parsed.data.pocetak);
+  if (startsAt.getTime() <= Date.now()) {
+    return fail(CHECK, { pocetak: [PAST_START] });
+  }
   const endsAt = new Date(startsAt.getTime() + parsed.data.trajanje * 60_000);
 
   try {

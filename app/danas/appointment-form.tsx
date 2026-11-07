@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState, useState, type ReactNode } from "react";
+import { Check, CaretDown } from "@phosphor-icons/react";
+import { Combobox } from "@base-ui/react/combobox";
 
 import { createAppointment, updateAppointment } from "@/app/actions/appointments";
 import { Button } from "@/components/ui/button";
@@ -50,6 +52,7 @@ export function AppointmentForm({
   defaultDentistId = null,
   termin = null,
   embedded = false,
+  onCreated,
 }: {
   choices: AppointmentFormChoices;
   datum: string;
@@ -57,16 +60,23 @@ export function AppointmentForm({
   defaultDentistId?: string | null;
   termin?: ExistingAppointment | null;
   embedded?: boolean;
+  onCreated?: () => void;
 }) {
   const [result, formAction, pending] = useActionState<ActionResult<{ id: string }> | null, FormData>(
-    termin ? updateAppointment : createAppointment,
+    async (previous, formData) => {
+      const next = await (termin ? updateAppointment : createAppointment)(previous, formData);
+      if (next.ok && !termin) onCreated?.();
+      return next;
+    },
     null,
   );
   const { dentists, patients, types, slotMinutes } = choices;
+  const startDefault = termin ? termin.startsAt : isIsoDate(datum) ? `${datum}T09:00` : "";
+  const [startsAt, setStartsAt] = useState(startDefault);
   const [patientId, setPatientId] = useState(
     termin && patients.some((patient) => patient.id === termin.patientId)
       ? termin.patientId
-      : (patients[0]?.id ?? ""),
+      : "",
   );
   const selected = patients.find((patient) => patient.id === patientId) ?? null;
   const askForContact = selected ? isUnder15(selected, today) && !selected.hasContact : false;
@@ -85,7 +95,6 @@ export function AppointmentForm({
       : durations.includes(30)
         ? "30"
         : String(slotMinutes);
-  const startDefault = termin ? termin.startsAt : isIsoDate(datum) ? `${datum}T09:00` : "";
   const typeDefault =
     termin && types.some((type) => type.id === termin.typeId) ? termin.typeId : (types[0]?.id ?? "");
   const formError = result && !result.ok ? result.error : null;
@@ -108,7 +117,7 @@ export function AppointmentForm({
       noValidate
       className={
         embedded
-          ? "flex flex-col gap-4"
+          ? "grid grid-cols-1 gap-x-3 gap-y-3 sm:grid-cols-2"
           : "flex max-w-lg flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground"
       }
     >
@@ -116,39 +125,94 @@ export function AppointmentForm({
         <h2 className="text-lg font-semibold text-foreground">{termin ? "Izmena termina" : "Novi termin"}</h2>
       )}
       {termin ? <input type="hidden" name="termin" value={termin.id} /> : null}
-      <Field id="appointment-dentist" label="Stomatolog" message={dentistError}>
-        <select
-          id="appointment-dentist"
-          name="stomatolog"
-          defaultValue={dentistDefault}
-          required
-          aria-invalid={dentistError ? true : undefined}
-          aria-describedby={describedBy("appointment-dentist", dentistError)}
-          className={controlClass}
-        >
-          <ChoiceOptions rows={dentists} />
-        </select>
+      <Field
+        id="appointment-dentist"
+        label="Stomatolog"
+        labelFor={dentists.length === 1 ? null : undefined}
+        message={dentistError}
+      >
+        {dentists.length === 1 ? (
+          <>
+            <input type="hidden" name="stomatolog" value={dentists[0].id} />
+            <div
+              role="group"
+              aria-labelledby="appointment-dentist-label"
+              className={`${controlClass} flex items-center`}
+            >
+              {dentists[0].label}
+            </div>
+          </>
+        ) : (
+          <select
+            id="appointment-dentist"
+            name="stomatolog"
+            defaultValue={dentistDefault}
+            required
+            aria-invalid={dentistError ? true : undefined}
+            aria-describedby={describedBy("appointment-dentist", dentistError)}
+            className={controlClass}
+          >
+            <ChoiceOptions rows={dentists} />
+          </select>
+        )}
       </Field>
       <Field id="appointment-patient" label="Pacijent" message={patientError}>
-        <select
-          id="appointment-patient"
-          name="pacijent"
-          value={patientId}
-          onChange={(event) => setPatientId(event.target.value)}
-          required
-          aria-invalid={patientError ? true : undefined}
-          aria-describedby={describedBy("appointment-patient", patientError)}
-          className={controlClass}
+        <input type="hidden" name="pacijent" value={patientId} />
+        <Combobox.Root
+          items={patients}
+          value={selected}
+          onValueChange={(patient) => setPatientId(patient?.id ?? "")}
+          itemToStringLabel={(patient) => patient.label}
+          itemToStringValue={(patient) => patient.id}
         >
-          <ChoiceOptions rows={patients} />
-        </select>
+          <Combobox.InputGroup className="relative">
+            <Combobox.Input
+              id="appointment-patient"
+              placeholder="Pretražite pacijente"
+              required
+              aria-invalid={patientError ? true : undefined}
+              aria-describedby={describedBy("appointment-patient", patientError)}
+              className={`${controlClass} pr-9 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20`}
+            />
+            <Combobox.Trigger
+              aria-label="Prikaži pacijente"
+              className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground outline-none focus-visible:text-foreground"
+            >
+              <CaretDown aria-hidden="true" size={16} />
+            </Combobox.Trigger>
+          </Combobox.InputGroup>
+          <Combobox.Portal>
+            <Combobox.Positioner className="z-[60] outline-none" sideOffset={4}>
+              <Combobox.Popup className="w-[var(--anchor-width)] max-w-[var(--available-width)] overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md">
+                <Combobox.Empty className="px-3 py-2 text-sm text-muted-foreground">
+                  Nema pronađenih pacijenata.
+                </Combobox.Empty>
+                <Combobox.List className="max-h-60 overflow-y-auto p-1 outline-none">
+                  {(patient: AppointmentPatientChoice) => (
+                    <Combobox.Item
+                      key={patient.id}
+                      value={patient}
+                      className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    >
+                      <Combobox.ItemIndicator className="flex size-4 items-center justify-center">
+                        <Check aria-hidden="true" size={14} />
+                      </Combobox.ItemIndicator>
+                      <span>{patient.label}</span>
+                    </Combobox.Item>
+                  )}
+                </Combobox.List>
+              </Combobox.Popup>
+            </Combobox.Positioner>
+          </Combobox.Portal>
+        </Combobox.Root>
       </Field>
       <Field id="appointment-start" label="Početak" message={startError}>
         <Input
           id="appointment-start"
           name="pocetak"
           type="datetime-local"
-          defaultValue={startDefault}
+          value={startsAt}
+          onChange={(event) => setStartsAt(event.target.value)}
           required
           aria-invalid={startError ? true : undefined}
           aria-describedby={describedBy("appointment-start", startError)}
@@ -184,20 +248,20 @@ export function AppointmentForm({
           <ChoiceOptions rows={types} />
         </select>
       </Field>
-      <Field id="appointment-note" label="Napomena" message={noteError}>
+      <Field id="appointment-note" label="Napomena" message={noteError} className={embedded ? "sm:col-span-2" : undefined}>
         <textarea
           id="appointment-note"
           name="napomena"
-          rows={3}
+          rows={embedded ? 2 : 3}
           maxLength={1000}
           defaultValue={termin ? termin.note : undefined}
           aria-invalid={noteError ? true : undefined}
           aria-describedby={describedBy("appointment-note", noteError)}
-          className={areaClass}
+          className={embedded ? `${areaClass} min-h-14` : areaClass}
         />
       </Field>
       {askForContact ? (
-        <fieldset className="flex flex-col gap-4 rounded-md border border-border p-4">
+        <fieldset className={`flex flex-col gap-3 rounded-md border border-border p-3 ${embedded ? "sm:col-span-2" : ""}`}>
           <legend className="px-1 text-sm font-medium text-foreground">Kontakt roditelja ili srodnika</legend>
           <Field id="appointment-contact-relationship" label="Odnos" message={relationshipError}>
             <select
@@ -257,7 +321,7 @@ export function AppointmentForm({
         </fieldset>
       ) : null}
       {contactOnFile ? (
-        <p className="text-sm text-muted-foreground">Kontakt roditelja ili srodnika je već unet.</p>
+        <p className={`text-sm text-muted-foreground ${embedded ? "sm:col-span-2" : ""}`}>Kontakt roditelja ili srodnika je već unet.</p>
       ) : null}
       {result?.ok ? (
         <p role="status" className="text-sm text-foreground">
@@ -269,8 +333,8 @@ export function AppointmentForm({
           {formError}
         </p>
       ) : null}
-      <Button type="submit" disabled={pending} className="self-start">
-        Sačuvaj
+      <Button type="submit" disabled={pending} className={`self-start ${embedded ? "sm:col-span-2" : ""}`}>
+        {termin ? "Sačuvaj" : "Kreiraj"}
       </Button>
     </form>
   );
@@ -292,19 +356,29 @@ function ChoiceOptions({ rows }: { rows: readonly AppointmentChoice[] }) {
 function Field({
   id,
   label,
+  labelFor = id,
   message,
+  className,
   children,
 }: {
   id: string;
   label: string;
+  labelFor?: string | null;
   message?: string;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-foreground">
-        {label}
-      </label>
+    <div className={`flex flex-col gap-1 ${className ?? ""}`}>
+      {labelFor ? (
+        <label htmlFor={labelFor} className="text-sm font-medium text-foreground">
+          {label}
+        </label>
+      ) : (
+        <span id={`${id}-label`} className="text-sm font-medium text-foreground">
+          {label}
+        </span>
+      )}
       {children}
       {message ? (
         <p id={errorId(id)} className="text-sm text-destructive">
