@@ -9,6 +9,7 @@ import {
   Odontogram,
   applyStatusChange,
   createToothChart,
+  nextSelectedTooth,
   toggleSurface,
   type ToothChart,
 } from "./odontogram";
@@ -22,6 +23,16 @@ const pageSource = readFileSync(path.join(process.cwd(), "app/pacijenti/[slug]/p
 const cssSource = readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
 
 describe("odontogram", () => {
+  it("clears the editor when the same tooth is chosen again", () => {
+    expect(nextSelectedTooth(null, "45")).toBe("45");
+    expect(nextSelectedTooth("45", "45")).toBeNull();
+    expect(nextSelectedTooth("45", "46")).toBe("46");
+    expect(componentSource).toContain("nextSelectedTooth");
+    expect(componentSource).toContain('document.addEventListener("pointerdown"');
+    expect(componentSource).toContain(".odontogram__editor");
+    expect(componentSource).toContain(".odontogram__tooth");
+  });
+
   it("shows surfaces for caries, none for a crown, and the old and new status under the map", () => {
     let chart = createToothChart();
     chart = applyStatusChange(chart, {

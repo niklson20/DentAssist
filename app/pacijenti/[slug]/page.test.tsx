@@ -10,6 +10,10 @@ const { requireMember, loadChildChart } = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth", () => ({ requireMember }));
 vi.mock("./load-child-chart", () => ({ loadChildChart }));
+vi.mock("@phosphor-icons/react", () => {
+  const Icon = () => <svg />;
+  return { PencilSimple: Icon };
+});
 
 import Page from "./page";
 
@@ -20,6 +24,7 @@ const chart = {
     firstName: "Mika",
     lastName: "Mikić",
     phone: null,
+    email: null,
     dateOfBirth: "2015-01-01",
     sex: null,
     address: null,

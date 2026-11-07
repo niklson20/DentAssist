@@ -35,6 +35,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# local demo logins for manual testing
+demo-nalozi.local.md
+
 # backups
 backups/
 

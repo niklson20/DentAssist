@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { Button } from "@/components/ui/button";
+import { StatisticsMonthField } from "@/app/statistika/month-field";
 import { requireOwner } from "@/lib/auth";
 import {
   formatStatisticsMonthLabel,
@@ -41,15 +41,8 @@ export default async function Page({ searchParams }: PageProps) {
         <form className="flex flex-wrap items-end gap-3" method="get">
           <label className="flex flex-col gap-1 text-sm text-muted-foreground">
             Izaberite mesec
-            <input
-              className="rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground shadow-sm"
-              type="month"
-              name="mesec"
-              value={month}
-              required
-            />
+            <StatisticsMonthField month={month} />
           </label>
-          <Button type="submit" variant="secondary">Prikaži</Button>
         </form>
       </section>
 
@@ -80,22 +73,22 @@ function StatisticsTable({
         <div className="overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full min-w-[28rem] border-collapse text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th scope="col" className="px-3 py-2 font-medium">Stomatolog</th>
-                <th scope="col" className="px-3 py-2 font-medium text-right">Termini</th>
-                <th scope="col" className="px-3 py-2 font-medium text-right">Novi pacijenti</th>
-                <th scope="col" className="px-3 py-2 font-medium text-right">Nedolasci</th>
+              <tr className="bg-muted text-left text-foreground">
+                <th scope="col" className="border-r border-border px-4 py-3 font-medium">Stomatolog</th>
+                <th scope="col" className="border-r border-border px-4 py-3 text-right font-medium">Termini</th>
+                <th scope="col" className="border-r border-border px-4 py-3 text-right font-medium">Novi pacijenti</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Nedolasci</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.dentistId} className="border-b border-border last:border-b-0">
-                  <th scope="row" className="px-3 py-2 text-left font-normal text-foreground">
+                <tr key={row.dentistId} className="border-t border-border">
+                  <th scope="row" className="border-r border-border px-4 py-3 text-left font-medium text-foreground">
                     {row.name}
                   </th>
-                  <td className="px-3 py-2 text-right tabular-nums text-foreground">{row.appointments}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-foreground">{row.newPatients}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-foreground">{row.noShows}</td>
+                  <td className="border-r border-border px-4 py-3 text-right tabular-nums text-foreground">{row.appointments}</td>
+                  <td className="border-r border-border px-4 py-3 text-right tabular-nums text-foreground">{row.newPatients}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{row.noShows}</td>
                 </tr>
               ))}
             </tbody>

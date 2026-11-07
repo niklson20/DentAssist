@@ -8,6 +8,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
+import { formatPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
   createPatientFromList,
@@ -129,7 +130,7 @@ function PatientListPanel({
                     {patient.lastName} {patient.firstName}
                   </span>
                   {patient.phone ? (
-                    <span className="text-sm text-muted-foreground">{patient.phone}</span>
+                    <span className="text-sm text-muted-foreground">{formatPhone(patient.phone)}</span>
                   ) : null}
                 </Link>
               </li>

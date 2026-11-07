@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { isIsoDate } from "@/lib/calendar-dates";
+import { normalizePhone } from "@/lib/phone";
 
 export const patientSearchQuerySchema = z.object({
   pretraga: z.string().trim().max(120).optional(),
@@ -36,7 +37,7 @@ export function newPatientFormSchema(today: string) {
       .string()
       .trim()
       .max(40, "Telefon može imati najviše 40 znakova.")
-      .transform(blankToNull),
+      .transform((value) => (value.length === 0 ? null : (normalizePhone(value) ?? value))),
     dateOfBirth: z
       .string()
       .trim()
@@ -57,6 +58,20 @@ export function newPatientFormSchema(today: string) {
     address: z.string().trim().max(200, "Adresa može imati najviše 200 znakova.").transform(blankToNull),
     note: z.string().trim().max(500, "Beleška može imati najviše 500 znakova.").transform(blankToNull),
     duplicateConfirmed: z.boolean(),
+  });
+}
+
+export function chartDetailsSchema(today: string) {
+  return newPatientFormSchema(today).pick({
+    firstName: true,
+    lastName: true,
+    phone: true,
+    dateOfBirth: true,
+    sex: true,
+    email: true,
+    address: true,
+    note: true,
+    duplicateConfirmed: true,
   });
 }
 

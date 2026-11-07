@@ -49,7 +49,13 @@ export default async function Page({ params }: PageProps) {
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 py-8">
-      <ChartHeader patient={chart.patient} alerts={chart.alerts} clinical={clinical} />
+      <ChartHeader
+        patient={chart.patient}
+        patientSlug={chart.patient.slug}
+        alerts={chart.alerts}
+        clinical={clinical}
+        today={onDate}
+      />
       {emailTasks.map((patient) => (
         <PatientEmailTask
           key={patient.slug}

@@ -11,7 +11,12 @@ import {
   startOfNextBelgradeDay,
   type CalendarQuery,
 } from "@/lib/calendar-dates";
-import { APPOINTMENT_STATUSES, appointmentStatusLabel } from "@/lib/labels";
+import {
+  APPOINTMENT_STATUSES,
+  CALENDAR_APPOINTMENT_STATUSES,
+  appointmentStatusLabel,
+  showsOnCalendar,
+} from "@/lib/labels";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import {
@@ -92,7 +97,7 @@ export function weekFromRows(input: {
   }
 
   const names = new Map(patients.map((patient) => [patient.id, `${patient.first_name} ${patient.last_name}`]));
-  const visits = appointments.filter((row) => row.dentist_id === dentist.id);
+  const visits = appointments.filter((row) => row.dentist_id === dentist.id && showsOnCalendar(row.status));
   const dates = weekDates(input.datum);
   const anySaved = memberHasSavedHours(schedules, dentist.id);
   const byDay = dates.map((datum) => ({
@@ -150,6 +155,7 @@ export async function loadWeekCalendar(clinicId: string, query: CalendarQuery): 
         .from("appointments")
         .select("id, dentist_id, patient_id, starts_at, ends_at, status")
         .eq("clinic_id", clinicId)
+        .in("status", [...CALENDAR_APPOINTMENT_STATUSES])
         .gte("starts_at", start)
         .lt("starts_at", end),
       supabase

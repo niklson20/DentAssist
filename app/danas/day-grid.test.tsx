@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { belgradeLocalToISO, formatBelgrade, localTimeOnDate } from "@/lib/calendar-dates";
-import { APPOINTMENT_STATUSES } from "@/lib/labels";
+import { APPOINTMENT_STATUSES, CALENDAR_APPOINTMENT_STATUSES } from "@/lib/labels";
 
 import { dayFromRows } from "./day-calendar";
 import { DayGrid } from "./day-grid";
@@ -108,7 +108,7 @@ describe("day grid", () => {
     expect(html).toContain("23. 10.");
     expect(html).not.toContain("23. oktobar 2026.");
     expect(html.indexOf("Ana Anić")).toBeLessThan(html.indexOf("Boris Borić"));
-    expect(model.hours[0]?.hour).toBe(8);
+    expect(model.hours[0]?.hour).toBe(9);
     expect(model.hours.at(-1)?.hour).toBe(17);
     const anaColumn = model.columns.find((column) => column.id === ana);
     const borisColumn = model.columns.find((column) => column.id === boris);
@@ -145,17 +145,19 @@ describe("day grid", () => {
     }
     expect(html).not.toContain("Rade Radić");
     expect(html).toContain("Mika Mikić");
-    expect(hoursList.indexOf(hourLabel(8))).toBeGreaterThanOrEqual(0);
-    expect(hoursList.indexOf(hourLabel(8))).toBeLessThan(hoursList.indexOf(hourLabel(9)));
+    expect(hoursList).not.toContain(hourLabel(8));
+    expect(hoursList.indexOf(hourLabel(9))).toBeGreaterThanOrEqual(0);
     expect(hoursList.indexOf(hourLabel(9))).toBeLessThan(hoursList.indexOf(hourLabel(10)));
     expect(hoursList).not.toContain(hourLabel(7));
     expect(tops.length).toBeGreaterThan(2);
     for (let index = 1; index < tops.length; index += 1) {
       expect(tops[index]).toBeGreaterThan(tops[index - 1] ?? 0);
     }
-    for (const status of APPOINTMENT_STATUSES) {
+    for (const status of CALENDAR_APPOINTMENT_STATUSES) {
       expect(html).toContain(`data-status="${status}"`);
     }
+    expect(html).not.toContain('data-status="pending_confirmation"');
+    expect(html).not.toContain('data-status="offered"');
 
     const blockStart = cssSource.indexOf("/* calendar-grid */");
     expect(blockStart).toBeGreaterThanOrEqual(0);
@@ -181,6 +183,9 @@ describe("day grid", () => {
     expect(gridSource).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(gridSource).not.toContain("line-through");
     expect(pageSource).toContain("loadDayCalendar");
+    expect(readFileSync(path.join(process.cwd(), "app/danas/load-day.ts"), "utf8")).toContain(
+      "CALENDAR_APPOINTMENT_STATUSES",
+    );
     expect(pageSource).toContain("DayGrid");
     expect(pageSource).not.toContain("query.sakrijOtkazane");
     expect(shellSource).toContain("data-hide-cancelled");

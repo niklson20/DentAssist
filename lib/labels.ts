@@ -162,6 +162,14 @@ export const OCCUPYING_APPOINTMENT_STATUSES = [
   "no_show",
 ] as const satisfies readonly AppointmentStatus[];
 
+/** Booked visits on the staff calendar. Request holds stay off the grid. */
+export const CALENDAR_APPOINTMENT_STATUSES = [
+  "scheduled",
+  "completed",
+  "no_show",
+  "cancelled",
+] as const satisfies readonly AppointmentStatus[];
+
 export const APPOINTMENT_SOURCES = ["patient", "staff"] as const;
 export type AppointmentSource = (typeof APPOINTMENT_SOURCES)[number];
 
@@ -253,6 +261,10 @@ export function appointmentStatusLabel(status: AppointmentStatus): string {
 
 export function occupiesAppointmentSlot(status: AppointmentStatus): boolean {
   return (OCCUPYING_APPOINTMENT_STATUSES as readonly AppointmentStatus[]).includes(status);
+}
+
+export function showsOnCalendar(status: AppointmentStatus): boolean {
+  return (CALENDAR_APPOINTMENT_STATUSES as readonly AppointmentStatus[]).includes(status);
 }
 
 export function appointmentSourceLabel(source: AppointmentSource): string {

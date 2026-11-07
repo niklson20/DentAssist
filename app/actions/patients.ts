@@ -4,9 +4,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { z, type ZodError } from "zod";
 
+import { parsePatientJmbg } from "@/app/pacijenti/new-patient-schema";
+import {
+  chartDetailsSchema,
+  DUPLICATE_CONFIRMATION_REQUIRED,
+  needsDuplicateNameConfirmation,
+  normalizePatientSearchTerm,
+} from "@/app/pacijenti/search-schema";
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireMember } from "@/lib/auth";
-import { isIsoDate, needsPatientEmailTask } from "@/lib/calendar-dates";
+import { formatBelgradeDate, isIsoDate, needsPatientEmailTask } from "@/lib/calendar-dates";
 import { ALERT_CODES } from "@/lib/labels";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -14,6 +21,7 @@ const CHECK = "Proverite unete podatke.";
 const UNAVAILABLE = "Čuvanje trenutno nije moguće. Pokušajte ponovo.";
 const CHART_MISSING = "Karton nije pronađen.";
 const EMAIL_SET = "Mejl je već upisan.";
+const EMAIL_TAKEN = "U ordinaciji već postoji pacijent sa tim mejlom.";
 const ANAMNESIS_HIDDEN = "Anamneza nije dostupna.";
 const ALERT_HIDDEN = "Upozorenje nije dostupno.";
 const MERGE_HIDDEN = "Spajanje nije dostupno.";
@@ -253,6 +261,180 @@ export async function dismissPatientEmail(
     console.error("dismiss_patient_email failed:", error instanceof Error ? error.name : "unknown");
     return fail(UNAVAILABLE);
   }
+}
+
+export async function saveChartDetails(
+  _previous: ActionResult<{ patientSlug: string }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ patientSlug: string }>> {
+  const member = await requireMember();
+  const slug = text(formData.get("patientSlug")).trim().toLowerCase();
+  if (!PATIENT_SLUG.test(slug)) return fail(CHART_MISSING);
+
+  const clinical = member.role === "owner" || member.role === "dentist";
+  const parsed = chartDetailsSchema(formatBelgradeDate(new Date())).safeParse({
+    firstName: text(formData.get("firstName")),
+    lastName: text(formData.get("lastName")),
+    phone: text(formData.get("phone")),
+    dateOfBirth: text(formData.get("dateOfBirth")),
+    sex: text(formData.get("sex")),
+    email: text(formData.get("email")),
+    address: text(formData.get("address")),
+    note: text(formData.get("note")),
+    duplicateConfirmed: parseDuplicateFlag(formData.get("duplicateConfirmed")),
+  });
+  const jmbg = clinical ? parsePatientJmbg(text(formData.get("jmbg"))) : { ok: true as const, jmbg: null };
+  if (!parsed.success || !jmbg.ok) {
+    const fieldErrors = parsed.success ? {} : fieldErrorsFrom(parsed.error);
+    if (!jmbg.ok) fieldErrors.jmbg = [jmbg.message];
+    return fail(CHECK, fieldErrors);
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const found = await supabase
+      .from("patients")
+      .select("id, first_name, last_name, email")
+      .eq("clinic_id", member.clinicId)
+      .eq("slug", slug)
+      .is("merged_into_id", null)
+      .maybeSingle();
+    if (found.error) {
+      console.error("save_chart_details rejected:", found.error.code ?? "rejected");
+      return fail(UNAVAILABLE);
+    }
+    const current = chartIdentity(found.data);
+    if (!current) return fail(CHART_MISSING);
+
+    const nameChanged =
+      normalizePatientSearchTerm(current.firstName) !== normalizePatientSearchTerm(parsed.data.firstName) ||
+      normalizePatientSearchTerm(current.lastName) !== normalizePatientSearchTerm(parsed.data.lastName);
+    if (nameChanged && !parsed.data.duplicateConfirmed) {
+      const names = await supabase
+        .from("patients")
+        .select("id, first_name, last_name")
+        .eq("clinic_id", member.clinicId)
+        .is("merged_into_id", null)
+        .ilike("first_name", `%${escapeIlike(parsed.data.firstName)}%`)
+        .ilike("last_name", `%${escapeIlike(parsed.data.lastName)}%`)
+        .limit(20);
+      if (names.error) {
+        console.error("save_chart_details names rejected:", names.error.code ?? "rejected");
+        return fail(UNAVAILABLE);
+      }
+      const others = chartNameRows(names.data).filter((row) => row.id !== current.id);
+      if (needsDuplicateNameConfirmation(others, parsed.data.firstName, parsed.data.lastName)) {
+        return fail(DUPLICATE_CONFIRMATION_REQUIRED, {
+          duplicateConfirmed: [DUPLICATE_CONFIRMATION_REQUIRED],
+        });
+      }
+    }
+
+    if (parsed.data.email && parsed.data.email !== current.email) {
+      const taken = await supabase
+        .from("patients")
+        .select("id")
+        .eq("clinic_id", member.clinicId)
+        .ilike("email", escapeIlike(parsed.data.email))
+        .limit(20);
+      if (taken.error) {
+        console.error("save_chart_details email rejected:", taken.error.code ?? "rejected");
+        return fail(UNAVAILABLE);
+      }
+      const clash = chartIds(taken.data).some((id) => id !== current.id);
+      if (clash) return fail(CHECK, { email: [EMAIL_TAKEN] });
+    }
+
+    const patch: {
+      first_name: string;
+      last_name: string;
+      phone: string | null;
+      email: string | null;
+      email_declined?: boolean;
+      date_of_birth: string | null;
+      sex: "male" | "female" | null;
+      address: string | null;
+      note: string | null;
+      jmbg?: string | null;
+    } = {
+      first_name: parsed.data.firstName,
+      last_name: parsed.data.lastName,
+      phone: parsed.data.phone,
+      email: parsed.data.email,
+      date_of_birth: parsed.data.dateOfBirth,
+      sex: parsed.data.sex,
+      address: parsed.data.address,
+      note: parsed.data.note,
+    };
+    if (parsed.data.email) patch.email_declined = false;
+    if (clinical) patch.jmbg = jmbg.jmbg;
+
+    const saved = await supabase
+      .from("patients")
+      .update(patch)
+      .eq("clinic_id", member.clinicId)
+      .eq("id", current.id)
+      .is("merged_into_id", null)
+      .select("id")
+      .maybeSingle();
+    if (saved.error) {
+      const code = saved.error.code ?? "rejected";
+      const detail = `${saved.error.message ?? ""} ${saved.error.details ?? ""}`.toLowerCase();
+      if (code === "23505" && detail.includes("email")) {
+        return fail(CHECK, { email: [EMAIL_TAKEN] });
+      }
+      console.error("save_chart_details rejected:", code);
+      return fail(UNAVAILABLE);
+    }
+    if (chartId(saved.data) !== current.id) return fail(UNAVAILABLE);
+
+    revalidatePath("/danas");
+    revalidatePath("/zahtevi");
+    revalidatePath("/pacijenti", "layout");
+    revalidatePath(`/pacijenti/${slug}`);
+    return ok({ patientSlug: slug });
+  } catch (error) {
+    console.error("save_chart_details failed:", error instanceof Error ? error.name : "unknown");
+    return fail(UNAVAILABLE);
+  }
+}
+
+function parseDuplicateFlag(value: FormDataEntryValue | null): boolean {
+  return value === "da" || value === "on" || value === "true";
+}
+
+function escapeIlike(term: string): string {
+  return term.replace(/[%_\\]/g, (char) => `\\${char}`);
+}
+
+function chartIdentity(data: unknown): { id: string; firstName: string; lastName: string; email: string | null } | null {
+  if (!data || typeof data !== "object") return null;
+  const record = data as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.first_name !== "string" || typeof record.last_name !== "string") {
+    return null;
+  }
+  const firstName = record.first_name.trim();
+  const lastName = record.last_name.trim();
+  if (!firstName || !lastName) return null;
+  const email = typeof record.email === "string" && record.email.trim() ? record.email.trim().toLowerCase() : null;
+  return { id: record.id, firstName, lastName, email };
+}
+
+function chartIds(data: unknown): string[] {
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((row) => {
+    if (!row || typeof row !== "object") return [];
+    const id = (row as Record<string, unknown>).id;
+    return typeof id === "string" ? [id] : [];
+  });
+}
+
+function chartNameRows(data: unknown): { id: string; firstName: string; lastName: string }[] {
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((row) => {
+    const identity = chartIdentity(row);
+    return identity ? [identity] : [];
+  });
 }
 
 async function findOpenChart(

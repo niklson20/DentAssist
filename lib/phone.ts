@@ -13,3 +13,9 @@ export function normalizePhone(input: string): string | null {
   }
   return value;
 }
+
+export function formatPhone(input: string | null | undefined): string | null {
+  const trimmed = input?.trim() ?? "";
+  if (!trimmed) return null;
+  return normalizePhone(trimmed) ?? trimmed;
+}

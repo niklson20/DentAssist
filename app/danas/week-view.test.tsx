@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { belgradeLocalToISO } from "@/lib/calendar-dates";
-import { APPOINTMENT_STATUSES, type AppointmentStatus } from "@/lib/labels";
+import { CALENDAR_APPOINTMENT_STATUSES, type AppointmentStatus } from "@/lib/labels";
 
 import { weekFromRows } from "./load-week";
 import { WeekView } from "./week-view";
@@ -141,9 +141,11 @@ describe("week view", () => {
       expect(atIndex).toBeGreaterThan(cursor);
       cursor = atIndex;
     }
-    for (const status of APPOINTMENT_STATUSES) {
+    for (const status of CALENDAR_APPOINTMENT_STATUSES) {
       expect(html).toContain(`data-status="${status}"`);
     }
+    expect(html).not.toContain('data-status="pending_confirmation"');
+    expect(html).not.toContain('data-status="offered"');
     expect(html).toContain("PON");
     expect(html).toContain("NED");
     expect(html.match(/data-current="true"/g)).toHaveLength(1);
@@ -170,6 +172,7 @@ describe("week view", () => {
     expect(cssSource).toContain("text-decoration: line-through");
 
     expect(loadSource).toContain("startOfBelgradeWeek(isoDate)");
+    expect(loadSource).toContain("CALENDAR_APPOINTMENT_STATUSES");
     expect(viewSource).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(viewSource.toLowerCase()).not.toContain("supabase");
     expect(pageSource).toContain("loadWeekCalendar");

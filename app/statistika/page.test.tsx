@@ -14,6 +14,9 @@ const { requireOwner, loadClinicStatistics } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({ requireOwner }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
 vi.mock("@/lib/queries/statistics", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/queries/statistics")>();
   return {

@@ -6,7 +6,12 @@ import {
   isoDayOfWeek,
   localTimeOnDate,
 } from "@/lib/calendar-dates";
-import { APPOINTMENT_STATUSES, appointmentStatusLabel, type AppointmentStatus } from "@/lib/labels";
+import {
+  APPOINTMENT_STATUSES,
+  appointmentStatusLabel,
+  showsOnCalendar,
+  type AppointmentStatus,
+} from "@/lib/labels";
 
 const FALLBACK_START_HOUR = 8;
 const FALLBACK_END_HOUR = 20;
@@ -205,7 +210,7 @@ export function dayFromRows(input: {
   );
 
   const visits = appointments
-    .filter((row) => columnIds.has(row.dentist_id))
+    .filter((row) => columnIds.has(row.dentist_id) && showsOnCalendar(row.status))
     .map((row) => ({
       id: row.id,
       dentistId: row.dentist_id,

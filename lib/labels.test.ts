@@ -6,6 +6,7 @@ import {
   APPOINTMENT_STATUSES,
   BOOKING_LINK_PURPOSES,
   BOOKING_REQUEST_STATUSES,
+  CALENDAR_APPOINTMENT_STATUSES,
   CANCELLED_BY,
   CLINIC_STATUSES,
   EMAIL_CLAIM_STATUSES,
@@ -35,6 +36,7 @@ import {
   relationshipLabels,
   reminderKindLabels,
   sexLabels,
+  showsOnCalendar,
   toothStatusAllowsSurfaces,
   toothStatusLabels,
   toothSurfaceLabels,
@@ -104,6 +106,13 @@ describe("labels", () => {
     ]);
     for (const status of APPOINTMENT_STATUSES) {
       expect(occupiesAppointmentSlot(status)).toBe(status !== "cancelled");
+    }
+  });
+
+  it("keeps request holds off the staff calendar", () => {
+    expect(CALENDAR_APPOINTMENT_STATUSES).toEqual(["scheduled", "completed", "no_show", "cancelled"]);
+    for (const status of APPOINTMENT_STATUSES) {
+      expect(showsOnCalendar(status)).toBe(status !== "pending_confirmation" && status !== "offered");
     }
   });
 

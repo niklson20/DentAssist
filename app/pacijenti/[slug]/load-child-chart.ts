@@ -107,6 +107,7 @@ export async function loadChildChart(
         firstName: patient.firstName,
         lastName: patient.lastName,
         phone: patient.phone,
+        email: patient.email,
         dateOfBirth: patient.dateOfBirth,
         sex: patient.sex,
         address: patient.address,

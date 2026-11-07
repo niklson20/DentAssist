@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -133,6 +133,10 @@ export function applyStatusChange(
       ...chart.changes,
     ],
   };
+}
+
+export function nextSelectedTooth(current: FdiTooth | null, clicked: FdiTooth): FdiTooth | null {
+  return current === clicked ? null : clicked;
 }
 
 export function toggleSurface(chart: ToothChart, tooth: FdiTooth, surface: ToothSurface): ToothChart {
@@ -333,6 +337,28 @@ export function Odontogram({
   const getSnapshot = useCallback(() => readPanel(panelId), [panelId]);
   const panel = useSyncExternalStore(subscribe, getSnapshot, serverPanel);
 
+  useEffect(() => {
+    if (!selectedTooth) {
+      return;
+    }
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.closest(".odontogram__editor") || target.closest(".odontogram__tooth")) {
+        return;
+      }
+      setSelectedTooth(null);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [selectedTooth]);
+
+  function selectTooth(tooth: FdiTooth) {
+    setSelectedTooth((current) => nextSelectedTooth(current, tooth));
+  }
+
   function changeStatus(status: ToothStatus) {
     if (!selectedTooth) {
       return;
@@ -362,7 +388,7 @@ export function Odontogram({
     <OdontogramMap
       chart={chart}
       selectedTooth={selectedTooth}
-      onSelect={setSelectedTooth}
+      onSelect={selectTooth}
       onStatus={changeStatus}
       onSurface={changeSurface}
     />

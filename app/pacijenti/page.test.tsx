@@ -177,7 +177,7 @@ describe("patient list page", () => {
       await Page({ searchParams: Promise.resolve({ pretraga: "061111" }) }),
     );
     expect(html).toContain("Perić Pera");
-    expect(html).toContain("061111111");
+    expect(html).toContain("+38161111111");
     expect(html).toContain("1–1 od 1.");
   });
 

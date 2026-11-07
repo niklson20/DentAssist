@@ -67,6 +67,8 @@ const appointments = [
   visit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3", ana, "cancelled", 8, 11),
   visit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4", ana, "scheduled", 9, 9),
   visit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5", reception, "scheduled", 8, 12),
+  visit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6", ana, "pending_confirmation", 8, 8),
+  visit("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7", ana, "offered", 8, 13),
 ];
 
 describe("month view", () => {
@@ -166,6 +168,7 @@ describe("month view", () => {
     expect(anaDay?.href).toBe(calendarPath({ ...query, stomatolog: ana }, { prikaz: "dan", datum }));
 
     expect(loadSource).toContain("startOfBelgradeWeek");
+    expect(loadSource).toContain("CALENDAR_APPOINTMENT_STATUSES");
     expect(viewSource).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(viewSource.toLowerCase()).not.toContain("supabase");
     expect(pageSource).toContain("loadMonthCalendar");

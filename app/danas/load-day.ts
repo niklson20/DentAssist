@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { isIsoDate, isoDayOfWeek, startOfBelgradeDay, startOfNextBelgradeDay } from "@/lib/calendar-dates";
+import { CALENDAR_APPOINTMENT_STATUSES } from "@/lib/labels";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { dayFromRows, slotStep, type DayGridModel } from "./day-calendar";
@@ -28,6 +29,7 @@ export async function loadDayCalendar(clinicId: string, datum: string): Promise<
         .from("appointments")
         .select("id, dentist_id, patient_id, starts_at, ends_at, status")
         .eq("clinic_id", clinicId)
+        .in("status", [...CALENDAR_APPOINTMENT_STATUSES])
         .gte("starts_at", start)
         .lt("starts_at", end),
       supabase

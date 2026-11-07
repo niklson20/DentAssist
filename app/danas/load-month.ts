@@ -14,7 +14,7 @@ import {
   startOfNextBelgradeDay,
   type CalendarQuery,
 } from "@/lib/calendar-dates";
-import { APPOINTMENT_STATUSES } from "@/lib/labels";
+import { APPOINTMENT_STATUSES, CALENDAR_APPOINTMENT_STATUSES, showsOnCalendar } from "@/lib/labels";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import { closedDows, schedulesFromRows } from "./day-calendar";
@@ -94,7 +94,7 @@ export function monthFromRows(input: {
   const openCounts = new Map<string, number>();
   const totalCounts = new Map<string, number>();
   for (const row of appointments) {
-    if (!dentistIds.has(row.dentist_id)) {
+    if (!dentistIds.has(row.dentist_id) || !showsOnCalendar(row.status)) {
       continue;
     }
     const datum = formatBelgradeDate(new Date(row.starts_at));
@@ -153,6 +153,7 @@ export async function loadMonthCalendar(clinicId: string, query: CalendarQuery):
         .from("appointments")
         .select("id, dentist_id, patient_id, starts_at, ends_at, status")
         .eq("clinic_id", clinicId)
+        .in("status", [...CALENDAR_APPOINTMENT_STATUSES])
         .gte("starts_at", start)
         .lt("starts_at", end),
       supabase
