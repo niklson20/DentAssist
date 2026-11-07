@@ -243,6 +243,22 @@ describe("patient registration", () => {
     expect(rpcNamed("abandon_patient_email_challenge")).toBeUndefined();
   });
 
+  it("creates a site-wide patient account without requiring a clinic", async () => {
+    const result = await registerPatient(
+      null,
+      form({
+        firstName: "Ana",
+        lastName: "Jović",
+        email: "Ana@Example.com",
+        password: "lozinka-1",
+      }),
+    );
+
+    expect(result).toEqual({ ok: true, data: { step: "code" } });
+    expect(mocks.loadClinicPublic).not.toHaveBeenCalled();
+    expect(db.account).toMatchObject({ email: "ana@example.com", email_confirmed_at: null });
+  });
+
   it("does not start a challenge when the network already sent 10 codes", async () => {
     db.quota = { status: "ok", email_sends: 0, network_sends: 10 };
     const result = await registerPatient(null, form(registerFields));
@@ -346,6 +362,11 @@ describe("patient email confirmation", () => {
     expect(rpcNamed("confirm_patient_email")?.args).toEqual({ p_code: "123456" });
   });
 
+  it("returns a confirmed site-wide account to the directory", async () => {
+    await expect(confirmPatientEmail(null, form({ code: "123456" }))).rejects.toThrow("REDIRECT:/");
+    expect(mocks.loadClinicPublic).not.toHaveBeenCalled();
+  });
+
   it("does not confirm the account when the code is wrong", async () => {
     db.confirmStatus = "wrong";
     const result = await confirmPatientEmail(null, form({ code: "000000", slug: "centar" }));
@@ -397,6 +418,21 @@ describe("patient sign-in", () => {
     await expect(
       signInPatient(null, form({ email: "ana@example.com", password: "lozinka-1", slug: "centar" })),
     ).rejects.toThrow("REDIRECT:/ordinacije/centar");
+  });
+
+  it("returns a site-wide patient to the directory", async () => {
+    db.account = { id: "acc-1", email: "ana@example.com", email_confirmed_at: "2026-10-22T10:00:00.000Z" };
+    await expect(
+      signInPatient(null, form({ email: "ana@example.com", password: "lozinka-1" })),
+    ).rejects.toThrow("REDIRECT:/");
+    expect(mocks.loadClinicPublic).not.toHaveBeenCalled();
+  });
+
+  it("sends a site-wide unconfirmed patient to the code form", async () => {
+    db.account = { id: "acc-1", email: "ana@example.com", email_confirmed_at: null };
+    await expect(
+      signInPatient(null, form({ email: "ana@example.com", password: "lozinka-1" })),
+    ).rejects.toThrow("REDIRECT:/nalog/registracija");
   });
 
   it("rejects a signed-in user who has no patient account", async () => {
@@ -455,6 +491,16 @@ describe("resend", () => {
 });
 
 describe("signOutPatient", () => {
+  it("clears the local session and returns to the directory without a clinic", async () => {
+    db.user = { id: "user-1", email: "ana@example.com" };
+    await expect(signOutPatient(null, form({}))).rejects.toThrow("REDIRECT:/");
+    expect(db.signOutScope).toBe("local");
+    expect(db.user).toBeNull();
+    const gate = mocks.cookieSet.mock.calls.find(([name]) => name === SESSION_GATE_COOKIE);
+    expect(gate?.[1]).toBe("");
+    expect(gate?.[2].maxAge).toBe(0);
+  });
+
   it("clears the local session and returns to the clinic page", async () => {
     db.user = { id: "user-1", email: "ana@example.com" };
     await expect(signOutPatient(null, form({ slug: "Belino" }))).rejects.toThrow("REDIRECT:/ordinacije/belino");
@@ -473,12 +519,24 @@ describe("signOutPatient", () => {
     expect(db.user).not.toBeNull();
   });
 
-  it("keeps the session when the provider rejects the sign-out", async () => {
+  it("clears local cookies and returns even when the provider rejects the sign-out", async () => {
     db.user = { id: "user-1", email: "ana@example.com" };
     db.signOutError = { code: "unexpected" };
-    const result = await signOutPatient(null, form({ slug: "belino" }));
-    expect(result).toEqual({ ok: false, error: "Odjava nije uspela. Pokušajte ponovo." });
+    mocks.cookieGetAll.mockReturnValue([
+      { name: "sb-project-auth-token", value: "token" },
+      { name: "sb-project-auth-token.0", value: "token-chunk" },
+      { name: SESSION_GATE_COOKIE, value: "patient" },
+      { name: "dent_remember", value: "1" },
+    ]);
+
+    await expect(signOutPatient(null, form({ slug: "belino" }))).rejects.toThrow("REDIRECT:/ordinacije/belino");
     expect(db.user).not.toBeNull();
-    expect(mocks.cookieSet).not.toHaveBeenCalled();
+    expect(mocks.cookieSet.mock.calls.map(([name]) => name)).toEqual([
+      "sb-project-auth-token",
+      "sb-project-auth-token.0",
+      "dent_remember",
+      SESSION_GATE_COOKIE,
+    ]);
+    expect(mocks.cookieSet.mock.calls.every(([, value, options]) => value === "" && options.maxAge === 0)).toBe(true);
   });
 });

@@ -46,6 +46,7 @@ const CODE_DEAD = "Kod više ne važi. Zatražite novi.";
 const OTHER_ACCOUNT = "Već ste prijavljeni drugim nalogom.";
 
 type Gate = "staff" | "platform" | "patient";
+const AUTH_COOKIE_NAME = /^sb-[a-z0-9]+-auth-token(?:\.\d+)?$/;
 
 type AccountRow = {
   id: string;
@@ -69,8 +70,8 @@ export async function signOutPatient(
   formData: FormData,
 ): Promise<ActionResult> {
   const rawSlug = formData.get("slug");
-  const slug = normalizeClinicSlug(typeof rawSlug === "string" ? rawSlug : undefined);
-  if (!slug) {
+  const slug = typeof rawSlug === "string" ? normalizeClinicSlug(rawSlug) : null;
+  if (typeof rawSlug === "string" && !slug) {
     return fail(SIGN_OUT_FAILED);
   }
 
@@ -78,16 +79,20 @@ export async function signOutPatient(
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase.auth.signOut({ scope: "local" });
     if (error) {
-      console.error("Patient sign-out rejected:", error.code ?? error.status ?? "unknown");
-      return fail(SIGN_OUT_FAILED);
+      console.error("Patient sign-out rejected:", error.code ?? error.status ?? error.name);
     }
-    await clearGate();
   } catch (error) {
-    console.error("Patient sign-out failed:", error instanceof Error ? error.name : "unknown");
+    console.error("Patient sign-out failed:", error instanceof Error ? error.message : "unknown error");
+  }
+
+  try {
+    await clearLocalSession();
+  } catch (error) {
+    console.error("Patient local session cleanup failed:", error instanceof Error ? error.message : "unknown error");
     return fail(SIGN_OUT_FAILED);
   }
 
-  redirect(`/ordinacije/${slug}`);
+  redirect(slug ? `/ordinacije/${slug}` : "/");
 }
 
 export async function signInPatient(
@@ -182,14 +187,15 @@ export async function resendPatientEmailCode(
 }
 
 async function signInDestination(
-  input: { email: string; password: string; slug: string; stomatolog?: string; pocetak?: string },
+  input: { email: string; password: string; slug?: string; stomatolog?: string; pocetak?: string },
 ): Promise<string | ActionResult<never>> {
   try {
-    const opened = await openClinic(input.slug);
-    if (!opened) {
+    const opened = input.slug ? await openClinic(input.slug) : null;
+    if (input.slug && !opened) {
       return fail(CLINIC_UNAVAILABLE);
     }
     const query = readReturn(input);
+    const returnPath = opened ? patientReturnPath(opened.slug, query) : "/";
     const supabase = await createSupabaseServerClient({ remember: false });
     const signedIn = await supabase.auth.signInWithPassword({
       email: input.email,
@@ -219,9 +225,9 @@ async function signInDestination(
     }
     await writeGate(gate, true);
     if (!lookup.account.emailConfirmedAt) {
-      return patientAuthPath(opened.slug, "registracija", query);
+      return opened ? patientAuthPath(opened.slug, "registracija", query) : "/nalog/registracija";
     }
-    return patientReturnPath(opened.slug, query);
+    return returnPath;
   } catch (error) {
     console.error("Patient sign-in failed:", error instanceof Error ? error.name : "unknown error");
     return fail(UNAVAILABLE);
@@ -233,7 +239,7 @@ async function registerOutcome(input: {
   lastName: string;
   email: string;
   password: string;
-  slug: string;
+  slug?: string;
   stomatolog?: string;
   pocetak?: string;
   turnstileToken?: string;
@@ -241,12 +247,12 @@ async function registerOutcome(input: {
   let createdUserId: string | null = null;
   let accountSaved = false;
   try {
-    const opened = await openClinic(input.slug);
-    if (!opened) {
+    const opened = input.slug ? await openClinic(input.slug) : null;
+    if (input.slug && !opened) {
       return { type: "result", result: fail(CLINIC_UNAVAILABLE) };
     }
     const query = readReturn(input);
-    const returnPath = patientReturnPath(opened.slug, query);
+    const returnPath = opened ? patientReturnPath(opened.slug, query) : "/";
     const supabase = await patientClient();
     const existing = await readAuthUser(supabase);
     if (existing && existing.email !== input.email) {
@@ -346,14 +352,15 @@ async function registerOutcome(input: {
 
 async function confirmDestination(
   code: string,
-  input: { slug: string; stomatolog?: string; pocetak?: string },
+  input: { slug?: string; stomatolog?: string; pocetak?: string },
 ): Promise<string | ActionResult<never>> {
   try {
-    const opened = await openClinic(input.slug);
-    if (!opened) {
+    const opened = input.slug ? await openClinic(input.slug) : null;
+    if (input.slug && !opened) {
       return fail(CLINIC_UNAVAILABLE);
     }
     const query = readReturn(input);
+    const returnPath = opened ? patientReturnPath(opened.slug, query) : "/";
     const supabase = await patientClient();
     const user = await readAuthUser(supabase);
     if (!user) {
@@ -367,7 +374,7 @@ async function confirmDestination(
       return fail(NOT_PATIENT);
     }
     if (lookup.account.emailConfirmedAt) {
-      return patientReturnPath(opened.slug, query);
+      return returnPath;
     }
 
     const { data, error } = await supabase.rpc("confirm_patient_email", { p_code: code });
@@ -377,7 +384,7 @@ async function confirmDestination(
     }
     const status = readStatus(data);
     if (status === "ok" || status === "already_confirmed") {
-      return patientReturnPath(opened.slug, query);
+      return returnPath;
     }
     if (status === "wrong") {
       return fail(WRONG_CODE, { code: [WRONG_CODE] });
@@ -390,17 +397,18 @@ async function confirmDestination(
 }
 
 async function resendDestination(input: {
-  slug: string;
+  slug?: string;
   stomatolog?: string;
   pocetak?: string;
   turnstileToken?: string;
 }): Promise<string | ActionResult<{ step: "code" }>> {
   try {
-    const opened = await openClinic(input.slug);
-    if (!opened) {
+    const opened = input.slug ? await openClinic(input.slug) : null;
+    if (input.slug && !opened) {
       return fail(CLINIC_UNAVAILABLE);
     }
     const query = readReturn(input);
+    const returnPath = opened ? patientReturnPath(opened.slug, query) : "/";
     const supabase = await patientClient();
     const user = await readAuthUser(supabase);
     if (!user) {
@@ -414,12 +422,12 @@ async function resendDestination(input: {
       return fail(NOT_PATIENT);
     }
     if (lookup.account.emailConfirmedAt) {
-      return patientReturnPath(opened.slug, query);
+      return returnPath;
     }
 
     const sent = await sendConfirmationCode(supabase, lookup.account.email, input.turnstileToken);
     if (sent.kind === "confirmed") {
-      return patientReturnPath(opened.slug, query);
+      return returnPath;
     }
     if (sent.kind === "fail") {
       return sent.result;
@@ -640,6 +648,17 @@ async function writeGate(gate: Gate, signedInNow: boolean): Promise<void> {
     store.set(REMEMBER_COOKIE, "0", sessionCookieOptions({}, false));
   }
   store.set(SESSION_GATE_COOKIE, gate, sessionCookieOptions({}, remember));
+}
+
+async function clearLocalSession(): Promise<void> {
+  const store = await cookies();
+  for (const { name } of store.getAll()) {
+    if (AUTH_COOKIE_NAME.test(name)) {
+      store.set(name, "", sessionCookieOptions({ maxAge: 0 }, false));
+    }
+  }
+  store.set(REMEMBER_COOKIE, "", sessionCookieOptions({ maxAge: 0 }, false));
+  store.set(SESSION_GATE_COOKIE, "", sessionCookieOptions({ maxAge: 0 }, false));
 }
 
 async function clearGate(): Promise<void> {

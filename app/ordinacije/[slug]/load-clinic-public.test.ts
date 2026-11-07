@@ -37,6 +37,12 @@ describe("loadClinicPublic", () => {
           dentists: [{ id: "11111111-1111-4111-8111-111111111111", first_name: "Ana", last_name: "Jović" }],
           max_ahead_days: 30,
           default_duration_min: 30,
+          weekday_opens_at: "08:00:00",
+          weekday_closes_at: "18:00:00",
+          weekend_opens_at: null,
+          weekend_closes_at: null,
+          weekday_has_schedule: true,
+          weekend_has_schedule: true,
         },
       ],
       error: null,
@@ -61,6 +67,10 @@ describe("loadClinicPublic", () => {
         ],
         maxAheadDays: 30,
         defaultDurationMin: 30,
+        weekdayHours: { opensAt: "08:00:00", closesAt: "18:00:00" },
+        weekendHours: null,
+        weekdayHasSchedule: true,
+        weekendHasSchedule: true,
       },
     });
     expect(mocks.rpc).toHaveBeenCalledWith("get_clinic_public", { slug: "ordinacija-jovanovic" });

@@ -6,7 +6,7 @@ import { signOutPatient } from "@/app/actions/patient-auth";
 import { Button } from "@/components/ui/button";
 import type { ActionResult } from "@/lib/action-result";
 
-export function PatientSignOutButton({ slug }: { slug: string }) {
+export function PatientSignOutButton({ slug }: { slug?: string }) {
   const [result, formAction, pending] = useActionState<ActionResult | null, FormData>(signOutPatient, null);
   const signOutError = result && !result.ok ? result.error : null;
 
@@ -15,7 +15,7 @@ export function PatientSignOutButton({ slug }: { slug: string }) {
       <Button type="submit" variant="outline" size="sm" disabled={pending}>
         {pending ? "Odjava…" : "Odjava"}
       </Button>
-      <input type="hidden" name="slug" value={slug} />
+      {slug ? <input type="hidden" name="slug" value={slug} /> : null}
       {signOutError ? (
         <p role="alert" className="max-w-48 text-right text-xs text-destructive">
           {signOutError}

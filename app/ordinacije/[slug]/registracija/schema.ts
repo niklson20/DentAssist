@@ -35,7 +35,10 @@ function requiredName(empty: string) {
 }
 
 const returnFields = {
-  slug: z.string({ error: CLINIC_UNAVAILABLE }).trim().min(1, CLINIC_UNAVAILABLE),
+  slug: z
+    .union([z.string({ error: CLINIC_UNAVAILABLE }).trim().min(1, CLINIC_UNAVAILABLE), z.null()])
+    .optional()
+    .transform((value) => (typeof value === "string" ? value : undefined)),
   stomatolog: optionalText,
   pocetak: optionalText,
 };

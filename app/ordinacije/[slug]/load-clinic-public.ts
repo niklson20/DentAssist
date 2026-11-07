@@ -13,6 +13,15 @@ export type ClinicPublicView = {
   dentists: PublicDentist[];
   maxAheadDays: number;
   defaultDurationMin: number;
+  weekdayHours: ClinicHoursRange | null;
+  weekendHours: ClinicHoursRange | null;
+  weekdayHasSchedule: boolean;
+  weekendHasSchedule: boolean;
+};
+
+export type ClinicHoursRange = {
+  opensAt: string;
+  closesAt: string;
 };
 
 export type ClinicPublicLoad =
@@ -30,6 +39,12 @@ type ClinicPublicRow = {
   dentists: unknown;
   max_ahead_days: number;
   default_duration_min: number;
+  weekday_opens_at: string | null;
+  weekday_closes_at: string | null;
+  weekend_opens_at: string | null;
+  weekend_closes_at: string | null;
+  weekday_has_schedule: boolean;
+  weekend_has_schedule: boolean;
 };
 
 export async function loadClinicPublic(slug: string): Promise<ClinicPublicLoad> {
@@ -65,6 +80,10 @@ export async function loadClinicPublic(slug: string): Promise<ClinicPublicLoad> 
         dentists: parsePublicDentists(row.dentists),
         maxAheadDays: row.max_ahead_days,
         defaultDurationMin: row.default_duration_min,
+        weekdayHours: mapHoursRange(row.weekday_opens_at, row.weekday_closes_at),
+        weekendHours: mapHoursRange(row.weekend_opens_at, row.weekend_closes_at),
+        weekdayHasSchedule: row.weekday_has_schedule,
+        weekendHasSchedule: row.weekend_has_schedule,
       },
     };
   } catch (loadError) {
@@ -74,6 +93,16 @@ export async function loadClinicPublic(slug: string): Promise<ClinicPublicLoad> 
     );
     return { status: "unavailable" };
   }
+}
+
+function mapHoursRange(
+  opensAt: string | null,
+  closesAt: string | null,
+): ClinicHoursRange | null {
+  if (!opensAt || !closesAt) {
+    return null;
+  }
+  return { opensAt, closesAt };
 }
 
 function publicLogoUrl(logoPath: string | null): string | null {

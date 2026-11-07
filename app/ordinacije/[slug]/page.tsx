@@ -65,10 +65,15 @@ export default async function ClinicPublicPage({ params }: PageProps) {
     <ClinicProfileView
       slug={clinic.slug}
       name={clinic.name}
+      city={clinic.city}
       address={clinic.address}
       phone={clinic.phone}
       description={clinic.description}
       logoUrl={clinic.logoUrl}
+      weekdayHours={clinic.weekdayHours}
+      weekendHours={clinic.weekendHours}
+      weekdayHasSchedule={clinic.weekdayHasSchedule}
+      weekendHasSchedule={clinic.weekendHasSchedule}
       dentists={isPatient ? clinic.dentists : []}
       initialDentistId={preferredDentistId}
       showPatientAuth={!isPatient}

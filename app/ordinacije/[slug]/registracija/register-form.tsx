@@ -14,14 +14,14 @@ import { Input } from "@/components/ui/input";
 import type { ActionResult } from "@/lib/action-result";
 
 type RegisterFormProps = {
-  slug: string;
-  clinicName: string;
+  slug?: string;
+  clinicName?: string;
   mode: "details" | "code";
   email?: string;
   stomatolog?: string;
   pocetak?: string;
   loginHref: string;
-  clinicHref: string;
+  clinicHref?: string;
   turnstileSiteKey: string | null;
 };
 
@@ -83,12 +83,12 @@ function DetailsStep({
   action,
   pending,
 }: {
-  slug: string;
-  clinicName: string;
+  slug?: string;
+  clinicName?: string;
   stomatolog?: string;
   pocetak?: string;
   loginHref: string;
-  clinicHref: string;
+  clinicHref?: string;
   turnstileSiteKey: string | null;
   result: ActionResult<{ step: "code" }> | null;
   action: (formData: FormData) => void;
@@ -108,7 +108,9 @@ function DetailsStep({
       ) : null}
       <h1 className="text-xl font-semibold">Registracija</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Otvorite nalog pacijenta za ordinaciju {clinicName}. Mejl se potvrđuje kodom.
+        {clinicName
+          ? `Otvorite nalog pacijenta za ordinaciju ${clinicName}. Mejl se potvrđuje kodom.`
+          : "Otvorite nalog pacijenta za zakazivanje u bilo kojoj ordinaciji. Mejl se potvrđuje kodom."}
       </p>
 
       <form action={action} className="mt-6 flex flex-col gap-4" noValidate>
@@ -154,11 +156,11 @@ function CodeStep({
   clinicHref,
   turnstileSiteKey,
 }: {
-  slug: string;
+  slug?: string;
   email?: string;
   stomatolog?: string;
   pocetak?: string;
-  clinicHref: string;
+  clinicHref?: string;
   turnstileSiteKey: string | null;
 }) {
   const [confirmed, confirmAction, confirmPending] = useActionState<ActionResult | null, FormData>(
@@ -245,13 +247,13 @@ function ReturnFields({
   stomatolog,
   pocetak,
 }: {
-  slug: string;
+  slug?: string;
   stomatolog?: string;
   pocetak?: string;
 }) {
   return (
     <>
-      <input type="hidden" name="slug" value={slug} />
+      {slug ? <input type="hidden" name="slug" value={slug} /> : null}
       {stomatolog ? <input type="hidden" name="stomatolog" value={stomatolog} /> : null}
       {pocetak ? <input type="hidden" name="pocetak" value={pocetak} /> : null}
     </>
@@ -320,7 +322,10 @@ function TurnstileField({
   );
 }
 
-function ClinicLink({ href }: { href: string }) {
+function ClinicLink({ href }: { href?: string }) {
+  if (!href) {
+    return null;
+  }
   return (
     <p className="mt-2 text-sm">
       <Link href={href} className="text-primary underline-offset-4 hover:underline">

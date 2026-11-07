@@ -9,12 +9,12 @@ import { Input } from "@/components/ui/input";
 import type { ActionResult } from "@/lib/action-result";
 
 type LoginFormProps = {
-  slug: string;
-  clinicName: string;
+  slug?: string;
+  clinicName?: string;
   stomatolog?: string;
   pocetak?: string;
   registerHref: string;
-  clinicHref: string;
+  clinicHref?: string;
 };
 
 export function LoginForm({
@@ -34,11 +34,13 @@ export function LoginForm({
     <section className="w-full max-w-sm rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xs">
       <h1 className="text-xl font-semibold">Prijava</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Prijavite se da nastavite u ordinaciji {clinicName}.
+        {clinicName
+          ? `Prijavite se da nastavite u ordinaciji ${clinicName}.`
+          : "Prijavite se da biste zakazali u bilo kojoj ordinaciji."}
       </p>
 
       <form action={formAction} className="mt-6 flex flex-col gap-4" noValidate>
-        <input type="hidden" name="slug" value={slug} />
+        {slug ? <input type="hidden" name="slug" value={slug} /> : null}
         {stomatolog ? <input type="hidden" name="stomatolog" value={stomatolog} /> : null}
         {pocetak ? <input type="hidden" name="pocetak" value={pocetak} /> : null}
 
@@ -97,11 +99,13 @@ export function LoginForm({
           Registracija
         </Link>
       </p>
-      <p className="mt-2 text-sm">
-        <Link href={clinicHref} className="text-primary underline-offset-4 hover:underline">
-          Nazad na ordinaciju
-        </Link>
-      </p>
+      {clinicHref ? (
+        <p className="mt-2 text-sm">
+          <Link href={clinicHref} className="text-primary underline-offset-4 hover:underline">
+            Nazad na ordinaciju
+          </Link>
+        </p>
+      ) : null}
     </section>
   );
 }
