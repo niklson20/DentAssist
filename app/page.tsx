@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 
 import {
@@ -13,9 +14,11 @@ import {
 import { DirectoryCityFilter, DirectoryMapPanel, ViewModeTabs } from "@/app/directory-map";
 import { PublicSiteFooter, publicSiteFooterClearance } from "@/app/ordinacije/public-site-footer";
 import { PublicSiteNav } from "@/app/ordinacije/public-site-nav";
+import { PatientSignOutButton } from "@/app/ordinacije/[slug]/sign-out-button";
 import { resolveStaffEntryUrl } from "@/app/ordinacije/staff-entry-url";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getSessionKind } from "@/lib/auth";
 import {
   listDirectoryCities,
   searchDirectoryClinics,
@@ -54,6 +57,7 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
   const directoryPage = paginateDirectory(clinics, parseDirectoryPage(params.strana));
 
   const staffEntryUrl = await resolveStaffEntryUrl();
+  const sessionKind = await getSessionKind();
   const hasFilter = Boolean(selectedCity || nameQuery || located);
   const showMap = clinics.length > 0 && Boolean(nameQuery || selectedCity || located);
   const showDirectory = clinics.length > 0 || hasFilter;
@@ -72,16 +76,36 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
 
   return (
     <div className="relative flex min-h-svh flex-col bg-background text-foreground">
-      <PublicSiteNav />
+      <PublicSiteNav>
+        {sessionKind === "patient" ? (
+          <nav aria-label="Nalog pacijenta" className="flex items-center gap-1">
+            <Link
+              href="/nalog/profil"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              Profil
+            </Link>
+            <PatientSignOutButton />
+          </nav>
+        ) : (
+          <nav aria-label="Nalog pacijenta" className="flex items-center gap-1">
+            <Link
+              href="/nalog/prijava"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              Prijava
+            </Link>
+            <Link href="/nalog/registracija" className={buttonVariants({ size: "sm" })}>
+              Registracija
+            </Link>
+          </nav>
+        )}
+      </PublicSiteNav>
       <main
         className={`mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-4 pt-8 ${publicSiteFooterClearance}`}
       >
-        <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between lg:gap-12">
-          <header className="min-w-0 space-y-2 lg:flex-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Imenik ordinacija</h1>
-          </header>
-
-          <section className="w-full space-y-3 lg:w-[28rem] lg:shrink-0">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <section className="w-full space-y-3 sm:order-2 sm:w-[300px] sm:shrink-0">
             <form className="flex flex-col gap-3 sm:flex-row" method="get">
               {selectedCity ? <input type="hidden" name="grad" value={selectedCity} /> : null}
               {userCoords ? (
@@ -117,21 +141,20 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
               </p>
             ) : null}
           </section>
+          <section className="space-y-3 sm:order-1 sm:pt-0">
+            <DirectoryCityFilter
+              cities={cities}
+              selectedCity={selectedCity}
+              coords={userCoords}
+              pretraga={nameQuery || undefined}
+            />
+            {cities.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Trenutno nema ordinacija sa online zakazivanjem.
+              </p>
+            ) : null}
+          </section>
         </div>
-
-        <section className="space-y-3">
-          <DirectoryCityFilter
-            cities={cities}
-            selectedCity={selectedCity}
-            coords={userCoords}
-            pretraga={nameQuery || undefined}
-          />
-          {cities.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Trenutno nema ordinacija sa online zakazivanjem.
-            </p>
-          ) : null}
-        </section>
 
         {showDirectory ? (
           <section className="space-y-4">
@@ -173,18 +196,32 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
                             href={`/ordinacije/${encodeURIComponent(clinic.slug)}`}
                             className="block rounded-lg border border-border bg-card p-4 text-card-foreground shadow-xs transition-colors hover:bg-muted/50"
                           >
-                            <p className="font-medium">{clinic.name}</p>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              {formatDirectoryAddress(clinic.address, clinic.city)}
-                            </p>
-                            {clinic.phone ? (
-                              <p className="mt-2 text-sm text-muted-foreground">{clinic.phone}</p>
-                            ) : null}
-                            {distanceLabel ? (
-                              <p className="mt-2 text-sm text-muted-foreground">
-                                Udaljenost: {distanceLabel}
-                              </p>
-                            ) : null}
+                            <div className="flex items-start gap-4">
+                              {clinic.logoUrl ? (
+                                <Image
+                                  src={clinic.logoUrl}
+                                  alt=""
+                                  width={64}
+                                  height={64}
+                                  className="size-16 shrink-0 rounded-md border border-border object-contain bg-card"
+                                  unoptimized
+                                />
+                              ) : null}
+                              <div className="min-w-0">
+                                <p className="font-medium">{clinic.name}</p>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                  {formatDirectoryAddress(clinic.address, clinic.city)}
+                                </p>
+                                {clinic.phone ? (
+                                  <p className="mt-2 text-sm text-muted-foreground">{clinic.phone}</p>
+                                ) : null}
+                                {distanceLabel ? (
+                                  <p className="mt-2 text-sm text-muted-foreground">
+                                    Udaljenost: {distanceLabel}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
                           </Link>
                         </li>
                       );

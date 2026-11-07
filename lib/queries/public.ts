@@ -6,6 +6,7 @@ export type ClinicDirectoryHit = {
   address: string;
   city: string;
   phone: string;
+  logoUrl: string | null;
   slug: string;
   distanceKm: number | null;
   latitude: number | null;
@@ -17,6 +18,7 @@ type ClinicDirectoryRow = {
   address: string;
   city: string;
   phone: string;
+  logo_path: string | null;
   slug: string;
   distance_km: number | null;
   latitude: number | null;
@@ -56,7 +58,7 @@ export async function searchDirectoryClinics(input: {
     name: input.name?.trim() || null,
     lat: input.lat ?? null,
     lng: input.lng ?? null,
-    max_distance_km: null,
+    max_distance_km: maxDistanceKm,
   });
 
   if (error) {
@@ -64,7 +66,14 @@ export async function searchDirectoryClinics(input: {
     return [];
   }
 
-  let hits = ((data as ClinicDirectoryRow[] | null) ?? []).map(mapDirectoryHit);
+  let hits = ((data as ClinicDirectoryRow[] | null) ?? []).map((row) =>
+    mapDirectoryHit(
+      row,
+      row.logo_path
+        ? supabase.storage.from("clinic-logos").getPublicUrl(row.logo_path).data.publicUrl
+        : null,
+    ),
+  );
   if (maxDistanceKm !== null) {
     hits = hits.filter(
       (hit) => hit.distanceKm !== null && hit.distanceKm <= maxDistanceKm,
@@ -73,12 +82,13 @@ export async function searchDirectoryClinics(input: {
   return hits;
 }
 
-function mapDirectoryHit(row: ClinicDirectoryRow): ClinicDirectoryHit {
+function mapDirectoryHit(row: ClinicDirectoryRow, logoUrl: string | null): ClinicDirectoryHit {
   return {
     name: row.name,
     address: row.address,
     city: typeof row.city === "string" ? row.city : "",
     phone: row.phone,
+    logoUrl,
     slug: row.slug,
     distanceKm: row.distance_km,
     latitude: row.latitude,
