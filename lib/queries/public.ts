@@ -56,6 +56,7 @@ export async function searchDirectoryClinics(input: {
     name: input.name?.trim() || null,
     lat: input.lat ?? null,
     lng: input.lng ?? null,
+    max_distance_km: null,
   });
 
   if (error) {

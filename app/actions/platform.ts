@@ -20,7 +20,9 @@ import {
   randomInviteCode,
 } from "@/lib/clinic-invite";
 import { MailError, sendMail } from "@/lib/mail";
+import { normalizePhone } from "@/lib/phone";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { geocodeAddress } from "@/app/actions/settings";
 
 const EMAIL_REQUESTS_PER_HOUR = 3;
 const IP_SUBMISSIONS_BEFORE_TURNSTILE = 10;
@@ -41,6 +43,29 @@ const clinicIdSchema = z.object({
   clinicId: z.string().uuid("Neispravna ordinacija."),
 });
 
+const platformClinicDetailsSchema = clinicIdSchema.extend({
+  name: z.string().trim().min(1, "Unesite naziv.").max(200, "Naziv je predugačak."),
+  city: z.string().trim().min(1, "Unesite grad.").max(200, "Unesite grad."),
+  address: z.string().trim().min(1, "Unesite adresu.").max(300, "Adresa je predugačka."),
+  phone: z.string().trim().min(1, "Unesite telefon."),
+});
+
+const suspendClinicSchema = z
+  .object({
+    clinicId: z.string().uuid("Neispravna ordinacija."),
+    notifyOwner: z.boolean(),
+    ownerMessage: z.string().trim().max(5000, "Poruka je predugačka.").optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.notifyOwner && !value.ownerMessage) {
+      context.addIssue({
+        code: "custom",
+        message: "Unesite tekst mejla vlasniku.",
+        path: ["ownerMessage"],
+      });
+    }
+  });
+
 export type PlatformClinicMember = {
   firstName: string;
   lastName: string;
@@ -51,6 +76,8 @@ export type PlatformClinicRow = {
   id: string;
   name: string;
   city: string;
+  address: string;
+  phone: string;
   status: ClinicStatus;
   members: PlatformClinicMember[];
 };
@@ -277,7 +304,7 @@ export async function listPlatformClinics(): Promise<PlatformClinicRow[]> {
 
   const { data: clinics, error: clinicsError } = await supabase
     .from("clinics")
-    .select("id, name, city, status")
+    .select("id, name, city, address, phone, status")
     .order("name", { ascending: true });
 
   if (clinicsError) {
@@ -320,9 +347,81 @@ export async function listPlatformClinics(): Promise<PlatformClinicRow[]> {
     id: row.id,
     name: row.name,
     city: row.city,
+    address: row.address,
+    phone: row.phone,
     status: row.status === "disabled" ? "disabled" : "active",
     members: membersByClinic.get(row.id) ?? [],
   }));
+}
+
+export async function updatePlatformClinicDetails(
+  _previous: ActionResult<{ saved: true }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ saved: true }>> {
+  const parsed = platformClinicDetailsSchema.safeParse({
+    clinicId: formData.get("clinicId"),
+    name: formData.get("name"),
+    city: formData.get("city"),
+    address: formData.get("address"),
+    phone: formData.get("phone"),
+  });
+  if (!parsed.success) {
+    return fail("Proverite unete podatke.", fieldErrorsFrom(parsed.error));
+  }
+
+  const phone = normalizePhone(parsed.data.phone);
+  if (!phone) {
+    return fail("Proverite unete podatke.", { phone: ["Unesite ispravan telefon."] });
+  }
+
+  await requirePlatformAdmin();
+
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  const { data: currentClinic, error: currentError } = await supabase
+    .from("clinics")
+    .select("city, address")
+    .eq("id", parsed.data.clinicId)
+    .maybeSingle();
+  if (currentError || !currentClinic) {
+    console.error("updatePlatformClinicDetails load failed:", currentError?.code ?? "missing row");
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  const addressChanged =
+    parsed.data.address !== currentClinic.address.trim() || parsed.data.city !== currentClinic.city.trim();
+  let coordinates: { latitude: number; longitude: number } | null = null;
+  if (addressChanged) {
+    try {
+      coordinates = await geocodeAddress(parsed.data.address, parsed.data.city);
+    } catch (error) {
+      console.error("updatePlatformClinicDetails geocode failed:", error instanceof Error ? error.name : "unknown");
+      return fail(ADMIN_UNAVAILABLE);
+    }
+  }
+
+  const { error } = await supabase.rpc("update_platform_clinic_details", {
+    p_clinic_id: parsed.data.clinicId,
+    p_name: parsed.data.name,
+    p_city: parsed.data.city,
+    p_address: parsed.data.address,
+    p_phone: phone,
+    p_update_coordinates: addressChanged,
+    p_latitude: coordinates?.latitude ?? null,
+    p_longitude: coordinates?.longitude ?? null,
+  });
+  if (error) {
+    console.error("updatePlatformClinicDetails failed:", error.code ?? "unknown");
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  revalidatePath("/platforma");
+  return ok({ saved: true });
 }
 
 export async function disableClinicAccess(
@@ -354,6 +453,137 @@ export async function disableClinicAccess(
 
   revalidatePath("/platforma");
   return ok({ disabled: true });
+}
+
+export async function suspendClinicAccess(
+  _previous: ActionResult<{
+    disabled: true;
+    notificationStatus: "not_requested" | "sent" | "failed";
+  }> | null,
+  formData: FormData,
+): Promise<
+  ActionResult<{
+    disabled: true;
+    notificationStatus: "not_requested" | "sent" | "failed";
+  }>
+> {
+  const parsed = suspendClinicSchema.safeParse({
+    clinicId: formData.get("clinicId"),
+    notifyOwner: formData.get("notifyOwner") === "on",
+    ownerMessage: formData.get("ownerMessage") ?? "",
+  });
+  if (!parsed.success) {
+    return fail("Proverite unete podatke.", fieldErrorsFrom(parsed.error));
+  }
+
+  await requirePlatformAdmin();
+
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  let ownerEmail: string | null = null;
+  let clinicName: string | null = null;
+  if (parsed.data.notifyOwner) {
+    try {
+      const [clinicResult, ownerResult] = await Promise.all([
+        supabase
+          .from("clinics")
+          .select("name")
+          .eq("id", parsed.data.clinicId)
+          .maybeSingle(),
+        supabase
+          .from("clinic_members")
+          .select("user_id")
+          .eq("clinic_id", parsed.data.clinicId)
+          .eq("role", "owner")
+          .maybeSingle(),
+      ]);
+
+      if (clinicResult.error) {
+        console.error("suspendClinicAccess clinic lookup failed:", clinicResult.error.code);
+      } else {
+        clinicName = clinicResult.data?.name ?? null;
+      }
+
+      if (ownerResult.error) {
+        console.error("suspendClinicAccess owner lookup failed:", ownerResult.error.code);
+      } else if (ownerResult.data?.user_id) {
+        const service = createServiceClient();
+        if (service) {
+          const { data, error } = await service.auth.admin.getUserById(ownerResult.data.user_id);
+          if (error) {
+            console.error("suspendClinicAccess owner email lookup failed:", error.code);
+          } else {
+            ownerEmail = data.user?.email?.trim() || null;
+          }
+        }
+      }
+    } catch (error) {
+      console.error("suspendClinicAccess owner lookup failed:", error instanceof Error ? error.name : "unknown");
+    }
+  }
+
+  const { error: suspendError } = await supabase.rpc("disable_clinic_access", {
+    p_clinic_id: parsed.data.clinicId,
+  });
+  if (suspendError) {
+    console.error("suspendClinicAccess failed:", suspendError.code ?? "unknown");
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  let notificationStatus: "not_requested" | "sent" | "failed" = "not_requested";
+  if (parsed.data.notifyOwner) {
+    notificationStatus = "failed";
+    if (ownerEmail) {
+      try {
+        await sendMail({
+          to: ownerEmail,
+          subject: `Pristup ordinaciji${clinicName ? ` ${clinicName.replace(/[\r\n]+/g, " ").trim()}` : ""} je pauziran`,
+          text: parsed.data.ownerMessage ?? "",
+        });
+        notificationStatus = "sent";
+      } catch (error) {
+        console.error("suspendClinicAccess notification failed:", error instanceof Error ? error.name : "unknown");
+      }
+    }
+  }
+
+  revalidatePath("/platforma");
+  return ok({ disabled: true, notificationStatus });
+}
+
+export async function enableClinicAccess(
+  _previous: ActionResult<{ enabled: true }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ enabled: true }>> {
+  const parsed = clinicIdSchema.safeParse({ clinicId: formData.get("clinicId") });
+  if (!parsed.success) {
+    return fail("Proverite unete podatke.", fieldErrorsFrom(parsed.error));
+  }
+
+  await requirePlatformAdmin();
+
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  const { error } = await supabase.rpc("enable_clinic_access", {
+    p_clinic_id: parsed.data.clinicId,
+  });
+  if (error) {
+    console.error("enableClinicAccess failed:", error.code ?? "unknown");
+    return fail(ADMIN_UNAVAILABLE);
+  }
+
+  revalidatePath("/platforma");
+  return ok({ enabled: true });
 }
 
 export async function dismissClinicAccessRequest(
