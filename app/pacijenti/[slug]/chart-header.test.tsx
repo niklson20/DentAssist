@@ -41,6 +41,7 @@ describe("chart header", () => {
         patientSlug="mika-mikic"
         clinical
         today="2026-11-05"
+        visits={[]}
         alerts={[{ code: "drug_allergy", note: "Penicilin" }]}
       />,
     );
@@ -73,6 +74,7 @@ describe("chart header", () => {
         patientSlug="mika-mikic"
         clinical={false}
         today="2026-11-05"
+        visits={[]}
         alerts={null}
       />,
     );

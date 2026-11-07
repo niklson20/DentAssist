@@ -8,7 +8,6 @@ import { memberRoleLabels } from "@/lib/labels";
 import { ChartHeader } from "./chart-header";
 import { ConnectParentButton } from "./connect-parent-button";
 import { PatientEmailTask } from "./email-task";
-import { VisitHistory } from "./history";
 import { loadChildChart } from "./load-child-chart";
 import { Odontogram } from "./odontogram";
 import { BIRTH_DATE_MISSING, CHART_MISSING } from "./schema";
@@ -55,6 +54,7 @@ export default async function Page({ params }: PageProps) {
         alerts={chart.alerts}
         clinical={clinical}
         today={onDate}
+        visits={[]}
       />
       {emailTasks.map((patient) => (
         <PatientEmailTask
@@ -72,8 +72,6 @@ export default async function Page({ params }: PageProps) {
       {clinical ? (
         <Odontogram actor={memberRoleLabels[member.role]} panelId="chart-panel-zubi" />
       ) : null}
-
-      <VisitHistory visits={[]} />
 
       {canSend && chart.connect.kind === "needsBirthDate" ? (
         <p className="text-sm text-muted-foreground">{BIRTH_DATE_MISSING}</p>

@@ -9,6 +9,7 @@ import { formatPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
 import { ChartDetailsForm, chartBirthDateLabel } from "./chart-details-form";
+import { VisitHistory, type VisitHistoryItem } from "./history";
 
 export type ChartHeaderPatient = {
   firstName: string;
@@ -62,9 +63,10 @@ type ChartHeaderProps = {
   alerts: ChartHeaderAlert[] | null;
   clinical: boolean;
   today: string;
+  visits: readonly VisitHistoryItem[];
 };
 
-export function ChartHeader({ patient, patientSlug, alerts, clinical, today }: ChartHeaderProps) {
+export function ChartHeader({ patient, patientSlug, alerts, clinical, today, visits }: ChartHeaderProps) {
   const tabs: ChartTab[] = clinical ? ["pregled", "istorija", "anamneza", "zubi"] : ["pregled", "istorija"];
   const [activeTab, setActiveTab] = useState<ChartTab>("pregled");
   const [editing, setEditing] = useState(false);
@@ -103,6 +105,10 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today }: C
           <div className="flex gap-1">
             <dt>Telefon</dt>
             <dd className="text-foreground">{formatPhone(patient.phone) ?? emptyValue}</dd>
+          </div>
+          <div className="flex gap-1">
+            <dt>Mejl</dt>
+            <dd className="text-foreground">{patient.email?.trim() || emptyValue}</dd>
           </div>
         </dl>
         {clinical && alerts && alerts.length > 0 ? (
@@ -151,7 +157,6 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today }: C
             aria-labelledby="chart-tab-pregled"
             className="rounded-lg border border-border bg-card p-4 text-card-foreground"
           >
-            <h2 className="mb-3 text-lg font-semibold">Pregled</h2>
             {showForm ? (
               <ChartDetailsForm
                 patient={patient}
@@ -162,12 +167,11 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today }: C
                 onSaved={closeEditor}
               />
             ) : (
-              <dl className="grid gap-3 text-sm">
+              <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
                 <Field label="Datum rođenja" value={birthDate ?? emptyValue} />
                 <Field label="Pol" value={patient.sex ? sexLabel(patient.sex) : emptyValue} />
-                <Field label="Mejl" value={patient.email?.trim() || emptyValue} />
-                <Field label="Adresa" value={patient.address?.trim() || emptyValue} />
-                <Field label="Beleška" value={patient.note?.trim() || emptyValue} />
+                <Field label="Adresa" value={patient.address?.trim() || emptyValue} className="sm:col-span-2" />
+                <Field label="Beleška" value={patient.note?.trim() || emptyValue} className="sm:col-span-2" />
                 {clinical ? <Field label="JMBG" value={patient.jmbg?.trim() || emptyValue} /> : null}
               </dl>
             )}
@@ -181,7 +185,7 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today }: C
             aria-labelledby="chart-tab-istorija"
             className="rounded-lg border border-border bg-card p-4 text-card-foreground"
           >
-            <h2 className="text-lg font-semibold">Istorija</h2>
+            <VisitHistory visits={visits} />
           </section>
         ) : null}
 
@@ -191,9 +195,7 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today }: C
             id="chart-panel-anamneza"
             aria-labelledby="chart-tab-anamneza"
             className="rounded-lg border border-border bg-card p-4 text-card-foreground"
-          >
-            <h2 className="text-lg font-semibold">Anamneza</h2>
-          </section>
+          />
         ) : null}
 
         {clinical && activeTab === "zubi" ? (
@@ -202,9 +204,7 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today }: C
             id="chart-panel-zubi"
             aria-labelledby="chart-tab-zubi"
             className="rounded-lg border border-border bg-card p-4 text-card-foreground"
-          >
-            <h2 className="text-lg font-semibold">Zubi</h2>
-          </section>
+          />
         ) : null}
       </div>
     </div>
@@ -224,9 +224,9 @@ function tabLabel(tab: ChartTab): string {
   }
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className="grid gap-1">
+    <div className={cn("grid gap-1", className)}>
       <dt className="font-medium text-muted-foreground">{label}</dt>
       <dd className="text-foreground">{value}</dd>
     </div>
