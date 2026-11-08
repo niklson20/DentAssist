@@ -66,7 +66,6 @@ export async function loadClinicPublic(slug: string): Promise<ClinicPublicLoad> 
     if (!row) {
       return { status: "unavailable" };
     }
-
     return {
       status: "ready",
       clinic: {

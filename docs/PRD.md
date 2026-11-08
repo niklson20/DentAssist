@@ -19,10 +19,11 @@ i kartone pacijenata. Ista instalacija služi više ordinacija. Podaci jedne ord
 nisu vidljivi drugoj.
 
 Bez prijave pacijent pregleda imenik i stranicu ordinacije: naziv, adresu, telefon,
-tekst i stomatologe. Slobodne termine ne vidi. Zakazivanje radi samo ulogovan i
-registrovan pacijent. Nalog ima mejl i lozinku, služi da izabere dete
-i vidi svoje termine u ordinaciji kroz koju je ušao, i ne otvara karton. Ordinacija u
-aplikaciji prihvata, odbija ili nudi druga vremena.
+tekst i stomatologe, kao i prosek njihovih ocena. Slobodne termine ne vidi. Zakazivanje
+radi samo ulogovan i registrovan pacijent. Posle završenog termina može da oceni
+ordinaciju od 1 do 5 i opciono stomatologa; jedna ocena po terminu. Nalog ima mejl i
+lozinku, služi da izabere dete i vidi svoje termine u ordinaciji kroz koju je ušao,
+i ne otvara karton. Ordinacija u aplikaciji prihvata, odbija ili nudi druga vremena.
 
 Vlasnik platforme otvara ordinaciju pozivnicom. Ne čita kartone, termine ni dokumente.
 
@@ -50,6 +51,8 @@ važi kad su prava imena nameštena.
 - Više ordinacija na jednoj aplikaciji, sa potpunom izolacijom kartona.
 - Pregled imenika i stranice ordinacije bez prijave. Slobodni termini i zahtev samo
   sa ulogovanog naloga. Zahtev traži i mejl potvrđen kodom pri registraciji.
+- Prikaz proseka i broja ocena ordinacijama i stomatolozima; pacijent može da oceni
+  samo svoj završen termin, bez javnog komentara.
 - Link i QR jedne ordinacije vode samo u tu ordinaciju, bez puta u imenik.
 - Kalendar po stomatologu: jedan stomatolog nema preklapanje, dva stomatologa smeju
   u isto vreme.
@@ -74,7 +77,7 @@ za zakazivanje i ne pripada osoblju ordinacije.
 | **Vlasnik ordinacije** | Podešava ordinaciju, poziva i vraća kolege, spaja kartone, preuzima izvoz i vidi mesečne brojeve. Vidi i menja sve kalendare i kartone. Prihvata online zahteve za svakog stomatologa. Ako prima pacijente, ima svoj kalendar. |
 | **Stomatolog** | Ima svoj kalendar i svoje radno vreme. Vidi ostale kalendare. Piše u bilo koji karton te ordinacije. Prihvata, odbija i nudi termine samo za sebe. Termin označava završenim samo ako je njegov. |
 | **Recepcija** | Zakazuje i otkazuje telefonom i na licu mesta, vidi kontakte, označava da pacijent nije došao. Ne otvara zapis posete, anamnezu, zubnu mapu, dokumente, JMBG ni upozorenje. Ne odgovara na online zahtev. |
-| **Pacijent** | Bez prijave bira grad, ordinaciju i vidi stomatologe. Slobodne termine vidi tek kad je ulogovan. Tada zakazuje za sebe ili za sačuvano dete, bira ponuđeni termin, jednom pomera termin i otkazuje ga do 24 sata pre početka. Vidi samo svoje termine u ordinaciji kroz koju je ušao. |
+| **Pacijent** | Bez prijave bira grad, ordinaciju i vidi stomatologe i njihove ocene. Slobodne termine vidi tek kad je ulogovan. Tada zakazuje za sebe ili za sačuvano dete, bira ponuđeni termin, jednom pomera termin i otkazuje ga do 24 sata pre početka. Vidi svoje termine i ocenjuje završen termin. |
 
 Recepcija vidi online zahtev da bi znala ko dolazi, bez dugmadi Prihvati, Odbij i Ponudi.
 
@@ -744,7 +747,7 @@ Ordinacije: firma, grad, status, nalozi i gašenje pristupa. Bez kartona i bez b
 - Pretplata ordinacija i plaćanje karticom.
 - SMS, WhatsApp i odgovaranje na mejl unutar aplikacije.
 - Uvid pacijenta u karton, anamnezu, zube i dokumente. Nalog za zakazivanje jeste u ovoj verziji.
-- Ocene, lista čekanja i javni imenik van Srbije.
+- Pisani komentari uz ocene, lista čekanja i javni imenik van Srbije.
 - Više adresa jedne ordinacije.
 - Isti nalog osoblja u dve ordinacije. Nalog pacijenta sme da zakazuje u više ordinacija, sa posebnim kartonom u svakoj.
 - Google kalendar i drugi spoljni kalendari.
@@ -772,6 +775,9 @@ Prva verzija je spremna kad važi sve ovo:
 - Dva termina istog stomatologa ne mogu da se preklapaju. Dva stomatologa smeju u isto vreme.
 - Dete mlađe od 15 godina dobija svoj karton, a mejl ostaje na kontaktu odrasle osobe.
 - Na 15. rođendan karton traži mejl pacijenta.
+- Pacijent sa potvrđenim mejlom može da oceni ordinaciju nakon završenog termina i
+  opciono stomatologa; javni imenik i profil prikazuju prosek i broj ocena bez komentara
+  ili podataka o pacijentima.
 - Recepcija ne otvara zapis, mapu, dokumente, JMBG ni upozorenje i ne prihvata online zahtev.
 - Završen termin otvara zapis. Posle 24 sata zapis je zaključan.
 - Zubna mapa pamti trenutno stanje i istoriju izmene.

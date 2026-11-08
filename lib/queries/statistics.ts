@@ -3,7 +3,9 @@ import {
   belgradeLocalToDate,
   formatBelgrade,
 } from "@/lib/calendar-dates";
+import type { RatingSummary } from "@/lib/ratings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { publicRatingSummariesFrom } from "./public";
 
 const MONTH_PARAM = /^(\d{4})-(\d{2})$/;
 
@@ -21,10 +23,16 @@ export type DentistMonthStatistics = {
   appointments: number;
   newPatients: number;
   noShows: number;
+  rating: RatingSummary | null;
 };
 
 export type ClinicStatistics =
-  | { status: "ready"; month: string; rows: DentistMonthStatistics[] }
+  | {
+      status: "ready";
+      month: string;
+      clinicRating: RatingSummary | null;
+      rows: DentistMonthStatistics[];
+    }
   | { status: "unavailable" };
 
 export function resolveStatisticsMonth(mesec: string | undefined, now: Date = new Date()): string {
@@ -91,7 +99,7 @@ export async function loadClinicStatistics(
 
   const supabase = await createSupabaseServerClient();
 
-  const [dentistsResult, monthAppointmentsResult] = await Promise.all([
+  const [dentistsResult, monthAppointmentsResult, clinicResult] = await Promise.all([
     supabase
       .from("clinic_members")
       .select("id, first_name, last_name")
@@ -106,15 +114,43 @@ export async function loadClinicStatistics(
       .gte("starts_at", startIso)
       .lt("starts_at", endIso)
       .neq("status", "cancelled"),
+    supabase
+      .from("clinics")
+      .select("slug")
+      .eq("id", clinicId)
+      .maybeSingle(),
   ]);
 
-  if (dentistsResult.error || monthAppointmentsResult.error) {
+  if (dentistsResult.error || monthAppointmentsResult.error || clinicResult.error) {
     console.error(
       "loadClinicStatistics failed:",
-      dentistsResult.error?.message ?? monthAppointmentsResult.error?.message,
+      dentistsResult.error?.message ??
+        monthAppointmentsResult.error?.message ??
+        clinicResult.error?.message,
     );
     return { status: "unavailable" };
   }
+
+  const clinicSlug =
+    clinicResult.data && typeof clinicResult.data.slug === "string"
+      ? clinicResult.data.slug
+      : null;
+  if (!clinicSlug) {
+    console.error("loadClinicStatistics failed:", "clinic slug unavailable");
+    return { status: "unavailable" };
+  }
+
+  const ratingsResult = await supabase.rpc("get_public_rating_summaries", {
+    p_slugs: [clinicSlug],
+  });
+  if (ratingsResult.error || (ratingsResult.data != null && !Array.isArray(ratingsResult.data))) {
+    console.error(
+      "loadClinicStatistics ratings failed:",
+      ratingsResult.error?.message ?? "invalid response",
+    );
+    return { status: "unavailable" };
+  }
+  const ratings = publicRatingSummariesFrom(ratingsResult.data ?? []);
 
   const dentists = (dentistsResult.data ?? []) as DentistRow[];
   const monthAppointments = (monthAppointmentsResult.data ?? []) as AppointmentRow[];
@@ -188,10 +224,16 @@ export async function loadClinicStatistics(
       appointments: bucket.appointments,
       newPatients: bucket.newPatients,
       noShows: bucket.noShows,
+      rating: ratings.dentists.get(clinicSlug)?.get(dentist.id) ?? null,
     };
   });
 
-  return { status: "ready", month: monthYm, rows };
+  return {
+    status: "ready",
+    month: monthYm,
+    clinicRating: ratings.clinics.get(clinicSlug) ?? null,
+    rows,
+  };
 }
 
 function pairKey(dentistId: string, patientId: string): string {

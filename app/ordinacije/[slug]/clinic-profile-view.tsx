@@ -6,9 +6,15 @@ import { useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  formatRatingAverage,
+  formatRatingCount,
+  type RatingSummary,
+} from "@/lib/ratings";
 
 import { PublicSiteFooter, publicSiteFooterClearance } from "../public-site-footer";
 import { PublicSiteNav } from "../public-site-nav";
+import { RatingBadge } from "../rating-badge";
 import { splitClinicDescription } from "./clinic-description";
 import { PatientSignOutButton } from "./sign-out-button";
 import { ClinicSlotsPanel } from "./clinic-slots-panel";
@@ -29,6 +35,7 @@ type ClinicProfileViewProps = {
   phone: string;
   description: string;
   logoUrl: string | null;
+  rating?: RatingSummary | null;
   weekdayHours: ClinicHoursRange | null;
   weekendHours: ClinicHoursRange | null;
   weekdayHasSchedule: boolean;
@@ -51,6 +58,7 @@ export function ClinicProfileView({
   phone,
   description,
   logoUrl,
+  rating = null,
   weekdayHours,
   weekendHours,
   weekdayHasSchedule,
@@ -109,7 +117,7 @@ export function ClinicProfileView({
         )}
       </PublicSiteNav>
       <header className="border-b">
-        <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-4 px-4 py-4">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             {logoUrl ? (
               <Image
@@ -127,6 +135,7 @@ export function ClinicProfileView({
               {phone ? <p className="text-sm text-muted-foreground">{phone}</p> : null}
             </div>
           </div>
+          {rating ? <RatingBadge rating={rating} /> : null}
         </div>
       </header>
 
@@ -172,27 +181,39 @@ export function ClinicProfileView({
           </section>
         ) : null}
 
-        {!showSlotsHint && dentists.length > 0 ? (
+        {dentists.length > 0 ? (
           <section className="space-y-3">
             <h2 className="text-sm font-medium">Stomatolozi</h2>
-            <div className="flex flex-wrap gap-2">
-              {dentists.map((dentist) => {
-                const active = dentist.id === selectedDentistId;
-                return (
-                  <Button
-                    key={dentist.id}
-                    type="button"
-                    variant={active ? "default" : "outline"}
-                    size="sm"
-                    className={cn(!active && "bg-background")}
-                    aria-pressed={active}
-                    onClick={() => selectDentist(dentist.id)}
-                  >
-                    {formatDentistLabel(dentist)}
-                  </Button>
-                );
-              })}
-            </div>
+            {showSlotsHint ? (
+              <ul className="space-y-2 text-sm">
+                {dentists.map((dentist) => (
+                  <li key={dentist.id} className="flex items-center gap-2">
+                    <span>{formatDentistLabel(dentist)}</span>
+                    {dentist.rating ? <RatingLabel rating={dentist.rating} /> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {dentists.map((dentist) => {
+                  const active = dentist.id === selectedDentistId;
+                  return (
+                    <Button
+                      key={dentist.id}
+                      type="button"
+                      variant={active ? "default" : "outline"}
+                      size="sm"
+                      className={cn(!active && "bg-background")}
+                      aria-pressed={active}
+                      onClick={() => selectDentist(dentist.id)}
+                    >
+                      <span>{formatDentistLabel(dentist)}</span>
+                      {dentist.rating ? <RatingLabel rating={dentist.rating} /> : null}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
           </section>
         ) : null}
 
@@ -216,6 +237,17 @@ export function ClinicProfileView({
       </main>
       <PublicSiteFooter staffEntryUrl={staffEntryUrl} />
     </div>
+  );
+}
+
+function RatingLabel({ rating }: { rating: RatingSummary }) {
+  return (
+    <span
+      className="text-xs text-muted-foreground"
+      aria-label={`Prosečna ocena ${formatRatingAverage(rating.average)} od 5, ${formatRatingCount(rating.count)}`}
+    >
+      ★ {formatRatingAverage(rating.average)}/5 · {formatRatingCount(rating.count)}
+    </span>
   );
 }
 

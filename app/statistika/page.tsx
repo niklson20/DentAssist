@@ -1,12 +1,19 @@
 import type { Metadata } from "next";
 
 import { StatisticsMonthField } from "@/app/statistika/month-field";
+import { RatingBadge } from "@/app/ordinacije/rating-badge";
+import { RatingStars } from "@/app/ordinacije/rating-stars";
 import { requireOwner } from "@/lib/auth";
+import { formatRatingAverage, formatRatingCount } from "@/lib/ratings";
 import {
   loadClinicStatistics,
   resolveStatisticsMonth,
   type DentistMonthStatistics,
 } from "@/lib/queries/statistics";
+
+import { loadClinicRatingDetails } from "./actions";
+import { RatingDetailsButton } from "./rating-details-button";
+import { RatingReviewList } from "./rating-review-list";
 
 export const metadata: Metadata = {
   title: "Statistika — DentAssist",
@@ -23,6 +30,10 @@ export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams;
   const month = resolveStatisticsMonth(params.mesec);
   const loaded = await loadClinicStatistics(member.clinicId, month);
+  const clinicReviews =
+    loaded.status === "ready" && loaded.clinicRating
+      ? await loadClinicRatingDetails(null)
+      : null;
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 py-8">
@@ -40,7 +51,26 @@ export default async function Page({ searchParams }: PageProps) {
       {loaded.status === "unavailable" ? (
         <p className="text-sm text-muted-foreground">Podaci trenutno nisu dostupni. Pokušajte ponovo.</p>
       ) : (
-        <StatisticsTable rows={loaded.rows} />
+        <>
+          <section aria-labelledby="ratings-heading" className="space-y-3">
+            <h2 id="ratings-heading" className="text-base font-semibold text-foreground">
+              Ocene pacijenata
+            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
+              <span className="text-sm font-medium text-foreground">Ocena ordinacije</span>
+              {loaded.clinicRating ? (
+                <RatingBadge rating={loaded.clinicRating} />
+              ) : (
+                <span className="text-sm text-muted-foreground">Još nema ocena</span>
+              )}
+            </div>
+            {clinicReviews ? <RatingReviewList result={clinicReviews} /> : null}
+            <p className="text-xs text-muted-foreground">
+              Proseci ocena su ukupni i ne zavise od izabranog meseca.
+            </p>
+          </section>
+          <StatisticsTable rows={loaded.rows} />
+        </>
       )}
     </main>
   );
@@ -59,7 +89,8 @@ function StatisticsTable({ rows }: { rows: DentistMonthStatistics[] }) {
             <th scope="col" className="border-r border-border px-4 py-3 font-medium">Stomatolog</th>
             <th scope="col" className="border-r border-border px-4 py-3 text-right font-medium">Termini</th>
             <th scope="col" className="border-r border-border px-4 py-3 text-right font-medium">Novi pacijenti</th>
-            <th scope="col" className="px-4 py-3 text-right font-medium">Nedolasci</th>
+            <th scope="col" className="border-r border-border px-4 py-3 text-right font-medium">Nedolasci</th>
+            <th scope="col" className="px-4 py-3 text-right font-medium">Ocena</th>
           </tr>
         </thead>
         <tbody>
@@ -70,7 +101,29 @@ function StatisticsTable({ rows }: { rows: DentistMonthStatistics[] }) {
               </th>
               <td className="border-r border-border px-4 py-3 text-right tabular-nums text-foreground">{row.appointments}</td>
               <td className="border-r border-border px-4 py-3 text-right tabular-nums text-foreground">{row.newPatients}</td>
-              <td className="px-4 py-3 text-right tabular-nums text-foreground">{row.noShows}</td>
+              <td className="border-r border-border px-4 py-3 text-right tabular-nums text-foreground">{row.noShows}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                {row.rating ? (
+                  <RatingDetailsButton dentistId={row.dentistId} label={row.name}>
+                    <span
+                      aria-label={`Prosečna ocena ${formatRatingAverage(row.rating.average)} od 5, ${formatRatingCount(row.rating.count)}`}
+                      title={`${formatRatingAverage(row.rating.average)}/5 · ${formatRatingCount(row.rating.count)}`}
+                      className="whitespace-nowrap"
+                    >
+                      <RatingStars
+                        rating={row.rating.average}
+                        label={`Prosek ${formatRatingAverage(row.rating.average)} od 5`}
+                        decorative
+                      />
+                      <span className="ml-1">
+                        {formatRatingAverage(row.rating.average)}/5 · {formatRatingCount(row.rating.count)}
+                      </span>
+                    </span>
+                  </RatingDetailsButton>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

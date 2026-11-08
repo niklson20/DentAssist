@@ -1,5 +1,7 @@
 import { directoryNearMeMaxDistanceKm } from "@/app/directory-href";
+import type { RatingSummary } from "@/lib/ratings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { z } from "zod";
 
 export type ClinicDirectoryHit = {
   name: string;
@@ -11,6 +13,7 @@ export type ClinicDirectoryHit = {
   distanceKm: number | null;
   latitude: number | null;
   longitude: number | null;
+  rating: RatingSummary | null;
 };
 
 type ClinicDirectoryRow = {
@@ -24,6 +27,66 @@ type ClinicDirectoryRow = {
   latitude: number | null;
   longitude: number | null;
 };
+
+const ratingRowSchema = z.object({
+  clinic_slug: z.string().min(1),
+  dentist_id: z.string().uuid().nullable(),
+  rating_average: z.coerce.number().min(1).max(5),
+  rating_count: z.coerce.number().int().positive(),
+});
+
+export type PublicRatingSummaries = {
+  clinics: Map<string, RatingSummary>;
+  dentists: Map<string, Map<string, RatingSummary>>;
+};
+
+export function publicRatingSummariesFrom(data: unknown): PublicRatingSummaries {
+  const summaries: PublicRatingSummaries = {
+    clinics: new Map(),
+    dentists: new Map(),
+  };
+  if (!Array.isArray(data)) {
+    return summaries;
+  }
+
+  for (const rawRow of data) {
+    const parsed = ratingRowSchema.safeParse(rawRow);
+    if (!parsed.success) {
+      continue;
+    }
+
+    const { clinic_slug: slug, dentist_id: dentistId, rating_average, rating_count } =
+      parsed.data;
+    const rating = { average: rating_average, count: rating_count };
+    if (dentistId === null) {
+      summaries.clinics.set(slug, rating);
+    } else {
+      const dentists = summaries.dentists.get(slug) ?? new Map<string, RatingSummary>();
+      dentists.set(dentistId, rating);
+      summaries.dentists.set(slug, dentists);
+    }
+  }
+
+  return summaries;
+}
+
+export async function getPublicRatingSummaries(slugs: string[]): Promise<PublicRatingSummaries> {
+  if (slugs.length === 0) {
+    return { clinics: new Map(), dentists: new Map() };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("get_public_rating_summaries", {
+    p_slugs: slugs,
+  });
+
+  if (error || (data != null && !Array.isArray(data))) {
+    console.error("getPublicRatingSummaries failed:", error?.message ?? "invalid response");
+    return { clinics: new Map(), dentists: new Map() };
+  }
+
+  return publicRatingSummariesFrom(data ?? []);
+}
 
 export async function listDirectoryCities(): Promise<string[]> {
   const supabase = await createSupabaseServerClient();
@@ -79,7 +142,8 @@ export async function searchDirectoryClinics(input: {
       (hit) => hit.distanceKm !== null && hit.distanceKm <= maxDistanceKm,
     );
   }
-  return hits;
+  const ratings = await getPublicRatingSummaries(hits.map((hit) => hit.slug));
+  return hits.map((hit) => ({ ...hit, rating: ratings.clinics.get(hit.slug) ?? null }));
 }
 
 function mapDirectoryHit(row: ClinicDirectoryRow, logoUrl: string | null): ClinicDirectoryHit {
@@ -93,5 +157,6 @@ function mapDirectoryHit(row: ClinicDirectoryRow, logoUrl: string | null): Clini
     distanceKm: row.distance_km,
     latitude: row.latitude,
     longitude: row.longitude,
+    rating: null,
   };
 }

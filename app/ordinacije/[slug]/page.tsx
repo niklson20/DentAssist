@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 
 import { formatBelgradeDate } from "@/lib/calendar-dates";
 import { getSessionKind } from "@/lib/auth";
+import { getPublicRatingSummaries } from "@/lib/queries/public";
 
 import { buildBookingDayRange } from "./booking-days";
 import { PublicSiteFooter, publicSiteFooterClearance } from "../public-site-footer";
@@ -48,6 +49,11 @@ export default async function ClinicPublicPage({ params }: PageProps) {
   }
 
   const clinic = loaded.clinic;
+  const ratings = await getPublicRatingSummaries([clinic.slug]);
+  const dentists = clinic.dentists.map((dentist) => ({
+    ...dentist,
+    rating: ratings.dentists.get(clinic.slug)?.get(dentist.id) ?? null,
+  }));
   const staffEntryUrl = await resolveStaffEntryUrl();
   const sessionKind = await getSessionKind();
   const isPatient = sessionKind === "patient";
@@ -70,11 +76,12 @@ export default async function ClinicPublicPage({ params }: PageProps) {
       phone={clinic.phone}
       description={clinic.description}
       logoUrl={clinic.logoUrl}
+      rating={ratings.clinics.get(clinic.slug) ?? null}
       weekdayHours={clinic.weekdayHours}
       weekendHours={clinic.weekendHours}
       weekdayHasSchedule={clinic.weekdayHasSchedule}
       weekendHasSchedule={clinic.weekendHasSchedule}
-      dentists={isPatient ? clinic.dentists : []}
+      dentists={dentists}
       initialDentistId={preferredDentistId}
       showPatientAuth={!isPatient}
       showSlotsHint={!isPatient}

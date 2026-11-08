@@ -1,6 +1,7 @@
 import { formatBelgrade } from "@/lib/calendar-dates";
 import { appointmentStatusLabel } from "@/lib/labels";
 
+import { ReviewForm } from "./review-form";
 import type { ProfileAppointment } from "./load-appointments";
 
 export function ProfileAppointmentsList({ items }: { items: ProfileAppointment[] }) {
@@ -10,15 +11,22 @@ export function ProfileAppointmentsList({ items }: { items: ProfileAppointment[]
 
   return (
     <ol className="flex flex-col gap-3">
-      {items.map((item, index) => (
+      {items.map((item) => (
         <li
-          key={`${item.startsAt}-${item.endsAt}-${item.clinicName}-${item.dentistName}-${index}`}
+          key={item.appointmentId}
           className="rounded-lg border border-border bg-card p-4 text-card-foreground"
         >
           <p className="font-medium">{formatAppointmentWhen(item.startsAt, item.endsAt)}</p>
           <p className="mt-1 text-sm">{item.clinicName}</p>
           <p className="mt-1 text-sm text-muted-foreground">{item.dentistName}</p>
           <p className="mt-1 text-sm">{appointmentStatusLabel(item.status)}</p>
+          {item.status === "completed" ? (
+            <ReviewForm
+              appointmentId={item.appointmentId}
+              clinicRating={item.clinicRating}
+              dentistRating={item.dentistRating}
+            />
+          ) : null}
         </li>
       ))}
     </ol>

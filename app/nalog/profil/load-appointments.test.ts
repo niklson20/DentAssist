@@ -15,12 +15,15 @@ vi.mock("@/lib/supabase/server", () => ({
 import { loadProfileAppointments, profileAppointmentsFrom } from "./load-appointments";
 
 const earlier = {
+  appointment_id: "11111111-1111-4111-8111-111111111111",
   starts_at: "2026-04-15T08:30:00.000Z",
   ends_at: "2026-04-15T09:00:00.000Z",
   clinic_name: "Ordinacija A",
   dentist_first_name: "Mina",
   dentist_last_name: "Minić",
   status: "scheduled",
+  clinic_rating: null,
+  dentist_rating: null,
   reason: "Privatna napomena",
 };
 
@@ -33,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("loadProfileAppointments", () => {
-  it("loads all account appointments and orders them chronologically", async () => {
+  it("loads all account appointments with the newest appointments first", async () => {
     mocks.rpc.mockResolvedValue({
       data: [
         {
@@ -52,18 +55,24 @@ describe("loadProfileAppointments", () => {
       ok: true,
       data: [
         {
-          startsAt: earlier.starts_at,
-          endsAt: earlier.ends_at,
-          clinicName: "Ordinacija A",
-          dentistName: "Mina Minić",
-          status: "scheduled",
-        },
-        {
+          appointmentId: earlier.appointment_id,
           startsAt: "2026-05-01T10:00:00.000Z",
           endsAt: "2026-05-01T10:30:00.000Z",
           clinicName: "Ordinacija B",
           dentistName: "Mina Minić",
           status: "cancelled",
+          clinicRating: null,
+          dentistRating: null,
+        },
+        {
+          appointmentId: earlier.appointment_id,
+          startsAt: earlier.starts_at,
+          endsAt: earlier.ends_at,
+          clinicName: "Ordinacija A",
+          dentistName: "Mina Minić",
+          status: "scheduled",
+          clinicRating: null,
+          dentistRating: null,
         },
       ],
     });
@@ -90,11 +99,14 @@ describe("profileAppointmentsFrom", () => {
 
     expect(appointments).toEqual([
       {
+        appointmentId: earlier.appointment_id,
         startsAt: earlier.starts_at,
         endsAt: earlier.ends_at,
         clinicName: "Ordinacija A",
         dentistName: "Mina Minić",
         status: "scheduled",
+        clinicRating: null,
+        dentistRating: null,
       },
     ]);
     expect(JSON.stringify(appointments)).not.toContain("Privatna napomena");

@@ -8,12 +8,14 @@ import {
   resolveStatisticsMonth,
 } from "@/lib/queries/statistics";
 
-const { requireOwner, loadClinicStatistics } = vi.hoisted(() => ({
+const { requireOwner, loadClinicStatistics, loadClinicRatingDetails } = vi.hoisted(() => ({
   requireOwner: vi.fn(),
   loadClinicStatistics: vi.fn(),
+  loadClinicRatingDetails: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ requireOwner }));
+vi.mock("./actions", () => ({ loadClinicRatingDetails }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
@@ -37,7 +39,22 @@ const fixedNow = new Date("2026-06-08T10:00:00+02:00");
 beforeEach(() => {
   requireOwner.mockReset();
   loadClinicStatistics.mockReset();
+  loadClinicRatingDetails.mockReset();
   requireOwner.mockResolvedValue({ userId: "u1", clinicId, role: "owner" });
+  loadClinicRatingDetails.mockResolvedValue({
+    ok: true,
+    data: [
+      {
+        appointmentId: "33333333-3333-4333-8333-333333333333",
+        reviewerName: "Milica Milić",
+        dentistName: "Marko Marković",
+        clinicRating: 5,
+        dentistRating: 4,
+        startsAt: "2026-11-08T12:00:00.000Z",
+        reviewedAt: "2026-11-08T12:30:00.000Z",
+      },
+    ],
+  });
   vi.useFakeTimers();
   vi.setSystemTime(fixedNow);
 });
@@ -71,6 +88,7 @@ describe("statistics page", () => {
     loadClinicStatistics.mockResolvedValue({
       status: "ready",
       month: "2026-05",
+      clinicRating: { average: 4.7, count: 8 },
       rows: [
         {
           dentistId,
@@ -78,6 +96,7 @@ describe("statistics page", () => {
           appointments: 12,
           newPatients: 3,
           noShows: 1,
+          rating: { average: 4.8, count: 6 },
         },
       ],
     });
@@ -88,12 +107,24 @@ describe("statistics page", () => {
 
     expect(requireOwner).toHaveBeenCalledOnce();
     expect(loadClinicStatistics).toHaveBeenCalledWith(clinicId, "2026-05");
+    expect(loadClinicRatingDetails).toHaveBeenCalledWith(null);
     expect(html).toContain("Statistika");
     expect(html).toContain("Mina Minić");
     expect(html).toContain(">Novi pacijenti<");
     expect(html).toContain(">12<");
     expect(html).toContain(">3<");
     expect(html).toContain(">1<");
+    expect(html).toContain("Ocene pacijenata");
+    expect(html).toContain('aria-label="Prosečna ocena 4,7 od 5, 8 ocena"');
+    expect(html).toContain('aria-label="Poslednjih pet ocena pacijenata"');
+    expect(html).toContain("Milica Milić");
+    expect(html).toContain("5/5");
+    expect(html).toContain("4/5");
+    expect(html).not.toContain('aria-label="Ocena ordinacije 5 od 5"');
+    expect(html).toContain('aria-label="Prikaži pojedinačne ocene: Mina Minić"');
+    expect(html).toContain(">Ocena<");
+    expect(html).toContain("Proseci ocena su ukupni");
+    expect(html).toContain("4,8/5 · 6");
     expect(html).toContain('value="2026-05"');
     expect(html).not.toContain("Preuzmi izvoz");
   });

@@ -8,6 +8,7 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 
 import { formatDirectoryAddress } from "@/app/directory-href";
+import { formatRatingAverage, formatRatingCount } from "@/lib/ratings";
 import type { ClinicDirectoryHit } from "@/lib/queries/public";
 
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
@@ -84,6 +85,15 @@ export function DirectoryMapCanvas({ clinics, className }: DirectoryMapProps) {
               <Popup>
                 <div className="space-y-1 text-sm">
                   <p className="font-medium">{clinic.name}</p>
+                  {clinic.rating ? (
+                    <p
+                      className="text-muted-foreground"
+                      aria-label={`Prosečna ocena ${formatRatingAverage(clinic.rating.average)} od 5, ${formatRatingCount(clinic.rating.count)}`}
+                    >
+                      ★ {formatRatingAverage(clinic.rating.average)}/5 ·{" "}
+                      {formatRatingCount(clinic.rating.count)}
+                    </p>
+                  ) : null}
                   <p className="text-muted-foreground">
                     {formatDirectoryAddress(clinic.address, clinic.city)}
                   </p>

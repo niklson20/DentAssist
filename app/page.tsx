@@ -14,6 +14,7 @@ import {
 import { DirectoryCityFilter, DirectoryMapPanel, ViewModeTabs } from "@/app/directory-map";
 import { PublicSiteFooter, publicSiteFooterClearance } from "@/app/ordinacije/public-site-footer";
 import { PublicSiteNav } from "@/app/ordinacije/public-site-nav";
+import { RatingBadge } from "@/app/ordinacije/rating-badge";
 import { PatientSignOutButton } from "@/app/ordinacije/[slug]/sign-out-button";
 import { resolveStaffEntryUrl } from "@/app/ordinacije/staff-entry-url";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -207,19 +208,22 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
                                   unoptimized
                                 />
                               ) : null}
-                              <div className="min-w-0">
-                                <p className="font-medium">{clinic.name}</p>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                  {formatDirectoryAddress(clinic.address, clinic.city)}
-                                </p>
-                                {clinic.phone ? (
-                                  <p className="mt-2 text-sm text-muted-foreground">{clinic.phone}</p>
-                                ) : null}
-                                {distanceLabel ? (
-                                  <p className="mt-2 text-sm text-muted-foreground">
-                                    Udaljenost: {distanceLabel}
+                              <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="min-w-0 font-medium">{clinic.name}</p>
+                                  <p className="-mt-0.5 text-sm text-muted-foreground">
+                                    {formatDirectoryAddress(clinic.address, clinic.city)}
                                   </p>
-                                ) : null}
+                                  {clinic.phone ? (
+                                    <p className="mt-2 text-sm text-muted-foreground">{clinic.phone}</p>
+                                  ) : null}
+                                  {distanceLabel ? (
+                                    <p className="mt-2 text-sm text-muted-foreground">
+                                      Udaljenost: {distanceLabel}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                {clinic.rating ? <RatingBadge rating={clinic.rating} /> : null}
                               </div>
                             </div>
                           </Link>

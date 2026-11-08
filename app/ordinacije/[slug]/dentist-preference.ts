@@ -1,11 +1,14 @@
 import { z } from "zod";
 
+import type { RatingSummary } from "@/lib/ratings";
+
 const dentistIdSchema = z.string().uuid();
 
 export type PublicDentist = {
   id: string;
   firstName: string;
   lastName: string;
+  rating?: RatingSummary | null;
 };
 
 export function dentistCookieName(slug: string): string {

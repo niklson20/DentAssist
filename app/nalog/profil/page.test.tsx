@@ -40,11 +40,14 @@ beforeEach(() => {
     ok: true,
     data: [
       {
+        appointmentId: "11111111-1111-4111-8111-111111111111",
         startsAt: "2026-04-15T08:30:00.000Z",
         endsAt: "2026-04-15T09:00:00.000Z",
         clinicName: "Ordinacija Centar",
         dentistName: "Mina Minić",
         status: "scheduled",
+        clinicRating: null,
+        dentistRating: null,
       },
     ],
   });
@@ -62,7 +65,7 @@ describe("patient profile page", () => {
     expect(mocks.loadProfileAppointments).toHaveBeenCalledWith();
     expect(mocks.loadPatientName).toHaveBeenCalledWith("patient-account");
     expect(html).toContain("<h1 class=\"text-2xl font-semibold\">Ana Anić</h1>");
-    expect(html).toContain("Status vaših termina hronološkim redoslijedom.");
+    expect(html).toContain("Najnoviji termini prikazani su prvi.");
     expect(html).toContain("Ordinacija Centar");
     expect(html).toContain("Mina Minić");
     expect(html).toContain("Zakazan");

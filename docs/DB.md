@@ -461,7 +461,29 @@ i ne čuva se.
 
 Primarni ključ je `(appointment_id, kind)`. Isti podsetnik ne ide dvaput.
 
-### 5.8 Prelazi zahteva
+### 5.8 `appointment_reviews`
+
+Jedan red po terminu. Pacijent ocenjuje ordinaciju od 1 do 5, a stomatologa može
+opciono da oceni posebno.
+
+| Kolona | Tip | Opis |
+| --- | --- | --- |
+| `appointment_id` | `uuid` | primarni ključ i termin |
+| `clinic_id` | `uuid` | ordinacija termina |
+| `dentist_id` | `uuid` | stomatolog termina |
+| `patient_user_id` | `uuid` | potvrđen nalog pacijenta; nije javan |
+| `clinic_rating` | `smallint` | obavezno, 1–5 |
+| `dentist_rating` | `smallint` | opciono, 1–5 |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+Tabela nema javni `SELECT`. `submit_appointment_review` proverava potvrđen nalog,
+vlasništvo nad terminom po mejlu, status `completed` i da je termin prošao. Isti
+nalog može da izmeni svoju ocenu, ali tuđi red ne može. Prosek i broj ocena računaju
+se pri čitanju; ne čuvaju se kao kolone. `get_clinic_rating_details(clinic_id,
+dentist_id)` vraća ime naloga koji je ocenio, ocene i datum termina isključivo
+vlasniku te ordinacije; ne vraća mejl, komentar niti druge kontakt podatke.
+
+### 5.9 Prelazi zahteva
 
 Traženi termin ostaje zauzet kad se pošalje ponuda. Ponuda ne menja `expires_at`.
 
@@ -508,8 +530,8 @@ pogled `audit_log_for_member`, ne kopija tabele.
 | Vlasnik | sve u svojoj ordinaciji |
 | Stomatolog | sve u svojoj ordinaciji, osim gašenja ordinacije, pozivnica, pravnih podataka, izvoza i tuđeg prihvatanja zahteva. Tuđe prihvatanje odbija baza: `dentist_id` mora biti taj član, osim ako je vlasnik. |
 | Recepcija | `patients` bez `jmbg` (pogled), `patient_contacts`, `appointments`, `working_hours`, `blocked_periods`. Bez zapisa, anamneze, upozorenja, zuba, fajlova. Status sme da pređe u `cancelled` i `no_show`, ne u `completed`. |
-| Pacijent | svoj `patient_accounts` i svoja deca. Bez `SELECT` nad `patients`, terminima, kartonom i fajlovima. Termine svoje ordinacije dobija samo kroz `list_my_appointments`. |
-| `anon` | nema `SELECT`. Imenik i javna strana ordinacije idu kroz funkcije iz odeljka 8. Slobodne termine i zahtev ne sme. |
+| Pacijent | svoj `patient_accounts` i svoja deca. Bez `SELECT` nad `patients`, terminima, kartonom, fajlovima i ocenama. Termine i mogućnost ocenjivanja dobija samo kroz proverene funkcije. |
+| `anon` | nema `SELECT`. Imenik, javna strana ordinacije i agregatne ocene idu kroz funkcije iz odeljka 8. Slobodne termine i zahtev ne sme. |
 
 `service_role` se ne koristi za čitanje kartona. Serverski izuzeci su kreiranje
 `auth.users` kad neko prihvati pozivnicu, izdavanje recovery linka za novu lozinku
@@ -543,9 +565,13 @@ gde piše. Vraćaju samo ono što sme napolje.
 | `list_cities()` | `anon` | gradovi u kojima ima vidljivu ordinaciju |
 | `search_clinics(city, name, lat, lng, max_distance_km)` | `anon` | naziv, adresa, grad, telefon, slug, udaljenost; bez termina |
 | `get_clinic_public(slug)` | `anon` | javna strana i imena stomatologa koji su online |
+| `get_public_rating_summaries(slugs)` | `anon` | prosek i broj ocena vidljivih ordinacija i online stomatologa; bez identiteta pacijenta |
 | `get_available_slots(slug, dentist_id, day)` | ulogovan nalog | početci; računa radno vreme, pauzu, blokadu, nedostupnost, razmak, najavu, horizont i zauzete statuse. `anon` je ne zove |
 | `create_booking(slug, dentist_id, starts_at, for_child, dependent_id, phone, date_of_birth, contact, reason)` | ulogovan pacijent | termin `pending_confirmation` i zahtev, ili greška ako slot nije slobodan; traži potvrđen mejl |
 | `list_my_appointments(slug)` | ulogovan pacijent | vreme, stomatolog i status samo za mejl tog naloga u toj ordinaciji |
+| `list_my_appointments_all()` | ulogovan pacijent | njegovi termini kroz ordinacije i njegove sačuvane ocene |
+| `submit_appointment_review(appointment_id, clinic_rating, dentist_rating)` | potvrđen pacijent | ocena 1–5 za ordinaciju i opciono stomatologa, samo za njegov završen termin |
+| `get_clinic_rating_details(clinic_id, dentist_id)` | vlasnik te ordinacije | pojedinačna ocena, ime naloga pacijenta i datum termina; bez kontakta i komentara |
 | `choose_offer(token, offer_id)` | ulogovan pacijent, mejl se poklapa | izabrani postaje `scheduled`, traženi i ostale ponude `cancelled` |
 | `decline_offers(token)` | isti uslov | traženi, sve ponude i zahtev otkazani |
 | `reschedule_by_token(token, starts_at)` | isti uslov | samo ako je brojač 0 i do početka ima više od 24 sata |

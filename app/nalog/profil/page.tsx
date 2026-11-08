@@ -36,7 +36,7 @@ export default async function PatientProfilePage() {
               : "Profil"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Status vaših termina hronološkim redoslijedom.
+            Najnoviji termini prikazani su prvi.
           </p>
         </header>
 
