@@ -1,14 +1,16 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState, useState, useTransition, type ReactNode } from "react";
 import { Check, CaretDown } from "@phosphor-icons/react";
 import { Combobox } from "@base-ui/react/combobox";
 
 import { createAppointment, updateAppointment } from "@/app/actions/appointments";
+import { loadAvailableAppointmentSlots } from "@/app/actions/appointment-slots";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { ActionResult } from "@/lib/action-result";
-import { hasTurned15, isIsoDate } from "@/lib/calendar-dates";
+import { formatBelgrade, formatBelgradeDate, hasTurned15, isIsoDate } from "@/lib/calendar-dates";
 import { RELATIONSHIPS, relationshipLabel } from "@/lib/labels";
 import type { SlotMinutes } from "@/lib/slots";
 
@@ -71,8 +73,14 @@ export function AppointmentForm({
     null,
   );
   const { dentists, patients, types, slotMinutes } = choices;
-  const startDefault = termin ? termin.startsAt : isIsoDate(datum) ? `${datum}T09:00` : "";
-  const [startsAt, setStartsAt] = useState(startDefault);
+  const startDefault = termin ? new Date(termin.startsAt) : null;
+  const initialDate = startDefault ? formatBelgradeDate(startDefault) : isIsoDate(datum) ? datum : today;
+  const [appointmentDate, setAppointmentDate] = useState(initialDate < today ? today : initialDate);
+  const [appointmentTime, setAppointmentTime] = useState(
+    startDefault && initialDate >= today
+      ? formatBelgrade(startDefault, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      : "",
+  );
   const [patientId, setPatientId] = useState(
     termin && patients.some((patient) => patient.id === termin.patientId)
       ? termin.patientId
@@ -88,6 +96,7 @@ export function AppointmentForm({
     (defaultDentistId && dentists.some((dentist) => dentist.id === defaultDentistId)
       ? defaultDentistId
       : (dentists[0]?.id ?? ""));
+  const [selectedDentistId, setSelectedDentistId] = useState(dentistDefault);
   const durations = durationChoices(slotMinutes);
   const durationDefault =
     termin && durations.includes(termin.durationMinutes)
@@ -95,6 +104,10 @@ export function AppointmentForm({
       : durations.includes(30)
         ? "30"
         : String(slotMinutes);
+  const [duration, setDuration] = useState(durationDefault);
+  const [slotDialogOpen, setSlotDialogOpen] = useState(false);
+  const [availableTimes, setAvailableTimes] = useState<ActionResult<string[]> | null>(null);
+  const [slotsPending, startSlotsTransition] = useTransition();
   const typeDefault =
     termin && types.some((type) => type.id === termin.typeId) ? termin.typeId : (types[0]?.id ?? "");
   const formError = result && !result.ok ? result.error : null;
@@ -109,6 +122,20 @@ export function AppointmentForm({
   const lastNameError = message(result, "kontaktPrezime");
   const phoneError = message(result, "kontaktTelefon");
   const emailError = message(result, "kontaktMejl");
+
+  function openTimePicker() {
+    setSlotDialogOpen(true);
+    setAvailableTimes(null);
+    startSlotsTransition(async () => {
+      const slots = await loadAvailableAppointmentSlots({
+        dentistId: selectedDentistId,
+        date: appointmentDate,
+        duration: Number(duration),
+        excludeAppointmentId: termin?.id ?? null,
+      });
+      setAvailableTimes(slots);
+    });
+  }
 
   return (
     <form
@@ -146,7 +173,11 @@ export function AppointmentForm({
           <select
             id="appointment-dentist"
             name="stomatolog"
-            defaultValue={dentistDefault}
+            value={selectedDentistId}
+            onChange={(event) => {
+              setSelectedDentistId(event.target.value);
+              setAppointmentTime("");
+            }}
             required
             aria-invalid={dentistError ? true : undefined}
             aria-describedby={describedBy("appointment-dentist", dentistError)}
@@ -206,23 +237,98 @@ export function AppointmentForm({
           </Combobox.Portal>
         </Combobox.Root>
       </Field>
-      <Field id="appointment-start" label="Početak" message={startError}>
-        <Input
-          id="appointment-start"
+      <Field
+        id="appointment-start"
+        label="Početak"
+        message={startError}
+        className={embedded ? "sm:col-span-2" : undefined}
+      >
+        <input
+          type="hidden"
           name="pocetak"
-          type="datetime-local"
-          value={startsAt}
-          onChange={(event) => setStartsAt(event.target.value)}
-          required
-          aria-invalid={startError ? true : undefined}
-          aria-describedby={describedBy("appointment-start", startError)}
+          value={appointmentDate && appointmentTime ? `${appointmentDate}T${appointmentTime}` : ""}
         />
+        <div className="grid grid-cols-2 gap-2">
+          <label htmlFor="appointment-date" className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Datum
+            <Input
+              id="appointment-date"
+              type="date"
+              min={today}
+              value={appointmentDate}
+              onChange={(event) => {
+                const nextDate = event.target.value;
+                if (nextDate && nextDate < today) return;
+                setAppointmentDate(nextDate);
+                setAppointmentTime("");
+              }}
+              required
+              aria-invalid={startError ? true : undefined}
+              aria-describedby={describedBy("appointment-start", startError)}
+            />
+          </label>
+          <label htmlFor="appointment-time" className="flex flex-col gap-1 text-xs text-muted-foreground">
+            Vreme
+            <Button
+              id="appointment-time"
+              type="button"
+              variant="outline"
+              aria-haspopup="dialog"
+              aria-invalid={startError ? true : undefined}
+              aria-describedby={describedBy("appointment-start", startError)}
+              className="w-full justify-between font-normal"
+              onClick={openTimePicker}
+            >
+              {appointmentTime || "Izaberite slobodan termin"}
+            </Button>
+          </label>
+        </div>
       </Field>
+      <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
+        <DialogContent className="w-[min(30rem,calc(100%-2rem))]">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <DialogTitle>Slobodni termini</DialogTitle>
+              <p className="mt-1 text-sm text-muted-foreground">{appointmentDate}</p>
+            </div>
+            <DialogClose render={<Button type="button" variant="outline" size="sm" />}>
+              Zatvori
+            </DialogClose>
+          </div>
+          {slotsPending ? (
+            <p role="status" className="text-sm text-muted-foreground">Učitavam slobodne termine…</p>
+          ) : availableTimes && !availableTimes.ok ? (
+            <p role="alert" className="text-sm text-destructive">{availableTimes.error}</p>
+          ) : availableTimes?.ok && availableTimes.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nema slobodnih termina za izabrani datum.</p>
+          ) : availableTimes?.ok ? (
+            <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4">
+              {availableTimes.data.map((time) => (
+                <Button
+                  key={time}
+                  type="button"
+                  variant={appointmentTime === time ? "default" : "outline"}
+                  onClick={() => {
+                    setAppointmentTime(time);
+                    setSlotDialogOpen(false);
+                  }}
+                >
+                  {time}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
       <Field id="appointment-duration" label="Trajanje" message={durationError}>
         <select
           id="appointment-duration"
           name="trajanje"
-          defaultValue={durationDefault}
+          value={duration}
+          onChange={(event) => {
+            setDuration(event.target.value);
+            setAppointmentTime("");
+          }}
           required
           aria-invalid={durationError ? true : undefined}
           aria-describedby={describedBy("appointment-duration", durationError)}

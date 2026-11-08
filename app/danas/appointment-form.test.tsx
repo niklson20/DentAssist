@@ -18,6 +18,23 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
+vi.mock("@phosphor-icons/react", () => {
+  const Icon = () => null;
+  return {
+    CalendarBlank: Icon,
+    CaretDown: Icon,
+    ChartBar: Icon,
+    Check: Icon,
+    ClipboardText: Icon,
+    Gear: Icon,
+    PencilSimple: Icon,
+    SignOut: Icon,
+    SidebarIcon: Icon,
+    Tooth: Icon,
+    Users: Icon,
+    XIcon: Icon,
+  };
+});
 vi.mock("next/navigation", () => ({
   usePathname: () => "/danas",
   redirect: (href: string) => {
@@ -26,6 +43,10 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/app/actions/appointments", () => ({
   createAppointment: vi.fn(async () => null),
+  updateAppointment: vi.fn(async () => null),
+}));
+vi.mock("@/app/actions/appointment-slots", () => ({
+  loadAvailableAppointmentSlots: vi.fn(async () => ({ ok: true, data: ["09:00", "09:15"] })),
 }));
 
 import { AppointmentForm, type AppointmentFormChoices } from "./appointment-form";
@@ -48,13 +69,36 @@ function choices(dateOfBirth: string, hasContact = false): AppointmentFormChoice
   };
 }
 
-function renderForm(dateOfBirth: string, hasContact = false): string {
+function renderForm(
+  dateOfBirth: string,
+  hasContact = false,
+  datum = DAY,
+  today = DAY,
+): string {
   return renderToStaticMarkup(
-    <AppointmentForm choices={choices(dateOfBirth, hasContact)} datum={DAY} today={DAY} />,
+    <AppointmentForm choices={choices(dateOfBirth, hasContact)} datum={datum} today={today} />,
   );
 }
 
 describe("appointment form", () => {
+  it("uses a separate date input and opens the free-slot picker", () => {
+    const html = renderForm("1990-01-01");
+    expect(html).toContain('id="appointment-date"');
+    expect(html).toContain('type="date"');
+    expect(html).toContain('id="appointment-time"');
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain("Izaberite slobodan termin");
+    expect(html).not.toContain('type="datetime-local"');
+    expect(html).toContain('name="pocetak"');
+    expect(html).toContain('name="pocetak" value=""/');
+  });
+
+  it("does not allow choosing a date before today", () => {
+    const html = renderForm("1990-01-01", false, "2026-06-01", "2026-06-08");
+    expect(html).toContain('min="2026-06-08"');
+    expect(html).toContain('value="2026-06-08"');
+  });
+
   it("asks for a parent contact when the patient is under 15", () => {
     const html = renderForm("2012-03-01");
     const names = ["stomatolog", "pacijent", "pocetak", "trajanje", "tip", "napomena"];
@@ -68,6 +112,13 @@ describe("appointment form", () => {
     expect(html).toContain("Stomatolog");
     expect(html).toContain("Pacijent");
     expect(html).toContain("Početak");
+    expect(html).toContain('id="appointment-date"');
+    expect(html).toContain('type="date"');
+    expect(html).toContain('id="appointment-time"');
+    expect(html).not.toContain('type="datetime-local"');
+    expect(html).toContain('value="2026-06-08T09:00"');
+    expect(html).toContain('<option value="09:00" selected="">09:00</option>');
+    expect(html).toContain('<option value="09:15">09:15</option>');
     expect(html).toContain("Trajanje");
     expect(html).toContain("Tip");
     expect(html).toContain("Napomena");
