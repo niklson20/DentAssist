@@ -37,6 +37,7 @@ yarn-error.log*
 
 # local demo logins for manual testing
 demo-nalozi.local.md
+/Nalozi.txt
 
 # backups
 backups/
