@@ -1,15 +1,20 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { TOOTH_STATUSES, TOOTH_SURFACES, toothStatusLabels, toothSurfaceLabels } from "@/lib/labels";
+
+vi.mock("@phosphor-icons/react", () => ({
+  TrashSimple: () => <span data-icon="trash" />,
+}));
 
 import {
   Odontogram,
   applyStatusChange,
   createToothChart,
   nextSelectedTooth,
+  removeChange,
   toggleSurface,
   type ToothChart,
 } from "./odontogram";
@@ -91,6 +96,8 @@ describe("odontogram", () => {
     expect(log).toContain(toothStatusLabels.crown);
     expect(log).toContain(actor);
     expect(log).toContain("2026-10-24T08:05:00.000Z");
+    expect(log).toContain('aria-label="Obriši izmenu zuba 11"');
+    expect(log).toContain("odontogram__change-delete");
 
     const base = createToothChart();
     const leftover: ToothChart = {
@@ -128,6 +135,63 @@ describe("odontogram", () => {
     );
   });
 
+  it("removes a history row and restores the tooth when the newest change is deleted", () => {
+    let chart = createToothChart();
+    chart = applyStatusChange(chart, {
+      tooth: "45",
+      status: "fracture",
+      actor,
+      at: "2026-11-10T22:10:00.000Z",
+    });
+    chart = applyStatusChange(chart, {
+      tooth: "45",
+      status: "root_canal",
+      actor,
+      at: "2026-11-10T22:11:00.000Z",
+    });
+    chart = applyStatusChange(chart, {
+      tooth: "45",
+      status: "fracture",
+      actor,
+      at: "2026-11-10T22:12:00.000Z",
+    });
+    chart = applyStatusChange(chart, {
+      tooth: "11",
+      status: "crown",
+      actor,
+      at: "2026-11-10T22:13:00.000Z",
+    });
+
+    expect(chart.teeth["45"].status).toBe("fracture");
+    expect(chart.changes).toHaveLength(4);
+
+    chart = removeChange(chart, 0);
+    expect(chart.teeth["11"].status).toBe("healthy");
+    expect(chart.teeth["45"].status).toBe("fracture");
+    expect(chart.changes).toHaveLength(3);
+    expect(chart.changes.map((change) => change.tooth)).toEqual(["45", "45", "45"]);
+
+    chart = removeChange(chart, 2);
+    expect(chart.teeth["45"].status).toBe("fracture");
+    expect(chart.changes).toHaveLength(2);
+    expect(chart.changes.map((change) => `${change.from}->${change.to}`)).toEqual([
+      "root_canal->fracture",
+      "fracture->root_canal",
+    ]);
+
+    chart = removeChange(chart, 0);
+    expect(chart.teeth["45"].status).toBe("root_canal");
+    expect(chart.changes).toEqual([
+      {
+        at: "2026-11-10T22:11:00.000Z",
+        actor,
+        tooth: "45",
+        from: "fracture",
+        to: "root_canal",
+      },
+    ]);
+  });
+
   it("lays out both FDI arches with the patient right on the left, and keeps reception off the map", () => {
     const html = renderToStaticMarkup(<Odontogram actor="Stomatolog" />);
     expect(html.match(/data-tooth="/g)).toHaveLength(52);
@@ -162,6 +226,7 @@ describe("odontogram", () => {
     expect(blockStart).toBeGreaterThanOrEqual(0);
     const block = cssSource.slice(blockStart);
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(block).toContain(".odontogram__change-delete");
     for (const status of TOOTH_STATUSES) {
       expect(block).toContain(`[data-status="${status}"]`);
     }

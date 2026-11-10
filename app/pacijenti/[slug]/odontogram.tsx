@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { TrashSimple } from "@phosphor-icons/react";
 
 import {
   TOOTH_STATUSES,
@@ -135,6 +136,28 @@ export function applyStatusChange(
   };
 }
 
+/** Removes a history row. If it is the newest change for that tooth, restores the previous status. */
+export function removeChange(chart: ToothChart, index: number): ToothChart {
+  const change = chart.changes[index];
+  if (!change) {
+    return chart;
+  }
+
+  const latestForTooth = chart.changes.findIndex((entry) => entry.tooth === change.tooth);
+  const changes = chart.changes.filter((_, entryIndex) => entryIndex !== index);
+  if (latestForTooth !== index) {
+    return { ...chart, changes };
+  }
+
+  return {
+    teeth: {
+      ...chart.teeth,
+      [change.tooth]: { status: change.from, surfaces: [] },
+    },
+    changes,
+  };
+}
+
 export function nextSelectedTooth(current: FdiTooth | null, clicked: FdiTooth): FdiTooth | null {
   return current === clicked ? null : clicked;
 }
@@ -168,9 +191,17 @@ type OdontogramMapProps = {
   onSelect: (tooth: FdiTooth) => void;
   onStatus: (status: ToothStatus) => void;
   onSurface: (surface: ToothSurface) => void;
+  onRemoveChange: (index: number) => void;
 };
 
-function OdontogramMap({ chart, selectedTooth, onSelect, onStatus, onSurface }: OdontogramMapProps) {
+function OdontogramMap({
+  chart,
+  selectedTooth,
+  onSelect,
+  onStatus,
+  onSurface,
+  onRemoveChange,
+}: OdontogramMapProps) {
   const selected = selectedTooth ? chart.teeth[selectedTooth] : null;
 
   return (
@@ -259,6 +290,14 @@ function OdontogramMap({ chart, selectedTooth, onSelect, onStatus, onSurface }: 
                 <span data-previous-status={change.from}>{toothStatusLabels[change.from]}</span>
                 <span aria-hidden="true">→</span>
                 <span data-next-status={change.to}>{toothStatusLabels[change.to]}</span>
+                <button
+                  type="button"
+                  className="odontogram__change-delete"
+                  aria-label={`Obriši izmenu zuba ${change.tooth}`}
+                  onClick={() => onRemoveChange(index)}
+                >
+                  <TrashSimple aria-hidden="true" />
+                </button>
               </li>
             ))}
           </ul>
@@ -380,6 +419,10 @@ export function Odontogram({
     setChart((current) => toggleSurface(current, selectedTooth, surface));
   }
 
+  function deleteChange(index: number) {
+    setChart((current) => removeChange(current, index));
+  }
+
   if (panelId && !panel) {
     return null;
   }
@@ -391,6 +434,7 @@ export function Odontogram({
       onSelect={selectTooth}
       onStatus={changeStatus}
       onSurface={changeSurface}
+      onRemoveChange={deleteChange}
     />
   );
 
