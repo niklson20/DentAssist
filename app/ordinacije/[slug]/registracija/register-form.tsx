@@ -107,11 +107,11 @@ function DetailsStep({
         <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="lazyOnload" />
       ) : null}
       <h1 className="text-xl font-semibold">Registracija</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {clinicName
-          ? `Otvorite nalog pacijenta za ordinaciju ${clinicName}. Mejl se potvrđuje kodom.`
-          : "Otvorite nalog pacijenta za zakazivanje u bilo kojoj ordinaciji. Mejl se potvrđuje kodom."}
-      </p>
+      {clinicName ? (
+        <p className="mt-1 text-sm text-muted-foreground">
+          Otvorite nalog pacijenta za ordinaciju {clinicName}. Mejl se potvrđuje kodom.
+        </p>
+      ) : null}
 
       <form action={action} className="mt-6 flex flex-col gap-4" noValidate>
         <ReturnFields slug={slug} stomatolog={stomatolog} pocetak={pocetak} />

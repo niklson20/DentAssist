@@ -1,10 +1,19 @@
+import { PublicSiteFooter, publicSiteFooterClearance } from "../public-site-footer";
 import { PublicSiteNav } from "../public-site-nav";
+import { resolveStaffEntryUrl } from "../staff-entry-url";
 
-export function PatientAuthShell({ children }: { children: React.ReactNode }) {
+export async function PatientAuthShell({ children }: { children: React.ReactNode }) {
+  const staffEntryUrl = await resolveStaffEntryUrl();
+
   return (
-    <div className="flex min-h-svh flex-col bg-background text-foreground">
+    <div className="relative flex min-h-svh flex-col bg-background text-foreground">
       <PublicSiteNav />
-      <main className="flex flex-1 items-center justify-center p-4">{children}</main>
+      <main
+        className={`flex flex-1 items-center justify-center p-4 ${publicSiteFooterClearance}`}
+      >
+        {children}
+      </main>
+      <PublicSiteFooter staffEntryUrl={staffEntryUrl} />
     </div>
   );
 }

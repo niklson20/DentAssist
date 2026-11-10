@@ -59,7 +59,8 @@ export default async function ClinicPublicPage({ params }: PageProps) {
   const isPatient = sessionKind === "patient";
   const cookieStore = await cookies();
   const preferredDentistId = cookieStore.get(dentistCookieName(clinic.slug))?.value ?? null;
-  const todayIso = formatBelgradeDate(new Date());
+  const now = new Date();
+  const todayIso = formatBelgradeDate(now);
   const bookingDays = buildBookingDayRange(todayIso, clinic.maxAheadDays);
   const activeDentistId = pickInitialDentistId(clinic.dentists, preferredDentistId);
   const initialSlots =
@@ -83,6 +84,7 @@ export default async function ClinicPublicPage({ params }: PageProps) {
       weekendHasSchedule={clinic.weekendHasSchedule}
       dentists={dentists}
       initialDentistId={preferredDentistId}
+      currentTimeIso={now.toISOString()}
       showPatientAuth={!isPatient}
       showSlotsHint={!isPatient}
       bookingDays={bookingDays}

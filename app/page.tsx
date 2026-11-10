@@ -195,35 +195,67 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
                         <li key={clinic.slug}>
                           <Link
                             href={`/ordinacije/${encodeURIComponent(clinic.slug)}`}
-                            className="block rounded-lg border border-border bg-card p-4 text-card-foreground shadow-xs transition-colors hover:bg-muted/50"
+                            className="group block rounded-xl border border-border/80 bg-card p-4 text-card-foreground shadow-xs transition-[border-color,background-color,box-shadow] hover:border-primary/30 hover:bg-muted/30 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                           >
                             <div className="flex items-start gap-4">
-                              {clinic.logoUrl ? (
-                                <Image
-                                  src={clinic.logoUrl}
-                                  alt=""
-                                  width={64}
-                                  height={64}
-                                  className="size-16 shrink-0 rounded-md border border-border object-contain bg-card"
-                                  unoptimized
-                                />
-                              ) : null}
-                              <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                  <p className="min-w-0 font-medium">{clinic.name}</p>
-                                  <p className="-mt-0.5 text-sm text-muted-foreground">
-                                    {formatDirectoryAddress(clinic.address, clinic.city)}
-                                  </p>
-                                  {clinic.phone ? (
-                                    <p className="mt-2 text-sm text-muted-foreground">{clinic.phone}</p>
-                                  ) : null}
-                                  {distanceLabel ? (
-                                    <p className="mt-2 text-sm text-muted-foreground">
-                                      Udaljenost: {distanceLabel}
+                              <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/40">
+                                {clinic.logoUrl ? (
+                                  <Image
+                                    src={clinic.logoUrl}
+                                    alt=""
+                                    width={64}
+                                    height={64}
+                                    className="size-full object-contain p-1"
+                                    unoptimized
+                                  />
+                                ) : (
+                                  <span className="text-sm font-semibold tracking-wide text-primary">
+                                    {clinic.name
+                                      .trim()
+                                      .split(/\s+/)
+                                      .filter(Boolean)
+                                      .slice(0, 2)
+                                      .map((part) => part[0])
+                                      .join("")
+                                      .toLocaleUpperCase("sr-RS") || "O"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                                  <div className="min-w-0">
+                                    <p className="font-semibold leading-5 transition-colors group-hover:text-primary">
+                                      {clinic.name}
                                     </p>
+                                    <p className="mt-1 flex items-start gap-1.5 text-sm leading-5 text-muted-foreground">
+                                      <MapPinIcon className="mt-0.5 size-4 shrink-0" />
+                                      <span>
+                                        {formatDirectoryAddress(clinic.address, clinic.city)}
+                                      </span>
+                                    </p>
+                                  </div>
+                                  {clinic.rating ? (
+                                    <RatingBadge rating={clinic.rating} compact />
                                   ) : null}
                                 </div>
-                                {clinic.rating ? <RatingBadge rating={clinic.rating} /> : null}
+                                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+                                  {clinic.phone ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <PhoneIcon className="size-4 shrink-0" />
+                                      {clinic.phone}
+                                    </span>
+                                  ) : null}
+                                  {distanceLabel ? (
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <MapPinIcon className="size-4 shrink-0" />
+                                      Udaljenost: {distanceLabel}
+                                    </span>
+                                  ) : null}
+                                  <span className="ml-auto inline-flex items-center gap-1 font-medium text-primary transition-transform group-hover:translate-x-0.5">
+                                    Pogledaj
+                                    <ArrowRightIcon className="size-4 shrink-0" />
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </Link>
@@ -251,6 +283,59 @@ export default async function DirectoryPage({ searchParams }: PageProps) {
 
       <PublicSiteFooter staffEntryUrl={staffEntryUrl} />
     </div>
+  );
+}
+
+function MapPinIcon({ className }: { className: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+    >
+      <path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" />
+      <circle cx="12" cy="10" r="2.25" />
+    </svg>
+  );
+}
+
+function PhoneIcon({ className }: { className: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+    >
+      <path d="M7.5 3.5h-3A1.5 1.5 0 0 0 3 5c0 8.84 7.16 16 16 16a1.5 1.5 0 0 0 1.5-1.5v-3l-5-2-2 2a12.5 12.5 0 0 1-6-6l2-2-2-5Z" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon({ className }: { className: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+    >
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
   );
 }
 
