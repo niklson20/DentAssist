@@ -27,6 +27,7 @@ export type PatientListItem = {
   lastName: string;
   slug: string;
   phone: string | null;
+  dateOfBirth: string | null;
 };
 
 export type PatientListPage = {
@@ -41,6 +42,7 @@ type PatientRow = {
   last_name: string;
   slug: string;
   phone: string | null;
+  date_of_birth: string | null;
 };
 
 export async function searchClinicPatients(
@@ -57,7 +59,7 @@ export async function searchClinicPatients(
   const supabase = await createSupabaseServerClient();
   let request = supabase
     .from("patients")
-    .select("id, first_name, last_name, slug, phone", { count: "exact" })
+    .select("id, first_name, last_name, slug, phone, date_of_birth", { count: "exact" })
     .eq("clinic_id", clinicId)
     .is("merged_into_id", null)
     .order("last_name", { ascending: true })
@@ -226,6 +228,7 @@ function mapPatientRow(row: PatientRow): PatientListItem {
     lastName: row.last_name,
     slug: row.slug,
     phone: row.phone,
+    dateOfBirth: row.date_of_birth,
   };
 }
 

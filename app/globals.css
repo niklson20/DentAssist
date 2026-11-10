@@ -162,7 +162,8 @@
 .calendar-grid__headrow {
   position: sticky;
   top: 0;
-  z-index: 3;
+  /* Keep appointments and grid lines behind the sticky date header while scrolling. */
+  z-index: 10;
   background: var(--card);
 }
 

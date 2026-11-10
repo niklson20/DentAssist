@@ -64,6 +64,7 @@ describe("visit form", () => {
     expect(formSource).toContain("text-destructive");
     expect(formSource).toContain("border-border");
     expect(formSource).toContain("bg-card");
+    expect(formSource).toContain("embedded");
     expect(formSource).not.toContain("#");
   });
 

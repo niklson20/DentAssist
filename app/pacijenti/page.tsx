@@ -8,7 +8,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
-import { formatPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import {
   createPatientFromList,
@@ -90,12 +89,10 @@ function PatientListPanel({
   total: number;
 }) {
   const pageCount = total === 0 ? 0 : Math.ceil(total / PATIENT_PAGE_SIZE);
-  const from = total === 0 ? 0 : (page - 1) * PATIENT_PAGE_SIZE + 1;
-  const to = Math.min(page * PATIENT_PAGE_SIZE, total);
 
   return (
     <div className="flex flex-col gap-8">
-      <section className="space-y-3">
+      <section>
         <form className="flex flex-col gap-3 sm:flex-row" method="get">
           <Input
             name="pretraga"
@@ -107,10 +104,6 @@ function PatientListPanel({
           />
           <Button type="submit">Pretraži</Button>
         </form>
-        <p className="text-sm text-muted-foreground">
-          {searchQuery ? `Rezultati za „${searchQuery}“.` : "Svi pacijenti, po prezimenu."}
-          {total > 0 ? ` ${from}–${to} od ${total}.` : ""}
-        </p>
       </section>
 
       <section className="rounded-lg border border-border bg-card text-card-foreground">
@@ -120,21 +113,25 @@ function PatientListPanel({
           </p>
         ) : (
           <ul className="divide-y divide-border">
-            {patients.map((patient) => (
-              <li key={patient.id}>
-                <Link
-                  href={`/pacijenti/${patient.slug}`}
-                  className="flex flex-col gap-0.5 px-4 py-3 text-primary hover:bg-accent hover:text-accent-foreground"
-                >
-                  <span className="font-medium text-foreground">
-                    {patient.lastName} {patient.firstName}
-                  </span>
-                  {patient.phone ? (
-                    <span className="text-sm text-muted-foreground">{formatPhone(patient.phone)}</span>
-                  ) : null}
-                </Link>
-              </li>
-            ))}
+            {patients.map((patient) => {
+              const birthDate = listBirthDateLabel(patient.dateOfBirth);
+              return (
+                <li key={patient.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="font-medium text-foreground">
+                      {patient.lastName} {patient.firstName}
+                    </span>
+                    {birthDate ? <span className="text-sm text-muted-foreground">{birthDate}</span> : null}
+                  </div>
+                  <Link
+                    href={`/pacijenti/${patient.slug}`}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                  >
+                    Pogledaj karton
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
         {pageCount > 1 ? (
@@ -191,4 +188,12 @@ function readPage(value: string | undefined): number {
   }
   const page = Number(value);
   return Number.isSafeInteger(page) ? page : 1;
+}
+
+function listBirthDateLabel(dateOfBirth: string | null): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOfBirth ?? "");
+  if (!match) {
+    return null;
+  }
+  return `${Number(match[3])}. ${Number(match[2])}. ${match[1]}.`;
 }

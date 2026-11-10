@@ -40,11 +40,13 @@ export function VisitForm({
   visit,
   role,
   now,
+  embedded = false,
 }: {
   appointment: VisitFormAppointment;
   visit: VisitNote | null;
   role: VisitFormRole;
   now: Date;
+  embedded?: boolean;
 }) {
   const [result, formAction, pending] = useActionState<ActionResult<{ id: string }> | null, FormData>(
     visit ? updateVisit : saveVisit,
@@ -55,13 +57,17 @@ export function VisitForm({
   const finished = appointment.status === "completed";
   const missing = finished && visit === null;
   const formError = result && !result.ok ? result.error : null;
+  const shell = embedded ? "flex flex-col gap-4" : shellClass;
+  const heading = embedded ? null : (
+    <h2 id="visit-note-heading" className="text-lg font-semibold text-foreground">
+      Zapis posete
+    </h2>
+  );
 
   if (role !== "owner" && role !== "dentist") {
     return (
-      <section aria-labelledby="visit-note-heading" className={shellClass}>
-        <h2 id="visit-note-heading" className="text-lg font-semibold text-foreground">
-          Zapis posete
-        </h2>
+      <section aria-labelledby={embedded ? undefined : "visit-note-heading"} className={shell}>
+        {heading}
         <p className="text-sm text-muted-foreground">Zapis posete nije dostupan.</p>
       </section>
     );
@@ -71,10 +77,8 @@ export function VisitForm({
 
   if (locked) {
     return (
-      <section aria-labelledby="visit-note-heading" className={shellClass}>
-        <h2 id="visit-note-heading" className="text-lg font-semibold text-foreground">
-          Zapis posete
-        </h2>
+      <section aria-labelledby={embedded ? undefined : "visit-note-heading"} className={shell}>
+        {heading}
         {missing ? <MissingVisitMark /> : null}
         <p className="text-sm text-muted-foreground">Zapis je zaključan.</p>
         {visit ? <ReadOnlyNote visit={visit} /> : null}
@@ -83,8 +87,8 @@ export function VisitForm({
   }
 
   return (
-    <form id="zapis-posete" action={formAction} noValidate className={shellClass}>
-      <h2 className="text-lg font-semibold text-foreground">Zapis posete</h2>
+    <form id="zapis-posete" action={formAction} noValidate className={shell}>
+      {heading}
       {missing ? <MissingVisitMark /> : null}
       <input type="hidden" name="termin" value={appointment.id} />
       {fields.map((field) => {

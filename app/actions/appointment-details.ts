@@ -27,7 +27,7 @@ export async function loadAppointmentDetails(appointmentId: string) {
     }
 
     const appointment = result.data;
-    const [patientResult, dentistResult, typeResult, choices] = await Promise.all([
+    const [patientResult, dentistResult, typeResult, choices, selfResult] = await Promise.all([
       supabase
         .from("patients")
         .select("id, slug, first_name, last_name")
@@ -47,12 +47,24 @@ export async function loadAppointmentDetails(appointmentId: string) {
         .eq("clinic_id", member.clinicId)
         .maybeSingle(),
       loadAppointmentChoices(member.clinicId),
+      member.role === "dentist"
+        ? supabase
+            .from("clinic_members")
+            .select("id")
+            .eq("clinic_id", member.clinicId)
+            .eq("user_id", member.userId)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
     ]);
     if (patientResult.error || dentistResult.error || typeResult.error || !patientResult.data || !dentistResult.data || !typeResult.data || !choices) {
       console.error(
         "load_appointment_details related data rejected:",
         patientResult.error?.code ?? dentistResult.error?.code ?? typeResult.error?.code ?? "missing",
       );
+      return null;
+    }
+    if (selfResult.error) {
+      console.error("load_appointment_details member rejected:", selfResult.error.code);
       return null;
     }
 
@@ -73,6 +85,9 @@ export async function loadAppointmentDetails(appointmentId: string) {
       minute: "2-digit",
       hourCycle: "h23",
     }).format(startsAt);
+    const canComplete =
+      member.role === "owner" ||
+      (member.role === "dentist" && selfResult.data?.id === appointment.dentist_id);
 
     return {
       appointment: {
@@ -80,6 +95,7 @@ export async function loadAppointmentDetails(appointmentId: string) {
         dentistId: appointment.dentist_id,
         patientId: appointment.patient_id,
         startsAt: belgradeInput(startsAt),
+        endsAt: endsAt.toISOString(),
         durationMinutes: Math.round((endsAt.getTime() - startsAt.getTime()) / 60_000),
         typeId: appointment.appointment_type_id,
         note: appointment.note ?? "",
@@ -95,6 +111,8 @@ export async function loadAppointmentDetails(appointmentId: string) {
       dentistName: `${dentistResult.data.first_name} ${dentistResult.data.last_name}`,
       typeName: typeResult.data.name,
       choices,
+      canComplete,
+      role: member.role,
     };
   } catch (error) {
     console.error("load_appointment_details failed:", error instanceof Error ? error.name : "unknown");

@@ -13,8 +13,15 @@ import type { ActionResult } from "@/lib/action-result";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
 import { appointmentStatusLabel } from "@/lib/labels";
 import { AppointmentForm } from "./appointment-form";
+import { VisitForm } from "./visit-form";
 
 type AppointmentDetails = NonNullable<Awaited<ReturnType<typeof loadAppointmentDetails>>>;
+
+type VisitDialogTarget = {
+  id: string;
+  endsAt: string;
+  role: "owner" | "dentist";
+};
 
 export function AppointmentCard({
   appointmentId,
@@ -34,9 +41,15 @@ export function AppointmentCard({
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [visitTarget, setVisitTarget] = useState<VisitDialogTarget | null>(null);
   const closeDialog = useCallback(() => {
     setOpen(false);
     setEditing(false);
+  }, []);
+  const openVisitDialog = useCallback((target: VisitDialogTarget) => {
+    setOpen(false);
+    setEditing(false);
+    setVisitTarget(target);
   }, []);
 
   useEffect(() => {
@@ -101,7 +114,47 @@ export function AppointmentCard({
           </div>
           {loading ? <p role="status" className="text-sm text-muted-foreground">Učitavam podatke termina…</p> : null}
           {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-          {details ? <AppointmentDetailsPanel details={details} editing={editing} onCancelled={closeDialog} /> : null}
+          {details ? (
+            <AppointmentDetailsPanel
+              details={details}
+              editing={editing}
+              onCancelled={closeDialog}
+              onCompleted={() => {
+                if (details.role !== "owner" && details.role !== "dentist") return;
+                openVisitDialog({
+                  id: details.appointment.id,
+                  endsAt: details.appointment.endsAt,
+                  role: details.role,
+                });
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={visitTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setVisitTarget(null);
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <div className="flex items-start justify-between gap-3">
+            <DialogTitle>Zapis posete</DialogTitle>
+            <DialogClose render={<Button type="button" variant="outline" size="sm" />}>Zatvori</DialogClose>
+          </div>
+          {visitTarget ? (
+            <VisitForm
+              embedded
+              role={visitTarget.role}
+              now={new Date()}
+              visit={null}
+              appointment={{
+                id: visitTarget.id,
+                status: "completed",
+                endsAt: visitTarget.endsAt,
+              }}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
     </>
@@ -112,12 +165,14 @@ function AppointmentDetailsPanel({
   details,
   editing,
   onCancelled,
+  onCompleted,
 }: {
   details: AppointmentDetails;
   editing: boolean;
   onCancelled: () => void;
+  onCompleted: () => void;
 }) {
-  const { appointment, patient, dentistName, typeName, status, cancellationNote, choices } = details;
+  const { appointment, patient, dentistName, typeName, status, cancellationNote, choices, canComplete } = details;
 
   return (
     <div className="flex flex-col gap-4">
@@ -149,38 +204,154 @@ function AppointmentDetailsPanel({
           />
         </section>
       ) : null}
-      {status === "scheduled" ? <CancelAppointmentForm appointmentId={appointment.id} onCancelled={onCancelled} /> : null}
+      {status === "scheduled" ? (
+        <AppointmentStatusActions
+          appointmentId={appointment.id}
+          canComplete={canComplete}
+          onCancelled={onCancelled}
+          onCompleted={onCompleted}
+        />
+      ) : null}
     </div>
   );
 }
 
-function CancelAppointmentForm({ appointmentId, onCancelled }: { appointmentId: string; onCancelled: () => void }) {
-  const [result, formAction, pending] = useActionState<ActionResult<{ id: string }> | null, FormData>(
-    setAppointmentStatus,
-    null,
-  );
+function AppointmentStatusActions({
+  appointmentId,
+  canComplete,
+  onCancelled,
+  onCompleted,
+}: {
+  appointmentId: string;
+  canComplete: boolean;
+  onCancelled: () => void;
+  onCompleted: () => void;
+}) {
+  const cancelFormId = `cancel-appointment-${appointmentId}`;
+  const [confirmStatus, setConfirmStatus] = useState<"no_show" | "completed" | null>(null);
+  const [cancelResult, cancelAction, cancelPending] = useActionState<
+    ActionResult<{ id: string }> | null,
+    FormData
+  >(setAppointmentStatus, null);
+  const [noShowResult, noShowAction, noShowPending] = useActionState<
+    ActionResult<{ id: string }> | null,
+    FormData
+  >(setAppointmentStatus, null);
+  const [completeResult, completeAction, completePending] = useActionState<
+    ActionResult<{ id: string }> | null,
+    FormData
+  >(setAppointmentStatus, null);
+  const busy = cancelPending || noShowPending || completePending;
+  const confirmingNoShow = confirmStatus === "no_show";
+  const confirmingComplete = confirmStatus === "completed";
 
   useEffect(() => {
-    if (result?.ok) onCancelled();
-  }, [onCancelled, result]);
+    if (!cancelResult?.ok && !noShowResult?.ok) return;
+    setConfirmStatus(null);
+    onCancelled();
+  }, [cancelResult, noShowResult, onCancelled]);
+
+  useEffect(() => {
+    if (!completeResult?.ok) return;
+    setConfirmStatus(null);
+    onCompleted();
+  }, [completeResult, onCompleted]);
 
   return (
-    <form action={formAction} className="flex flex-col gap-2 border-t border-border pt-4">
-      <input type="hidden" name="termin" value={appointmentId} />
-      <input type="hidden" name="status" value="cancelled" />
-      <label htmlFor={`cancel-note-${appointmentId}`} className="text-sm font-medium">Razlog otkazivanja</label>
-      <textarea
-        id={`cancel-note-${appointmentId}`}
-        name="poruka"
-        required
-        maxLength={300}
-        className="min-h-20 rounded-md border border-input bg-transparent px-2.5 py-2 text-sm"
-      />
-      {result?.ok ? <p role="status" className="text-sm">Termin je otkazan.</p> : null}
-      {result && !result.ok ? <p role="alert" className="text-sm text-destructive">{result.error}</p> : null}
-      <Button type="submit" variant="destructive" disabled={pending} className="self-start">
-        {pending ? "Otkazujem…" : "Otkaži termin"}
-      </Button>
-    </form>
+    <div className="flex flex-col gap-2 border-t border-border pt-4">
+      <form id={cancelFormId} action={cancelAction} className="flex flex-col gap-2">
+        <input type="hidden" name="termin" value={appointmentId} />
+        <input type="hidden" name="status" value="cancelled" />
+        <label htmlFor={`cancel-note-${appointmentId}`} className="text-sm font-medium">
+          Razlog otkazivanja
+        </label>
+        <textarea
+          id={`cancel-note-${appointmentId}`}
+          name="poruka"
+          required
+          maxLength={300}
+          className="min-h-20 rounded-md border border-input bg-transparent px-2.5 py-2 text-sm"
+        />
+        {cancelResult?.ok ? <p role="status" className="text-sm">Termin je otkazan.</p> : null}
+        {cancelResult && !cancelResult.ok ? (
+          <p role="alert" className="text-sm text-destructive">
+            {cancelResult.error}
+          </p>
+        ) : null}
+      </form>
+      {noShowResult?.ok ? <p role="status" className="text-sm">Termin je označen kao „Nije došao“.</p> : null}
+      {noShowResult && !noShowResult.ok ? (
+        <p role="alert" className="text-sm text-destructive">
+          {noShowResult.error}
+        </p>
+      ) : null}
+      {completeResult && !completeResult.ok ? (
+        <p role="alert" className="text-sm text-destructive">
+          {completeResult.error}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy}
+          onClick={() => setConfirmStatus("no_show")}
+        >
+          Nije došao
+        </Button>
+        <Button type="submit" form={cancelFormId} variant="destructive" disabled={busy}>
+          {cancelPending ? "Otkazujem…" : "Otkaži termin"}
+        </Button>
+        {canComplete ? (
+          <Button
+            type="button"
+            variant="default"
+            className="ml-auto"
+            disabled={busy}
+            onClick={() => setConfirmStatus("completed")}
+          >
+            Završen
+          </Button>
+        ) : null}
+      </div>
+      <Dialog
+        open={confirmStatus !== null}
+        onOpenChange={(next) => {
+          if (!next && !busy) setConfirmStatus(null);
+        }}
+      >
+        <DialogContent className="w-[min(20rem,calc(100%-2rem))]">
+          <DialogTitle>Jeste li sigurni?</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            {confirmingNoShow
+              ? "Termin će biti označen kao „Nije došao“."
+              : "Termin će biti označen kao završen."}
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmStatus(null)}>
+              Odustani
+            </Button>
+            {confirmingNoShow ? (
+              <form action={noShowAction}>
+                <input type="hidden" name="termin" value={appointmentId} />
+                <input type="hidden" name="status" value="no_show" />
+                <Button type="submit" variant="outline" disabled={busy}>
+                  {noShowPending ? "Označavam…" : "Potvrdi"}
+                </Button>
+              </form>
+            ) : null}
+            {confirmingComplete ? (
+              <form action={completeAction}>
+                <input type="hidden" name="termin" value={appointmentId} />
+                <input type="hidden" name="status" value="completed" />
+                <Button type="submit" variant="default" disabled={busy}>
+                  {completePending ? "Završavam…" : "Potvrdi"}
+                </Button>
+              </form>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
