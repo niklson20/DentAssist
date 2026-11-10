@@ -77,6 +77,8 @@ export default async function ClinicPublicPage({ params }: PageProps) {
       phone={clinic.phone}
       description={clinic.description}
       logoUrl={clinic.logoUrl}
+      latitude={clinic.latitude}
+      longitude={clinic.longitude}
       rating={ratings.clinics.get(clinic.slug) ?? null}
       weekdayHours={clinic.weekdayHours}
       weekendHours={clinic.weekendHours}

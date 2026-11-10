@@ -10,6 +10,8 @@ export type ClinicPublicView = {
   phone: string;
   description: string;
   logoUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
   dentists: PublicDentist[];
   maxAheadDays: number;
   defaultDurationMin: number;
@@ -36,6 +38,8 @@ type ClinicPublicRow = {
   phone: string;
   logo_path: string | null;
   description: string | null;
+  latitude: number | null;
+  longitude: number | null;
   dentists: unknown;
   max_ahead_days: number;
   default_duration_min: number;
@@ -76,6 +80,8 @@ export async function loadClinicPublic(slug: string): Promise<ClinicPublicLoad> 
         phone: row.phone,
         description: row.description?.trim() ?? "",
         logoUrl: publicLogoUrl(row.logo_path),
+        latitude: mapCoordinate(row.latitude),
+        longitude: mapCoordinate(row.longitude),
         dentists: parsePublicDentists(row.dentists),
         maxAheadDays: row.max_ahead_days,
         defaultDurationMin: row.default_duration_min,
@@ -102,6 +108,10 @@ function mapHoursRange(
     return null;
   }
   return { opensAt, closesAt };
+}
+
+function mapCoordinate(value: number | null): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function publicLogoUrl(logoPath: string | null): string | null {

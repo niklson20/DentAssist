@@ -80,7 +80,7 @@ export function ClinicProfileForm({
   const error = result && !result.ok ? result : null;
 
   return (
-    <form action={formAction} className="flex flex-col gap-6" encType="multipart/form-data" noValidate>
+    <form action={formAction} className="flex flex-col gap-6" noValidate>
       {result?.ok ? (
         <p className="text-sm" role="status">
           Podešavanja ordinacije su sačuvana.

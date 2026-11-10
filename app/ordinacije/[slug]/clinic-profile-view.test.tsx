@@ -18,8 +18,25 @@ vi.mock("@/components/ui/button", () => ({
 
 vi.mock("./clinic-slots-panel", () => ({ ClinicSlotsPanel: () => null }));
 vi.mock("./sign-out-button", () => ({ PatientSignOutButton: () => null }));
+vi.mock("./clinic-location-map", async () => {
+  const actual = await vi.importActual<typeof import("./clinic-location-map")>("./clinic-location-map");
+  return {
+    ...actual,
+    ClinicLocationMap: ({ address }: { address: string }) => (
+      <a
+        href={actual.googleMapsSearchUrl(address)}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Otvori lokaciju u Google Maps"
+      >
+        mapa
+      </a>
+    ),
+  };
+});
 
 import { ClinicProfileView } from "./clinic-profile-view";
+import { googleMapsSearchUrl } from "./clinic-location-map";
 
 describe("clinic profile details", () => {
   const dentist = {
@@ -70,6 +87,41 @@ describe("clinic profile details", () => {
     expect(html).toContain("Zatvoreno");
     expect(html).toContain(">Otvoreno</span>");
     expect(html.indexOf("Sub – Ned")).toBeGreaterThan(html.indexOf("Pon – Pet"));
+    expect(html).not.toContain("Otvori lokaciju u Google Maps");
+  });
+
+  it("links the location map to Google Maps with the address", () => {
+    const html = renderToStaticMarkup(
+      <ClinicProfileView
+        slug="centar"
+        name="Ordinacija Centar"
+        city="Beograd"
+        address="Knez Mihailova 1"
+        phone=""
+        description=""
+        logoUrl={null}
+        latitude={44.8176}
+        longitude={20.4569}
+        weekdayHours={{ opensAt: "09:00:00", closesAt: "17:00:00" }}
+        weekendHours={null}
+        weekdayHasSchedule
+        weekendHasSchedule
+        dentists={[dentist]}
+        initialDentistId={null}
+        currentTimeIso="2026-11-09T09:00:00.000Z"
+        showPatientAuth
+        showSlotsHint
+        bookingDays={[]}
+        todayIso="2026-11-07"
+        initialSlots={[]}
+        staffEntryUrl="/staff"
+      />,
+    );
+
+    expect(html).toContain(
+      `href="${googleMapsSearchUrl("Knez Mihailova 1, Beograd").replaceAll("&", "&amp;")}"`,
+    );
+    expect(html).toContain('aria-label="Otvori lokaciju u Google Maps"');
   });
 
   it("shows public dentist ratings before login", () => {

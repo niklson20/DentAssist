@@ -16,6 +16,7 @@ import { PublicSiteFooter, publicSiteFooterClearance } from "../public-site-foot
 import { PublicSiteNav } from "../public-site-nav";
 import { RatingBadge } from "../rating-badge";
 import { splitClinicDescription } from "./clinic-description";
+import { ClinicLocationMap, hasClinicCoordinates } from "./clinic-location-map";
 import { getClinicHoursStatus, type ClinicHoursStatus } from "./clinic-hours-status";
 import { PatientSignOutButton } from "./sign-out-button";
 import { ClinicSlotsPanel } from "./clinic-slots-panel";
@@ -36,6 +37,8 @@ type ClinicProfileViewProps = {
   phone: string;
   description: string;
   logoUrl: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   rating?: RatingSummary | null;
   weekdayHours: ClinicHoursRange | null;
   weekendHours: ClinicHoursRange | null;
@@ -60,6 +63,8 @@ export function ClinicProfileView({
   phone,
   description,
   logoUrl,
+  latitude = null,
+  longitude = null,
   rating = null,
   weekdayHours,
   weekendHours,
@@ -76,6 +81,7 @@ export function ClinicProfileView({
   staffEntryUrl,
 }: ClinicProfileViewProps) {
   const location = [address, city].filter(Boolean).join(", ");
+  const showMap = hasClinicCoordinates(latitude, longitude);
   const [currentTime, setCurrentTime] = useState(() => new Date(currentTimeIso));
   const [selectedDentistId, setSelectedDentistId] = useState(() => {
     if (typeof window !== "undefined") {
@@ -187,50 +193,66 @@ export function ClinicProfileView({
         className={`mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-6 sm:py-8 ${publicSiteFooterClearance}`}
       >
         <div className="flex flex-col gap-4">
-          <section
-            aria-labelledby="clinic-hours-heading"
-            className="w-full max-w-[380px] rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs"
+          <div
+            className={cn(
+              "flex flex-col gap-4",
+              showMap && "sm:flex-row sm:items-stretch",
+            )}
           >
-            <div className="mb-4 flex items-center justify-between gap-3 border-b border-border/70 pb-3">
-              <h2 id="clinic-hours-heading" className="flex items-center gap-2 text-base font-semibold">
-                <ClockIcon className="size-5 text-primary" />
-                Radno vreme
-              </h2>
-              <HoursStatusBadge
-                status={getClinicHoursStatus({
-                  now: currentTime,
-                  weekdayHours,
-                  weekendHours,
-                  weekdayHasSchedule,
-                  weekendHasSchedule,
-                })}
+            <section
+              aria-labelledby="clinic-hours-heading"
+              className="w-full max-w-[380px] shrink-0 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs"
+            >
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-border/70 pb-3">
+                <h2 id="clinic-hours-heading" className="flex items-center gap-2 text-base font-semibold">
+                  <ClockIcon className="size-5 text-primary" />
+                  Radno vreme
+                </h2>
+                <HoursStatusBadge
+                  status={getClinicHoursStatus({
+                    now: currentTime,
+                    weekdayHours,
+                    weekendHours,
+                    weekdayHasSchedule,
+                    weekendHasSchedule,
+                  })}
+                />
+              </div>
+              <dl className="flex flex-col gap-2.5 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Pon – Pet</dt>
+                  <dd
+                    className={cn(
+                      "font-medium tabular-nums",
+                      !weekdayHours && weekdayHasSchedule && "font-normal text-muted-foreground",
+                    )}
+                  >
+                    {formatHoursRange(weekdayHours, weekdayHasSchedule)}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Sub – Ned</dt>
+                  <dd
+                    className={cn(
+                      "font-medium tabular-nums",
+                      !weekendHours && weekendHasSchedule && "font-normal text-muted-foreground",
+                    )}
+                  >
+                    {formatHoursRange(weekendHours, weekendHasSchedule)}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+
+            {showMap && location ? (
+              <ClinicLocationMap
+                address={location}
+                latitude={latitude as number}
+                longitude={longitude as number}
+                className="w-full sm:min-h-0 sm:flex-1"
               />
-            </div>
-            <dl className="flex flex-col gap-2.5 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted-foreground">Pon – Pet</dt>
-                <dd
-                  className={cn(
-                    "font-medium tabular-nums",
-                    !weekdayHours && weekdayHasSchedule && "font-normal text-muted-foreground",
-                  )}
-                >
-                  {formatHoursRange(weekdayHours, weekdayHasSchedule)}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted-foreground">Sub – Ned</dt>
-                <dd
-                  className={cn(
-                    "font-medium tabular-nums",
-                    !weekendHours && weekendHasSchedule && "font-normal text-muted-foreground",
-                  )}
-                >
-                  {formatHoursRange(weekendHours, weekendHasSchedule)}
-                </dd>
-              </div>
-            </dl>
-          </section>
+            ) : null}
+          </div>
 
           {description ? (
             <section

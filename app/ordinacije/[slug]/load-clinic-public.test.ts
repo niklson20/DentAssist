@@ -34,6 +34,8 @@ describe("loadClinicPublic", () => {
           phone: "+381111234567",
           logo_path: "clinic-id/logo.png",
           description: "Porodična stomatologija",
+          latitude: 44.8176,
+          longitude: 20.4569,
           dentists: [{ id: "11111111-1111-4111-8111-111111111111", first_name: "Ana", last_name: "Jović" }],
           max_ahead_days: 30,
           default_duration_min: 30,
@@ -58,6 +60,8 @@ describe("loadClinicPublic", () => {
         phone: "+381111234567",
         description: "Porodična stomatologija",
         logoUrl: "https://example.supabase.co/storage/v1/object/public/clinic-logos/clinic-id/logo.png",
+        latitude: 44.8176,
+        longitude: 20.4569,
         dentists: [
           {
             id: "11111111-1111-4111-8111-111111111111",

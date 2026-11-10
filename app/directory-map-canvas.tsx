@@ -8,6 +8,7 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 
 import { formatDirectoryAddress } from "@/app/directory-href";
+import { googleMapsSearchUrl } from "@/lib/google-maps";
 import { formatRatingAverage, formatRatingCount } from "@/lib/ratings";
 import type { ClinicDirectoryHit } from "@/lib/queries/public";
 
@@ -76,44 +77,56 @@ export function DirectoryMapCanvas({ clinics, className }: DirectoryMapProps) {
           />
           {bounds ? <FitBounds bounds={bounds} /> : null}
           <WatchMapSize />
-          {pinned.map((clinic) => (
-            <Marker
-              key={clinic.slug}
-              position={[clinic.latitude!, clinic.longitude!]}
-              icon={defaultIcon}
-            >
-              <Popup>
-                <div className="space-y-1 text-sm">
-                  <p className="font-medium">{clinic.name}</p>
-                  {clinic.rating ? (
-                    <p
-                      className="text-muted-foreground"
-                      aria-label={`Prosečna ocena ${formatRatingAverage(clinic.rating.average)} od 5, ${formatRatingCount(clinic.rating.count)}`}
+          {pinned.map((clinic) => {
+            const addressLine = formatDirectoryAddress(clinic.address, clinic.city);
+            return (
+              <Marker
+                key={clinic.slug}
+                position={[clinic.latitude!, clinic.longitude!]}
+                icon={defaultIcon}
+              >
+                <Popup>
+                  <div className="space-y-1 text-sm">
+                    <p className="font-medium">{clinic.name}</p>
+                    {clinic.rating ? (
+                      <p
+                        className="text-muted-foreground"
+                        aria-label={`Prosečna ocena ${formatRatingAverage(clinic.rating.average)} od 5, ${formatRatingCount(clinic.rating.count)}`}
+                      >
+                        ★ {formatRatingAverage(clinic.rating.average)}/5 ·{" "}
+                        {formatRatingCount(clinic.rating.count)}
+                      </p>
+                    ) : null}
+                    {addressLine ? (
+                      <p>
+                        <a
+                          href={googleMapsSearchUrl(addressLine)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
+                        >
+                          {addressLine}
+                        </a>
+                      </p>
+                    ) : null}
+                    {clinic.phone ? (
+                      <p>
+                        <a href={`tel:${clinic.phone}`} className="text-primary underline-offset-4 hover:underline">
+                          {clinic.phone}
+                        </a>
+                      </p>
+                    ) : null}
+                    <Link
+                      href={`/ordinacije/${encodeURIComponent(clinic.slug)}`}
+                      className="text-primary underline-offset-4 hover:underline"
                     >
-                      ★ {formatRatingAverage(clinic.rating.average)}/5 ·{" "}
-                      {formatRatingCount(clinic.rating.count)}
-                    </p>
-                  ) : null}
-                  <p className="text-muted-foreground">
-                    {formatDirectoryAddress(clinic.address, clinic.city)}
-                  </p>
-                  {clinic.phone ? (
-                    <p>
-                      <a href={`tel:${clinic.phone}`} className="text-primary underline-offset-4 hover:underline">
-                        {clinic.phone}
-                      </a>
-                    </p>
-                  ) : null}
-                  <Link
-                    href={`/ordinacije/${encodeURIComponent(clinic.slug)}`}
-                    className="text-primary underline-offset-4 hover:underline"
-                  >
-                    Otvori ordinaciju
-                  </Link>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+                      Otvori ordinaciju
+                    </Link>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
       )}
     </div>
