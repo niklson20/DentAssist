@@ -231,7 +231,7 @@ radno vreme i svoj nalog, bez PIN-a vlasnika. Recepcija vidi samo nalog.
 ## 6. Kalendar
 
 Podrazumevani pogled je današnji dan, stomatolozi jedan pored drugog. Nedeljni i mesečni
-pregled postoje. Nedelja počinje ponedeljkom. Otkazani termini mogu da se sakriju.
+pregled postoje. Nedelja počinje ponedeljkom. Otkazani termini nisu na kalendaru.
 Termin se menja kroz formu, bez prevlačenja.
 
 Ulogovan pacijent vidi samo slobodne početke izabranog stomatologa. Ne vidi
@@ -245,11 +245,11 @@ i sat i stomatolog, mejl ide jer se menjao sat. Otkaz već zakazanog termina tra
 poruku ordinacije, do 300 znakova.
 
 Početni ekran osoblja je taj kalendar i zahtevi koji čekaju potvrdu.
-Otkazani su sakriveni čim se ekran otvori. Prekidač „Sakrij otkazane“ može da ih vrati.
+Otkazani termini se ne učitavaju na kalendar; ostaju u istoriji i listama van mreže.
 
 Boja statusa ide iz tokena teme, bez heksa u komponenti. Čeka potvrdu je upozorenje,
 ponuđen je akcenat, zakazan je puna neutralna površina, završen je prigušen, nije došao
-je prigušeno crven, otkazan je precrtan i najslabiji.
+je prigušeno crven.
 
 ### 6.1 Podaci termina
 
@@ -683,11 +683,11 @@ pacijentu otvara javno ime. Pacijent se posle vraća na prijavu svoje
 ordinacije.
 
 `/danas` na širokom ekranu ima levo meni: Danas, Pacijenti, Podešavanja, Statistika
-(samo vlasnik) i odjavu. Adresa drži `prikaz` (`dan`, `nedelja` ili `mesec`), `datum`,
-`stomatolog` i `sakrijOtkazane`. Iznad kalendara su datum, Dan / Nedelja / Mesec i
-prekidač otkazanih. Dan su kolone stomatologa; vreme ide vertikalno, a osa sati ostaje
-pri pomeranju kolona. Nedelja je jedan stomatolog i sedam dana od ponedeljka. Mesec je
-broj termina po danu; klik otvara taj dan. Desno je kolona „Čeka potvrdu“ (sat, ime,
+(samo vlasnik) i odjavu. Adresa drži `prikaz` (`dan`, `nedelja` ili `mesec`), `datum` i
+`stomatolog`. Iznad kalendara su datum i Dan / Nedelja / Mesec. Dan su kolone
+stomatologa; vreme ide vertikalno, a osa sati ostaje pri pomeranju kolona. Nedelja je
+jedan stomatolog i sedam dana od ponedeljka. Mesec je broj termina po danu; klik
+otvara taj dan. Desno je kolona „Čeka potvrdu“ (sat, ime,
 stomatolog, razlog, rok), pa zadaci „Unesite mejl pacijenta“. Vlasnik vidi sve zahteve.
 Stomatolog vidi svoje i tu odgovara. Recepcija vidi ko dolazi, bez Prihvati, Odbij i
 Ponudi. Klik na termin otvara traku. Na telefonu traka zauzima ceo ekran.

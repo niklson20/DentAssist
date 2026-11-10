@@ -12,7 +12,6 @@ export type CalendarQuery = {
   prikaz: CalendarView;
   datum: string;
   stomatolog: string | null;
-  sakrijOtkazane: boolean;
 };
 
 export type LocalDateTime = {
@@ -224,7 +223,6 @@ export function parseCalendarState(params: CalendarParams, today: string): Calen
     prikaz,
     datum,
     stomatolog: stomatologValue ? stomatologValue : null,
-    sakrijOtkazane: parseHideCancelled(readParam(params, "sakrijOtkazane")),
   };
 }
 
@@ -233,14 +231,6 @@ function parseView(value: string | undefined): CalendarView {
     return value;
   }
   return "nedelja";
-}
-
-function parseHideCancelled(value: string | undefined): boolean {
-  if (value === undefined || value.trim() === "") {
-    return true;
-  }
-  const normalized = value.trim().toLowerCase();
-  return normalized !== "false" && normalized !== "0" && normalized !== "ne";
 }
 
 function readParam(params: CalendarParams, key: string): string | undefined {

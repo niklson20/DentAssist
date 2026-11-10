@@ -6,6 +6,22 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/danas",
 }));
+vi.mock("@phosphor-icons/react", () => {
+  const Icon = () => null;
+  return {
+    CalendarBlank: Icon,
+    CaretDown: Icon,
+    ChartBar: Icon,
+    ClipboardText: Icon,
+    Gear: Icon,
+    PencilSimple: Icon,
+    SignOut: Icon,
+    SidebarIcon: Icon,
+    Tooth: Icon,
+    Users: Icon,
+    XIcon: Icon,
+  };
+});
 vi.mock("@/app/actions/appointments", () => ({
   createAppointment: vi.fn(async () => null),
   createBlock: vi.fn(async () => null),
@@ -45,7 +61,7 @@ describe("block form", () => {
   it("stays off the calendar toolbar", () => {
     const html = renderToStaticMarkup(
       <CalendarShell
-        query={{ prikaz: "dan", datum: DAY, stomatolog: dentistId, sakrijOtkazane: true }}
+        query={{ prikaz: "dan", datum: DAY, stomatolog: dentistId }}
       />,
     );
     expect(html).not.toContain("Nova blokada");

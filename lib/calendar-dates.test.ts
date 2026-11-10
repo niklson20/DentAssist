@@ -139,24 +139,20 @@ describe("needsPatientEmailTask", () => {
 });
 
 describe("parseCalendarState", () => {
-  it("hides cancelled appointments until the query says otherwise", () => {
+  it("defaults to the week view on today", () => {
     expect(parseCalendarState({}, "2026-06-01")).toEqual({
       prikaz: "nedelja",
       datum: "2026-06-01",
       stomatolog: null,
-      sakrijOtkazane: true,
     });
-    expect(parseCalendarState({ sakrijOtkazane: "ne" }, "2026-06-01").sakrijOtkazane).toBe(false);
-    expect(parseCalendarState({ sakrijOtkazane: "0" }, "2026-06-01").sakrijOtkazane).toBe(false);
   });
 
   it("reads the view, date, and dentist from the query", () => {
-    const params = new URLSearchParams("prikaz=nedelja&datum=2026-06-08&stomatolog=dent-1&sakrijOtkazane=da");
+    const params = new URLSearchParams("prikaz=nedelja&datum=2026-06-08&stomatolog=dent-1");
     expect(parseCalendarState(params, "2026-06-01")).toEqual({
       prikaz: "nedelja",
       datum: "2026-06-08",
       stomatolog: "dent-1",
-      sakrijOtkazane: true,
     });
   });
 
@@ -165,7 +161,6 @@ describe("parseCalendarState", () => {
       prikaz: "nedelja",
       datum: "2026-06-01",
       stomatolog: null,
-      sakrijOtkazane: true,
     });
   });
 });

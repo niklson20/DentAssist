@@ -7,6 +7,23 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/danas",
 }));
 
+vi.mock("@phosphor-icons/react", () => {
+  const Icon = () => null;
+  return {
+    CalendarBlank: Icon,
+    CaretDown: Icon,
+    ChartBar: Icon,
+    ClipboardText: Icon,
+    Gear: Icon,
+    PencilSimple: Icon,
+    SignOut: Icon,
+    SidebarIcon: Icon,
+    Tooth: Icon,
+    Users: Icon,
+    XIcon: Icon,
+  };
+});
+
 vi.mock("next/link", () => ({
   default: ({
     href,
@@ -119,7 +136,6 @@ describe("phone calendar", () => {
           datum,
           prikaz: "dan",
           stomatolog: ana,
-          sakrijOtkazane: true,
         }}
         phoneCalendar={<PhoneDayList model={model} dentistId={ana} />}
         dayCalendar={<DayGrid model={model} />}

@@ -109,10 +109,12 @@ describe("labels", () => {
     }
   });
 
-  it("keeps request holds off the staff calendar", () => {
-    expect(CALENDAR_APPOINTMENT_STATUSES).toEqual(["scheduled", "completed", "no_show", "cancelled"]);
+  it("keeps request holds and cancelled off the staff calendar", () => {
+    expect(CALENDAR_APPOINTMENT_STATUSES).toEqual(["scheduled", "completed", "no_show"]);
     for (const status of APPOINTMENT_STATUSES) {
-      expect(showsOnCalendar(status)).toBe(status !== "pending_confirmation" && status !== "offered");
+      expect(showsOnCalendar(status)).toBe(
+        status !== "pending_confirmation" && status !== "offered" && status !== "cancelled",
+      );
     }
   });
 

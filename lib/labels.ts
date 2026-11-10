@@ -162,12 +162,11 @@ export const OCCUPYING_APPOINTMENT_STATUSES = [
   "no_show",
 ] as const satisfies readonly AppointmentStatus[];
 
-/** Booked visits on the staff calendar. Request holds stay off the grid. */
+/** Booked visits on the staff calendar. Request holds and cancelled stay off the grid. */
 export const CALENDAR_APPOINTMENT_STATUSES = [
   "scheduled",
   "completed",
   "no_show",
-  "cancelled",
 ] as const satisfies readonly AppointmentStatus[];
 
 export const APPOINTMENT_SOURCES = ["patient", "staff"] as const;

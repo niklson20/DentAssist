@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@phosphor-icons/react", () => {
+  const Icon = () => null;
+  return { PencilSimple: Icon };
+});
 
 import { belgradeLocalToISO } from "@/lib/calendar-dates";
 import { CALENDAR_APPOINTMENT_STATUSES, type AppointmentStatus } from "@/lib/labels";
@@ -130,8 +135,8 @@ describe("week view", () => {
     expect(html).toContain("Kraj Perioda");
     expect(html).not.toContain("Van Opsega");
     expect(html).not.toContain("Pera Perić");
-    expect(html).toContain("Otkaz Sakriven");
-    expect(html).toContain('data-status="cancelled"');
+    expect(html).not.toContain("Otkaz Sakriven");
+    expect(html).not.toContain('data-status="cancelled"');
     expect(html).not.toContain("2026-06-07");
     expect(html).not.toContain("2026-06-15");
 
@@ -168,8 +173,8 @@ describe("week view", () => {
     expect(viewSource).toContain("slotLines={false}");
     expect(viewSource).toContain("dates={model.days.map((day) => day.datum)}");
     expect(cssSource).toContain(".calendar-grid__now");
-    expect(cssSource).toContain('[data-hide-cancelled="true"] [data-status="cancelled"]');
-    expect(cssSource).toContain("text-decoration: line-through");
+    expect(cssSource).not.toContain('[data-hide-cancelled="true"] [data-status="cancelled"]');
+    expect(cssSource).not.toContain("text-decoration: line-through");
 
     expect(loadSource).toContain("startOfBelgradeWeek(isoDate)");
     expect(loadSource).toContain("CALENDAR_APPOINTMENT_STATUSES");

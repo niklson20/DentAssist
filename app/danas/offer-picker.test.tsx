@@ -8,6 +8,22 @@ import { belgradeLocalToISO, formatBelgrade } from "@/lib/calendar-dates";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/danas",
 }));
+vi.mock("@phosphor-icons/react", () => {
+  const Icon = () => null;
+  return {
+    CalendarBlank: Icon,
+    CaretDown: Icon,
+    ChartBar: Icon,
+    ClipboardText: Icon,
+    Gear: Icon,
+    PencilSimple: Icon,
+    SignOut: Icon,
+    SidebarIcon: Icon,
+    Tooth: Icon,
+    Users: Icon,
+    XIcon: Icon,
+  };
+});
 vi.mock("@/app/actions/appointments", () => ({
   createAppointment: vi.fn(async () => null),
   updateAppointment: vi.fn(async () => null),
@@ -130,7 +146,7 @@ describe("offer picker", () => {
 
   it("stays off the calendar toolbar and does not send", () => {
     const html = renderToStaticMarkup(
-      <CalendarShell query={{ prikaz: "dan", datum: DAY, stomatolog: null, sakrijOtkazane: true }} />,
+      <CalendarShell query={{ prikaz: "dan", datum: DAY, stomatolog: null }} />,
     );
 
     expect(html).not.toContain("Ponudi");

@@ -431,17 +431,6 @@
   border-color: color-mix(in oklch, var(--destructive) 25%, var(--border));
 }
 
-.calendar-grid__visit[data-status="cancelled"] {
-  background: var(--background);
-  color: var(--muted-foreground);
-  text-decoration: line-through;
-  opacity: 0.55;
-}
-
-[data-hide-cancelled="true"] [data-status="cancelled"] {
-  display: none;
-}
-
 /* odontogram */
 .odontogram {
   display: flex;

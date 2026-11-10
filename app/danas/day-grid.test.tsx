@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@phosphor-icons/react", () => {
+  const Icon = () => null;
+  return { PencilSimple: Icon };
+});
 
 import { belgradeLocalToISO, formatBelgrade, localTimeOnDate } from "@/lib/calendar-dates";
 import { APPOINTMENT_STATUSES, CALENDAR_APPOINTMENT_STATUSES } from "@/lib/labels";
@@ -158,6 +163,7 @@ describe("day grid", () => {
     }
     expect(html).not.toContain('data-status="pending_confirmation"');
     expect(html).not.toContain('data-status="offered"');
+    expect(html).not.toContain('data-status="cancelled"');
 
     const blockStart = cssSource.indexOf("/* calendar-grid */");
     expect(blockStart).toBeGreaterThanOrEqual(0);
@@ -166,14 +172,19 @@ describe("day grid", () => {
     expect(block).toContain("position: sticky");
     expect(block).toContain("left: 0");
     expect(block).toContain("flex-direction: column");
-    expect(block).toContain("text-decoration: line-through");
-    expect(block).toContain('[data-hide-cancelled="true"] [data-status="cancelled"]');
+    expect(block).not.toContain("text-decoration: line-through");
+    expect(block).not.toContain('[data-hide-cancelled="true"] [data-status="cancelled"]');
+    expect(block).not.toContain('[data-status="cancelled"]');
     expect(block).toContain(".calendar-grid__now");
     expect(block).toContain("var(--primary)");
     expect(gridSource).toContain("<NowLine");
     expect(gridSource).toContain("dates={[model.datum]}");
     expect(block).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     for (const status of APPOINTMENT_STATUSES) {
+      if (status === "cancelled") {
+        expect(block).not.toContain(`[data-status="${status}"]`);
+        continue;
+      }
       expect(block).toContain(`[data-status="${status}"]`);
     }
     for (const token of ["--primary", "--secondary", "--muted", "--destructive", "--muted-foreground", "--card"]) {
@@ -188,7 +199,7 @@ describe("day grid", () => {
     );
     expect(pageSource).toContain("DayGrid");
     expect(pageSource).not.toContain("query.sakrijOtkazane");
-    expect(shellSource).toContain("data-hide-cancelled");
+    expect(shellSource).not.toContain("data-hide-cancelled");
     expect(pageSource.toLowerCase()).not.toContain("supabase");
     expect(shellSource).toContain('query.prikaz === "dan"');
     expect(shellSource).toContain("dayCalendar");

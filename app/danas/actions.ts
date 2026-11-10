@@ -24,7 +24,6 @@ export async function showCalendarDay(
     prikaz: formData.get("prikaz"),
     datum: formData.get("datum"),
     stomatolog: typeof stomatolog === "string" ? stomatolog : "",
-    sakrijOtkazane: formData.get("sakrijOtkazane"),
   });
   if (!parsed.success) {
     return fail(CHECK_DATE, fieldErrorsFrom(parsed.error));

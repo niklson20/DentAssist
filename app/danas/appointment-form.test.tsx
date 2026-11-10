@@ -139,7 +139,7 @@ describe("appointment form", () => {
   it("opens from a button on the calendar", () => {
     const html = renderToStaticMarkup(
       <CalendarShell
-        query={{ prikaz: "dan", datum: DAY, stomatolog: null, sakrijOtkazane: true }}
+        query={{ prikaz: "dan", datum: DAY, stomatolog: null }}
       />,
     );
     expect(html).toContain("Novi termin");

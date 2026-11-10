@@ -93,7 +93,7 @@ nema preusmerenja: putanje stoje na istom originu. Imenik nema prijavu ni regist
 Ta dugmad su u gornjem desnom uglu `/ordinacije/[slug]`, dok pacijent nije prijavljen.
 
 Zakazivanje drži `stomatolog` i `pocetak` u adresi. Kalendar drži `prikaz`
-(`dan`, `nedelja`, `mesec`), `datum`, `stomatolog` i `sakrijOtkazane`.
+(`dan`, `nedelja`, `mesec`), `datum` i `stomatolog`.
 
 ---
 
@@ -170,7 +170,8 @@ Sve u `lib/calendar-dates.ts`.
   se ne koristi.
 - Nedelja počinje ponedeljkom.
 - Korak i razmak čitaju se iz ordinacije, nisu konstante.
-- Stanje kalendara je u URL-u (`prikaz`, `datum`, `stomatolog`, `sakrijOtkazane`).
+- Stanje kalendara je u URL-u (`prikaz`, `datum`, `stomatolog`).
+- Otkazani termini nisu u `CALENDAR_APPOINTMENT_STATUSES` i ne idu na kalendarsku mrežu.
 - Zaključavanje zapisa: 24 sata od `ends_at`. Zaključavanje dokumenta: 24 sata od
   `created_at`.
 

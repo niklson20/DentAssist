@@ -91,37 +91,32 @@ afterEach(() => {
 });
 
 describe("calendar query", () => {
-  it("hides cancelled visits as soon as the screen opens", () => {
+  it("opens on the week view for today", () => {
     expect(formatBelgradeDate(new Date())).toBe(today);
     expect(readCalendarQuery({}, today)).toEqual({
       prikaz: "nedelja",
       datum: today,
       stomatolog: null,
-      sakrijOtkazane: true,
     });
     expect(hasCanonicalCalendarParams({}, readCalendarQuery({}, today))).toBe(false);
-    expect(calendarPath(readCalendarQuery({}, today))).toBe(
-      `/danas?prikaz=nedelja&datum=${today}&sakrijOtkazane=da`,
-    );
+    expect(calendarPath(readCalendarQuery({}, today))).toBe(`/danas?prikaz=nedelja&datum=${today}`);
   });
 
-  it("keeps the dentist and shows cancelled visits only when the address says so", () => {
+  it("keeps the dentist in the address", () => {
     const params = {
       prikaz: "nedelja",
       datum: "2026-06-08",
       stomatolog: dentistId,
-      sakrijOtkazane: "ne",
     };
     const query = readCalendarQuery(params, today);
     expect(query).toEqual({
       prikaz: "nedelja",
       datum: "2026-06-08",
       stomatolog: dentistId,
-      sakrijOtkazane: false,
     });
     expect(hasCanonicalCalendarParams(params, query)).toBe(true);
     expect(calendarPath(query, { prikaz: "mesec" })).toBe(
-      `/danas?prikaz=mesec&datum=2026-06-08&stomatolog=${dentistId}&sakrijOtkazane=ne`,
+      `/danas?prikaz=mesec&datum=2026-06-08&stomatolog=${dentistId}`,
     );
   });
 });
@@ -137,19 +132,18 @@ describe("today page", () => {
     expect(menuSource).toContain("loadStaffMenuRole");
   });
 
-  it("opens on a dated address with cancelled visits hidden", async () => {
+  it("opens on a dated address without sakrijOtkazane", async () => {
     await expect(Page({ searchParams: Promise.resolve({}) })).rejects.toThrow(
-      `REDIRECT:/danas?prikaz=nedelja&datum=${today}&sakrijOtkazane=da`,
+      `REDIRECT:/danas?prikaz=nedelja&datum=${today}`,
     );
   });
 
-  it("shows the date, the three views, and hidden cancelled visits", async () => {
+  it("shows the date and the three views", async () => {
     const html = renderToStaticMarkup(
       await Page({
         searchParams: Promise.resolve({
           prikaz: "dan",
           datum: today,
-          sakrijOtkazane: "da",
         }),
       }),
     );
@@ -172,23 +166,19 @@ describe("today page", () => {
     expect(pageSource).not.toContain("PendingColumn");
     expect(html.indexOf("Novi termin")).toBeGreaterThan(views);
     expect(html.indexOf("Novi termin")).toBeLessThan(calendar);
-    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=${today}&amp;sakrijOtkazane=da"`);
-    expect(html).toContain(`href="/danas?prikaz=nedelja&amp;datum=${today}&amp;sakrijOtkazane=da"`);
+    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=${today}"`);
+    expect(html).toContain(`href="/danas?prikaz=nedelja&amp;datum=${today}"`);
     expect(html).toContain('aria-label="Prethodni dan"');
     expect(html).toContain('aria-label="Sledeći dan"');
-    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=2026-10-22&amp;sakrijOtkazane=da"`);
-    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=2026-10-24&amp;sakrijOtkazane=da"`);
+    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=2026-10-22"`);
+    expect(html).toContain(`href="/danas?prikaz=dan&amp;datum=2026-10-24"`);
     expect(html).not.toContain(">Prethodni dan<");
     expect(html).not.toContain(">Sledeći dan<");
+    expect(html).not.toContain("Sakrij otkazane");
     expect(html).not.toContain("Prikaži otkazane");
-    expect(html).toContain("Sakrij otkazane");
-    expect(html).toContain('type="checkbox"');
-    expect(html).toContain('checked=""');
-    expect(html).toContain('data-hide-cancelled="true"');
-    expect(html.indexOf("Sakrij otkazane")).toBeLessThan(html.indexOf("Novi termin"));
-    expect(shellSource).toContain("replaceState");
-    expect(html).not.toContain("Otkazani termini su sakriveni.");
-    expect(html).not.toContain("Otkazani termini su vidljivi.");
+    expect(html).not.toContain("sakrijOtkazane");
+    expect(html).not.toContain("data-hide-cancelled");
+    expect(shellSource).not.toContain("replaceState");
     expect(shellSource).toContain("<DateJump");
     expect(pageSource).not.toContain("<DateJump");
     expect(readFileSync(path.join(process.cwd(), "app/danas/date-jump.tsx"), "utf8")).not.toContain('id="datum"');
@@ -201,7 +191,6 @@ describe("today page", () => {
           prikaz: "nedelja",
           datum: "2026-06-08",
           stomatolog: dentistId,
-          sakrijOtkazane: true,
         }}
       />,
     );
@@ -213,47 +202,35 @@ describe("today page", () => {
           prikaz: "nedelja",
           datum: "2026-06-08",
           stomatolog: dentistId,
-          sakrijOtkazane: true,
         }}
       />,
     );
     expect(jump).not.toContain('id="datum"');
-    expect(jump).toContain(
-      `href="/danas?prikaz=nedelja&amp;datum=${today}&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
-    );
-    expect(html).toContain(
-      `href="/danas?prikaz=mesec&amp;datum=2026-06-08&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
-    );
+    expect(jump).toContain(`href="/danas?prikaz=nedelja&amp;datum=${today}&amp;stomatolog=${dentistId}"`);
+    expect(html).toContain(`href="/danas?prikaz=mesec&amp;datum=2026-06-08&amp;stomatolog=${dentistId}"`);
     expect(html).toContain('aria-label="Prethodna nedelja"');
     expect(html).toContain('aria-label="Sledeća nedelja"');
-    expect(html).toContain(
-      `href="/danas?prikaz=nedelja&amp;datum=2026-06-01&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
-    );
-    expect(html).toContain(
-      `href="/danas?prikaz=nedelja&amp;datum=2026-06-15&amp;stomatolog=${dentistId}&amp;sakrijOtkazane=da"`,
-    );
+    expect(html).toContain(`href="/danas?prikaz=nedelja&amp;datum=2026-06-01&amp;stomatolog=${dentistId}"`);
+    expect(html).toContain(`href="/danas?prikaz=nedelja&amp;datum=2026-06-15&amp;stomatolog=${dentistId}"`);
   });
 
-  it("shows cancelled visits when the address asks for them", async () => {
+  it("moves the month without sakrijOtkazane", async () => {
     const html = renderToStaticMarkup(
       await Page({
         searchParams: Promise.resolve({
           prikaz: "mesec",
           datum: "2026-06-08",
-          sakrijOtkazane: "ne",
         }),
       }),
     );
     expect(html).not.toContain('id="datum"');
     expect(html).toContain('aria-label="Prethodni mesec"');
     expect(html).toContain('aria-label="Sledeći mesec"');
-    expect(html).toContain('href="/danas?prikaz=mesec&amp;datum=2026-05-08&amp;sakrijOtkazane=ne"');
-    expect(html).toContain('href="/danas?prikaz=mesec&amp;datum=2026-07-08&amp;sakrijOtkazane=ne"');
-    expect(html).toContain(`href="/danas?prikaz=mesec&amp;datum=${today}&amp;sakrijOtkazane=ne"`);
-    expect(html).not.toContain("Prikaži otkazane");
-    expect(html).toContain("Sakrij otkazane");
-    expect(html).not.toContain('data-hide-cancelled="true"');
-    expect(html.slice(html.indexOf('type="checkbox"'), html.indexOf("Sakrij otkazane"))).not.toContain("checked");
+    expect(html).toContain('href="/danas?prikaz=mesec&amp;datum=2026-05-08"');
+    expect(html).toContain('href="/danas?prikaz=mesec&amp;datum=2026-07-08"');
+    expect(html).toContain(`href="/danas?prikaz=mesec&amp;datum=${today}"`);
+    expect(html).not.toContain("Sakrij otkazane");
+    expect(html).not.toContain("sakrijOtkazane");
   });
 });
 
@@ -272,7 +249,7 @@ describe("clinic menu", () => {
     expect(staffMenuItems("dentist").map((item) => item.label)).toEqual([
       "Kalendar",
       "Pacijenti",
-      "Zahtevi",
+      "Termini",
       "Podešavanja",
     ]);
     expect(staffMenuItems("owner").map((item) => item.href)).toContain("/statistika");
@@ -289,7 +266,7 @@ describe("clinic menu", () => {
     );
     expect(dentist).toContain("Kalendar");
     expect(dentist).toContain("Pacijenti");
-    expect(dentist).toContain("Zahtevi");
+    expect(dentist).toContain("Termini");
     expect(dentist.indexOf("Pacijenti")).toBeLessThan(dentist.indexOf('href="/zahtevi"'));
     expect(dentist.indexOf('href="/zahtevi"')).toBeLessThan(dentist.indexOf("Podešavanja"));
     expect(dentist).toContain("Podešavanja");

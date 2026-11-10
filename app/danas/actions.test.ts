@@ -49,7 +49,7 @@ describe("showCalendarDay", () => {
   it("rejects a date that is not a real day", async () => {
     const result = await showCalendarDay(
       null,
-      form({ prikaz: "dan", datum: "2026-02-31", stomatolog: "", sakrijOtkazane: "da" }),
+      form({ prikaz: "dan", datum: "2026-02-31", stomatolog: "" }),
     );
     expect(result).toEqual({
       ok: false,
@@ -60,7 +60,7 @@ describe("showCalendarDay", () => {
     expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
-  it("opens the address with the dentist and cancelled visits still hidden or shown", async () => {
+  it("opens the address with the dentist", async () => {
     await expect(
       showCalendarDay(
         null,
@@ -68,12 +68,9 @@ describe("showCalendarDay", () => {
           prikaz: "nedelja",
           datum: "2026-06-08",
           stomatolog: dentistId,
-          sakrijOtkazane: "ne",
         }),
       ),
-    ).rejects.toThrow(
-      `REDIRECT:/danas?prikaz=nedelja&datum=2026-06-08&stomatolog=${dentistId}&sakrijOtkazane=ne`,
-    );
+    ).rejects.toThrow(`REDIRECT:/danas?prikaz=nedelja&datum=2026-06-08&stomatolog=${dentistId}`);
     expect(mocks.requireMember).toHaveBeenCalledOnce();
   });
 });

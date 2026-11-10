@@ -9,7 +9,6 @@ import type { AppointmentStatus } from "@/lib/labels";
 
 import { monthFromRows } from "./load-month";
 import { MonthView } from "./month-view";
-import { HideCancelledProvider } from "./hide-cancelled";
 import { calendarPath } from "./schema";
 
 vi.mock("next/link", () => ({
@@ -30,7 +29,6 @@ const query: CalendarQuery = {
   prikaz: "mesec",
   datum,
   stomatolog: null,
-  sakrijOtkazane: true,
 };
 
 const viewSource = readFileSync(path.join(process.cwd(), "app/danas/month-view.tsx"), "utf8");
@@ -104,9 +102,7 @@ describe("month view", () => {
     const june8 = model.days.find((day) => day.datum === datum);
     const june9 = model.days.find((day) => day.datum === "2026-06-09");
     expect(june8?.count).toBe(2);
-    expect(june8?.total).toBe(3);
     expect(june8?.countLabel).toBe("2 termina");
-    expect(june8?.totalLabel).toBe("3 termina");
     expect(june8?.href).toBe(calendarPath(query, { prikaz: "dan", datum }));
     expect(june9?.count).toBe(1);
     expect(june9?.countLabel).toBe("1 termin");
@@ -129,7 +125,7 @@ describe("month view", () => {
     expect(june8Cell).not.toContain(">2 termina<");
     expect(html).not.toContain(">0 termina<");
     expect(html).not.toContain(">0</span>");
-    const june9Start = html.indexOf('href="/danas?prikaz=dan&amp;datum=2026-06-09&amp;sakrijOtkazane=da"');
+    const june9Start = html.indexOf('href="/danas?prikaz=dan&amp;datum=2026-06-09"');
     const june9Cell = html.slice(june9Start, html.indexOf("</a>", june9Start));
     expect(june9Cell).toContain(">1</span>");
     expect(june9Cell).not.toContain(">1 termin<");
@@ -146,15 +142,7 @@ describe("month view", () => {
     const todayCell = html.slice(todayStart, html.indexOf("</a>", todayStart));
     expect(todayCell).toContain('data-today="true"');
     expect(todayCell).toContain("bg-primary");
-
-    const shown = renderToStaticMarkup(
-      <HideCancelledProvider hidden={false}>
-        <MonthView model={model} />
-      </HideCancelledProvider>,
-    );
-    const shownStart = shown.indexOf('href="/danas?prikaz=dan&amp;datum=2026-06-08&amp;sakrijOtkazane=ne"');
-    const shownCell = shown.slice(shownStart, shown.indexOf("</a>", shownStart));
-    expect(shownCell).toContain(">3</span>");
+    expect(html).not.toContain("sakrijOtkazane");
 
     const onlyAna = monthFromRows({
       query: { ...query, stomatolog: ana },
