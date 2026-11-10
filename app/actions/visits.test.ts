@@ -38,9 +38,12 @@ type VisitRow = {
 type AppointmentRow = {
   id: string;
   clinic_id: string;
+  dentist_id: string;
   status: string;
   ends_at: string;
 };
+
+const dentistId = "20000000-0000-4000-8000-000000000002";
 
 const state: {
   appointments: AppointmentRow[];
@@ -83,8 +86,13 @@ function seedVisit(procedure = "Vađenje"): void {
 function createMemory() {
   function from(table: string) {
     const filters = new Map<string, unknown>();
+    let patch: Record<string, unknown> | null = null;
     const builder = {
       select() {
+        return builder;
+      },
+      update(values: Record<string, unknown>) {
+        patch = values;
         return builder;
       },
       eq(column: string, value: unknown) {
@@ -96,7 +104,15 @@ function createMemory() {
           const row = state.appointments.find(
             (item) => item.id === filters.get("id") && item.clinic_id === filters.get("clinic_id"),
           );
-          return Promise.resolve({ data: row ? { ...row } : null, error: null });
+          if (!row) return Promise.resolve({ data: null, error: null });
+          if (patch) {
+            if (filters.has("status") && row.status !== filters.get("status")) {
+              return Promise.resolve({ data: null, error: null });
+            }
+            Object.assign(row, patch);
+            return Promise.resolve({ data: { id: row.id }, error: null });
+          }
+          return Promise.resolve({ data: { ...row }, error: null });
         }
         if (table === "visits") {
           const row = state.visits.find(
@@ -105,6 +121,12 @@ function createMemory() {
               item.clinic_id === filters.get("clinic_id"),
           );
           return Promise.resolve({ data: row ? { id: row.id } : null, error: null });
+        }
+        if (table === "clinic_members") {
+          return Promise.resolve({
+            data: { id: dentistId },
+            error: null,
+          });
         }
         throw new Error(`unexpected table ${table}`);
       },
@@ -149,6 +171,7 @@ beforeEach(() => {
     {
       id: appointmentId,
       clinic_id: clinicId,
+      dentist_id: dentistId,
       status: "completed",
       ends_at: appointmentEnd.toISOString(),
     },
@@ -191,6 +214,16 @@ describe("saveVisit", () => {
     expect(readFileSync(path.join(process.cwd(), "app/actions/visits.ts"), "utf8")).toContain(
       "isVisitLocked(",
     );
+  });
+
+  it("marks a scheduled appointment completed when the first visit note is saved", async () => {
+    state.appointments[0]!.status = "scheduled";
+
+    const result = await saveVisit(null, noteForm({ opis: "Pregled" }));
+
+    expect(result).toEqual({ ok: true, data: { id: visitId } });
+    expect(state.appointments[0]?.status).toBe("completed");
+    expect(state.visits[0]?.procedure_description).toBe("Pregled");
   });
 
   it("rejects a second note for the same appointment on 2026-06-08", async () => {

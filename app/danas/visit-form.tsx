@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 
 import { saveVisit, updateVisit } from "@/app/actions/visits";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { ActionResult } from "@/lib/action-result";
 import { isVisitLocked } from "@/lib/calendar-dates";
 
@@ -21,6 +22,8 @@ export type VisitFormAppointment = {
 };
 
 type VisitFormRole = "owner" | "dentist" | "reception";
+
+const NOTE_FIELDS = ["opis", "preporuke", "plan", "beleske"] as const;
 
 const shellClass =
   "flex max-w-lg flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground";
@@ -41,13 +44,19 @@ export function VisitForm({
   role,
   now,
   embedded = false,
+  completeOnSave = false,
+  onSaved,
 }: {
   appointment: VisitFormAppointment;
   visit: VisitNote | null;
   role: VisitFormRole;
   now: Date;
   embedded?: boolean;
+  completeOnSave?: boolean;
+  onSaved?: () => void;
 }) {
+  const formId = useId();
+  const [confirmEmpty, setConfirmEmpty] = useState(false);
   const [result, formAction, pending] = useActionState<ActionResult<{ id: string }> | null, FormData>(
     visit ? updateVisit : saveVisit,
     null,
@@ -55,6 +64,7 @@ export function VisitForm({
   const endsAt = new Date(appointment.endsAt);
   const locked = Number.isNaN(endsAt.getTime()) || isVisitLocked(endsAt, now);
   const finished = appointment.status === "completed";
+  const canWrite = finished || completeOnSave;
   const missing = finished && visit === null;
   const formError = result && !result.ok ? result.error : null;
   const shell = embedded ? "flex flex-col gap-4" : shellClass;
@@ -63,6 +73,10 @@ export function VisitForm({
       Zapis posete
     </h2>
   );
+
+  useEffect(() => {
+    if (result?.ok) onSaved?.();
+  }, [onSaved, result]);
 
   if (role !== "owner" && role !== "dentist") {
     return (
@@ -73,7 +87,7 @@ export function VisitForm({
     );
   }
 
-  if (!finished) return null;
+  if (!canWrite) return null;
 
   if (locked) {
     return (
@@ -86,43 +100,100 @@ export function VisitForm({
     );
   }
 
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (confirmEmpty) {
+      setConfirmEmpty(false);
+      return;
+    }
+    if (isEmptyNote(event.currentTarget)) {
+      event.preventDefault();
+      setConfirmEmpty(true);
+    }
+  }
+
   return (
-    <form id="zapis-posete" action={formAction} noValidate className={shell}>
-      {heading}
-      {missing ? <MissingVisitMark /> : null}
-      <input type="hidden" name="termin" value={appointment.id} />
-      {fields.map((field) => {
-        const messageText = message(result, field.name);
-        return (
-          <Field key={field.id} id={field.id} label={field.label} message={messageText}>
-            <textarea
-              id={field.id}
-              name={field.name}
-              rows={3}
-              maxLength={4000}
-              defaultValue={visit?.[field.key] ?? ""}
-              aria-invalid={messageText ? true : undefined}
-              aria-describedby={describedBy(field.id, messageText)}
-              className={areaClass}
-            />
-          </Field>
-        );
-      })}
-      {result?.ok ? (
-        <p role="status" className="text-sm text-foreground">
-          Zapis je sačuvan.
-        </p>
-      ) : null}
-      {formError ? (
-        <p role="alert" className="text-sm text-destructive">
-          {formError}
-        </p>
-      ) : null}
-      <Button type="submit" disabled={pending} className="self-start">
-        Sačuvaj
-      </Button>
-    </form>
+    <>
+      <form
+        id={formId}
+        action={formAction}
+        onSubmit={handleSubmit}
+        noValidate
+        className={shell}
+      >
+        {heading}
+        <input type="hidden" name="termin" value={appointment.id} />
+        {fields.map((field) => {
+          const messageText = message(result, field.name);
+          return (
+            <Field key={field.id} id={field.id} label={field.label} message={messageText}>
+              <textarea
+                id={field.id}
+                name={field.name}
+                rows={3}
+                maxLength={4000}
+                defaultValue={visit?.[field.key] ?? ""}
+                aria-invalid={messageText ? true : undefined}
+                aria-describedby={describedBy(field.id, messageText)}
+                className={areaClass}
+              />
+            </Field>
+          );
+        })}
+        {result?.ok && !onSaved ? (
+          <p role="status" className="text-sm text-foreground">
+            Zapis je sačuvan.
+          </p>
+        ) : null}
+        {formError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {formError}
+          </p>
+        ) : null}
+        <Button type="submit" disabled={pending} className="self-start">
+          Sačuvaj
+        </Button>
+      </form>
+      <Dialog
+        open={confirmEmpty}
+        onOpenChange={(next) => {
+          if (!next && !pending) setConfirmEmpty(false);
+        }}
+      >
+        <DialogContent className="w-[min(20rem,calc(100%-2rem))]">
+          <DialogTitle>Termin završen bez zapisa</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Sačuvaćete prazan zapis posete. Možete ga dopuniti dok važi rok za izmenu.
+          </p>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => setConfirmEmpty(false)}
+            >
+              Otkaži
+            </Button>
+            <Button type="submit" form={formId} disabled={pending}>
+              {pending ? "Čuvam…" : "Potvrdi"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
+}
+
+export function isEmptyNoteValues(values: Record<string, string>): boolean {
+  return NOTE_FIELDS.every((name) => (values[name] ?? "").trim() === "");
+}
+
+export function isEmptyNote(form: HTMLFormElement): boolean {
+  const values: Record<string, string> = {};
+  for (const name of NOTE_FIELDS) {
+    const field = form.elements.namedItem(name);
+    values[name] = field && "value" in field ? String(field.value) : "";
+  }
+  return isEmptyNoteValues(values);
 }
 
 function MissingVisitMark() {

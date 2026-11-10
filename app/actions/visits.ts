@@ -16,6 +16,8 @@ const PICK_APPOINTMENT = "Izaberite termin.";
 const TEXT_MAX = "Tekst može imati najviše 4000 znakova.";
 const APPOINTMENT_MISSING = "Termin nije pronađen.";
 const NOT_COMPLETED = "Zapis se čuva samo za završen termin.";
+const COMPLETED_ONLY =
+  "Samo stomatolog tog termina i vlasnik mogu da označe termin završenim.";
 const LOCKED = "Zapis je zaključan.";
 const ALREADY = "Termin već ima zapis.";
 const MISSING = "Zapis nije pronađen.";
@@ -36,6 +38,7 @@ type WriteMode = "create" | "update";
 type LoadedAppointment = {
   status: string;
   endsAt: Date;
+  dentistId: string;
 };
 
 export async function saveVisit(
@@ -68,7 +71,25 @@ async function writeVisit(formData: FormData, mode: WriteMode): Promise<ActionRe
     const appointment = await loadAppointment(supabase, member.clinicId, parsed.data.termin);
     if (appointment === "missing") return fail(APPOINTMENT_MISSING);
     if (appointment === "unavailable") return fail(UNAVAILABLE);
-    if (appointment.status !== "completed") return fail(NOT_COMPLETED);
+    if (appointment.status === "scheduled") {
+      if (mode !== "create") return fail(NOT_COMPLETED);
+      const denied = await denyUnlessCanComplete(supabase, member, appointment.dentistId);
+      if (denied) return denied;
+      const completed = await supabase
+        .from("appointments")
+        .update({ status: "completed" })
+        .eq("id", parsed.data.termin)
+        .eq("clinic_id", member.clinicId)
+        .eq("status", "scheduled")
+        .select("id")
+        .maybeSingle();
+      if (completed.error || !completed.data) {
+        console.error("save_visit complete rejected:", completed.error?.code ?? "rejected");
+        return fail(UNAVAILABLE);
+      }
+    } else if (appointment.status !== "completed") {
+      return fail(NOT_COMPLETED);
+    }
     if (isVisitLocked(appointment.endsAt, new Date())) return fail(LOCKED);
 
     const existing = await loadVisit(supabase, member.clinicId, parsed.data.termin);
@@ -110,7 +131,7 @@ async function loadAppointment(
 ): Promise<LoadedAppointment | "missing" | "unavailable"> {
   const result = await supabase
     .from("appointments")
-    .select("status, ends_at")
+    .select("status, ends_at, dentist_id")
     .eq("clinic_id", clinicId)
     .eq("id", appointmentId)
     .maybeSingle();
@@ -123,6 +144,31 @@ async function loadAppointment(
   if (!result.data) return "missing";
   const appointment = appointmentFrom(result.data);
   return appointment ?? "unavailable";
+}
+
+async function denyUnlessCanComplete(
+  supabase: SupabaseClient,
+  member: { userId: string; clinicId: string; role: string },
+  dentistId: string,
+): Promise<ActionResult<never> | null> {
+  if (member.role === "owner") return null;
+  if (member.role !== "dentist") return fail(COMPLETED_ONLY);
+
+  const self = await supabase
+    .from("clinic_members")
+    .select("id")
+    .eq("clinic_id", member.clinicId)
+    .eq("user_id", member.userId)
+    .maybeSingle();
+
+  if (self.error) {
+    console.error("save_visit member rejected:", self.error.code ?? "rejected");
+    return fail(UNAVAILABLE);
+  }
+
+  const memberId = self.data && typeof self.data.id === "string" ? self.data.id : null;
+  if (memberId !== dentistId) return fail(COMPLETED_ONLY);
+  return null;
 }
 
 async function loadVisit(
@@ -149,10 +195,16 @@ async function loadVisit(
 function appointmentFrom(data: unknown): LoadedAppointment | null {
   if (!data || typeof data !== "object") return null;
   const row = data as Record<string, unknown>;
-  if (typeof row.status !== "string" || typeof row.ends_at !== "string") return null;
+  if (
+    typeof row.status !== "string" ||
+    typeof row.ends_at !== "string" ||
+    typeof row.dentist_id !== "string"
+  ) {
+    return null;
+  }
   const endsAt = new Date(row.ends_at);
   if (Number.isNaN(endsAt.getTime())) return null;
-  return { status: row.status, endsAt };
+  return { status: row.status, endsAt, dentistId: row.dentist_id };
 }
 
 function visitId(data: unknown): string | null {

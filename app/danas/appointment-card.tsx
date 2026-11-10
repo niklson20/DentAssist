@@ -3,15 +3,20 @@
 import { useActionState, useCallback, useEffect, useState, type ReactNode } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
-import { PencilSimple } from "@phosphor-icons/react";
+import { ArrowSquareOut, PencilSimple } from "@phosphor-icons/react";
 
 import { loadAppointmentDetails } from "@/app/actions/appointment-details";
 import { setAppointmentStatus } from "@/app/actions/appointments";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { ActionResult } from "@/lib/action-result";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
-import { appointmentStatusLabel } from "@/lib/labels";
+import {
+  APPOINTMENT_STATUSES,
+  appointmentStatusLabel,
+  type AppointmentStatus,
+} from "@/lib/labels";
+import { cn } from "@/lib/utils";
 import { AppointmentForm } from "./appointment-form";
 import { VisitForm } from "./visit-form";
 
@@ -20,8 +25,22 @@ type AppointmentDetails = NonNullable<Awaited<ReturnType<typeof loadAppointmentD
 type VisitDialogTarget = {
   id: string;
   endsAt: string;
+  status: string;
   role: "owner" | "dentist";
 };
+
+const STATUS_BADGE_CLASS: Record<AppointmentStatus, string> = {
+  pending_confirmation: "border-destructive/50 bg-destructive/25 text-foreground",
+  offered: "border-primary bg-primary text-primary-foreground",
+  scheduled: "border-border bg-secondary text-secondary-foreground",
+  completed: "border-border bg-muted text-muted-foreground",
+  no_show: "border-destructive/25 bg-destructive/10 text-destructive",
+  cancelled: "border-border bg-background text-muted-foreground line-through opacity-60",
+};
+
+function resolveAppointmentStatus(value: string | undefined): AppointmentStatus | null {
+  return APPOINTMENT_STATUSES.find((status) => status === value) ?? null;
+}
 
 export function AppointmentCard({
   appointmentId,
@@ -42,6 +61,7 @@ export function AppointmentCard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [visitTarget, setVisitTarget] = useState<VisitDialogTarget | null>(null);
+  const headerStatus = resolveAppointmentStatus(details?.status ?? status);
   const closeDialog = useCallback(() => {
     setOpen(false);
     setEditing(false);
@@ -96,6 +116,16 @@ export function AppointmentCard({
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-1.5">
               <DialogTitle>Detalji termina</DialogTitle>
+              {headerStatus ? (
+                <span
+                  className={cn(
+                    "rounded-md border px-2 py-0.5 text-xs font-medium",
+                    STATUS_BADGE_CLASS[headerStatus],
+                  )}
+                >
+                  {appointmentStatusLabel(headerStatus)}
+                </span>
+              ) : null}
               {details?.status === "scheduled" ? (
                 <Button
                   type="button"
@@ -119,11 +149,12 @@ export function AppointmentCard({
               details={details}
               editing={editing}
               onCancelled={closeDialog}
-              onCompleted={() => {
+              onComplete={() => {
                 if (details.role !== "owner" && details.role !== "dentist") return;
                 openVisitDialog({
                   id: details.appointment.id,
                   endsAt: details.appointment.endsAt,
+                  status: details.status,
                   role: details.role,
                 });
               }}
@@ -148,9 +179,11 @@ export function AppointmentCard({
               role={visitTarget.role}
               now={new Date()}
               visit={null}
+              completeOnSave={visitTarget.status === "scheduled"}
+              onSaved={() => setVisitTarget(null)}
               appointment={{
                 id: visitTarget.id,
-                status: "completed",
+                status: visitTarget.status,
                 endsAt: visitTarget.endsAt,
               }}
             />
@@ -165,12 +198,12 @@ function AppointmentDetailsPanel({
   details,
   editing,
   onCancelled,
-  onCompleted,
+  onComplete,
 }: {
   details: AppointmentDetails;
   editing: boolean;
   onCancelled: () => void;
-  onCompleted: () => void;
+  onComplete: () => void;
 }) {
   const { appointment, patient, dentistName, typeName, status, cancellationNote, choices, canComplete } = details;
 
@@ -178,9 +211,15 @@ function AppointmentDetailsPanel({
     <div className="flex flex-col gap-4">
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-sm">
         <dt className="font-medium">Pacijent</dt>
-        <dd className="flex items-center gap-2">
-          <span>{patient.name}</span>
-          <Link href={patient.href} className={buttonVariants({ variant: "outline", size: "xs" })}>Karton</Link>
+        <dd>
+          <Link
+            href={patient.href}
+            className="inline-flex items-center gap-1.5 font-medium text-foreground underline decoration-foreground/35 underline-offset-4 hover:decoration-foreground"
+          >
+            {patient.name}
+            <ArrowSquareOut aria-hidden="true" className="size-3.5 opacity-70" />
+            <span className="sr-only"> — otvori karton</span>
+          </Link>
         </dd>
         <dt className="font-medium">Stomatolog</dt><dd>{dentistName}</dd>
         <dt className="font-medium">Datum i vreme</dt><dd>{details.dateLabel}, {details.timeLabel}</dd>
@@ -209,7 +248,7 @@ function AppointmentDetailsPanel({
           appointmentId={appointment.id}
           canComplete={canComplete}
           onCancelled={onCancelled}
-          onCompleted={onCompleted}
+          onComplete={onComplete}
         />
       ) : null}
     </div>
@@ -220,15 +259,15 @@ function AppointmentStatusActions({
   appointmentId,
   canComplete,
   onCancelled,
-  onCompleted,
+  onComplete,
 }: {
   appointmentId: string;
   canComplete: boolean;
   onCancelled: () => void;
-  onCompleted: () => void;
+  onComplete: () => void;
 }) {
   const cancelFormId = `cancel-appointment-${appointmentId}`;
-  const [confirmStatus, setConfirmStatus] = useState<"no_show" | "completed" | null>(null);
+  const [confirmNoShow, setConfirmNoShow] = useState(false);
   const [cancelResult, cancelAction, cancelPending] = useActionState<
     ActionResult<{ id: string }> | null,
     FormData
@@ -237,25 +276,13 @@ function AppointmentStatusActions({
     ActionResult<{ id: string }> | null,
     FormData
   >(setAppointmentStatus, null);
-  const [completeResult, completeAction, completePending] = useActionState<
-    ActionResult<{ id: string }> | null,
-    FormData
-  >(setAppointmentStatus, null);
-  const busy = cancelPending || noShowPending || completePending;
-  const confirmingNoShow = confirmStatus === "no_show";
-  const confirmingComplete = confirmStatus === "completed";
+  const busy = cancelPending || noShowPending;
 
   useEffect(() => {
     if (!cancelResult?.ok && !noShowResult?.ok) return;
-    setConfirmStatus(null);
+    setConfirmNoShow(false);
     onCancelled();
   }, [cancelResult, noShowResult, onCancelled]);
-
-  useEffect(() => {
-    if (!completeResult?.ok) return;
-    setConfirmStatus(null);
-    onCompleted();
-  }, [completeResult, onCompleted]);
 
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-4">
@@ -285,17 +312,12 @@ function AppointmentStatusActions({
           {noShowResult.error}
         </p>
       ) : null}
-      {completeResult && !completeResult.ok ? (
-        <p role="alert" className="text-sm text-destructive">
-          {completeResult.error}
-        </p>
-      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           variant="outline"
           disabled={busy}
-          onClick={() => setConfirmStatus("no_show")}
+          onClick={() => setConfirmNoShow(true)}
         >
           Nije došao
         </Button>
@@ -308,47 +330,34 @@ function AppointmentStatusActions({
             variant="default"
             className="ml-auto"
             disabled={busy}
-            onClick={() => setConfirmStatus("completed")}
+            onClick={onComplete}
           >
             Završen
           </Button>
         ) : null}
       </div>
       <Dialog
-        open={confirmStatus !== null}
+        open={confirmNoShow}
         onOpenChange={(next) => {
-          if (!next && !busy) setConfirmStatus(null);
+          if (!next && !busy) setConfirmNoShow(false);
         }}
       >
         <DialogContent className="w-[min(20rem,calc(100%-2rem))]">
           <DialogTitle>Jeste li sigurni?</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            {confirmingNoShow
-              ? "Termin će biti označen kao „Nije došao“."
-              : "Termin će biti označen kao završen."}
+            Termin će biti označen kao „Nije došao“.
           </p>
           <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmStatus(null)}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmNoShow(false)}>
               Odustani
             </Button>
-            {confirmingNoShow ? (
-              <form action={noShowAction}>
-                <input type="hidden" name="termin" value={appointmentId} />
-                <input type="hidden" name="status" value="no_show" />
-                <Button type="submit" variant="outline" disabled={busy}>
-                  {noShowPending ? "Označavam…" : "Potvrdi"}
-                </Button>
-              </form>
-            ) : null}
-            {confirmingComplete ? (
-              <form action={completeAction}>
-                <input type="hidden" name="termin" value={appointmentId} />
-                <input type="hidden" name="status" value="completed" />
-                <Button type="submit" variant="default" disabled={busy}>
-                  {completePending ? "Završavam…" : "Potvrdi"}
-                </Button>
-              </form>
-            ) : null}
+            <form action={noShowAction}>
+              <input type="hidden" name="termin" value={appointmentId} />
+              <input type="hidden" name="status" value="no_show" />
+              <Button type="submit" variant="outline" disabled={busy}>
+                {noShowPending ? "Označavam…" : "Potvrdi"}
+              </Button>
+            </form>
           </div>
         </DialogContent>
       </Dialog>

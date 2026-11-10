@@ -10,7 +10,7 @@ vi.mock("@/app/actions/visits", () => ({
   updateVisit: vi.fn(async () => null),
 }));
 
-import { VisitForm, type VisitNote } from "./visit-form";
+import { isEmptyNoteValues, VisitForm, type VisitNote } from "./visit-form";
 
 const appointmentId = "55555555-5555-4555-8555-555555555555";
 const DAY = "2026-06-08";
@@ -41,13 +41,13 @@ function renderNote(visit: VisitNote | null, now: Date, role: "owner" | "dentist
 }
 
 describe("visit form", () => {
-  it("marks a finished appointment without a note and keeps every field optional on 2026-06-08", () => {
+  it("keeps every field optional and does not warn until an empty save on 2026-06-08", () => {
     const html = renderNote(null, appointmentEnd, "dentist");
     const names = ["opis", "preporuke", "plan", "beleske"];
     let cursor = -1;
 
     expect(DAY).toBe("2026-06-08");
-    expect(html).toContain("Termin završen bez zapisa");
+    expect(html).not.toContain("Termin završen bez zapisa");
     expect(html).toContain("Opis zahvata");
     expect(html).toContain("Preporuke");
     expect(html).toContain("Plan daljeg lečenja");
@@ -61,11 +61,53 @@ describe("visit form", () => {
     expect(formSource.toLowerCase()).not.toContain("supabase");
     expect(formSource).toContain("ActionResult");
     expect(formSource).toContain("isVisitLocked(");
-    expect(formSource).toContain("text-destructive");
-    expect(formSource).toContain("border-border");
-    expect(formSource).toContain("bg-card");
+    expect(formSource).toContain("confirmEmpty");
+    expect(formSource).toContain("Termin završen bez zapisa");
+    expect(formSource).toContain("Potvrdi");
+    expect(formSource).toContain("Otkaži");
+    expect(formSource).toContain("isEmptyNote");
     expect(formSource).toContain("embedded");
+    expect(formSource).toContain("completeOnSave");
+    expect(formSource).toContain("onSaved");
     expect(formSource).not.toContain("#");
+  });
+
+  it("opens the form for a scheduled appointment when completeOnSave is set", () => {
+    const html = renderToStaticMarkup(
+      <VisitForm
+        role="dentist"
+        now={appointmentEnd}
+        visit={null}
+        completeOnSave
+        appointment={{
+          id: appointmentId,
+          status: "scheduled",
+          endsAt: appointmentEnd.toISOString(),
+        }}
+      />,
+    );
+    expect(html).toContain("<form");
+    expect(html).toContain("Sačuvaj");
+    expect(html).not.toContain("Termin završen bez zapisa");
+  });
+
+  it("treats blank visit fields as an empty note", () => {
+    expect(
+      isEmptyNoteValues({
+        opis: "  ",
+        preporuke: "",
+        plan: "\n",
+        beleske: "",
+      }),
+    ).toBe(true);
+    expect(
+      isEmptyNoteValues({
+        opis: "Vađenje",
+        preporuke: "",
+        plan: "",
+        beleske: "",
+      }),
+    ).toBe(false);
   });
 
   it("opens the edit for the owner before the deadline on 2026-06-08", () => {
@@ -80,7 +122,7 @@ describe("visit form", () => {
   });
 
   it("does not open the edit for the owner after the deadline on 2026-06-08", () => {
-    const html = renderNote(savedNote, new Date(appointmentEnd.getTime() + 24 * 60 * 60 * 1000));
+    const html = renderNote(null, new Date(appointmentEnd.getTime() + 24 * 60 * 60 * 1000));
 
     expect(html).not.toContain("<form");
     expect(html).not.toContain("<textarea");
@@ -90,6 +132,6 @@ describe("visit form", () => {
     expect(html).not.toContain('name="beleske"');
     expect(html).not.toContain("Sačuvaj");
     expect(html).toContain("Zapis je zaključan.");
-    expect(html).not.toContain("Termin završen bez zapisa");
+    expect(html).toContain("Termin završen bez zapisa");
   });
 });

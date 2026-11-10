@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const cardSource = readFileSync(path.join(process.cwd(), "app/danas/appointment-card.tsx"), "utf8");
+const formSource = readFileSync(path.join(process.cwd(), "app/danas/visit-form.tsx"), "utf8");
 
 describe("appointment card status actions", () => {
   it("offers no-show separately from cancel for scheduled appointments", () => {
@@ -32,28 +33,34 @@ describe("appointment card status actions", () => {
     expect(noShowFormSlice).not.toContain("required");
   });
 
-  it("asks for confirmation before no-show and complete", () => {
+  it("asks for confirmation before no-show only", () => {
     expect(cardSource).toContain("Jeste li sigurni?");
     expect(cardSource).toContain("Odustani");
-    expect(cardSource).toContain('setConfirmStatus("no_show")');
-    expect(cardSource).toContain('setConfirmStatus("completed")');
+    expect(cardSource).toContain("setConfirmNoShow(true)");
     expect(cardSource).toContain("Termin će biti označen kao „Nije došao“.");
-    expect(cardSource).toContain("Termin će biti označen kao završen.");
+    expect(cardSource).not.toContain("Termin će biti označen kao završen.");
+    expect(cardSource).not.toContain('setConfirmStatus("completed")');
+    expect(cardSource).not.toContain('value="completed"');
   });
 
-  it("offers complete on the right for canComplete and opens the visit form after success", () => {
+  it("opens the visit form from Završen without completing the appointment first", () => {
     expect(cardSource).toContain("canComplete");
     expect(cardSource).toContain("Završen");
-    expect(cardSource).toContain("Završavam…");
-    expect(cardSource).toContain('value="completed"');
     expect(cardSource).toContain('variant="default"');
     expect(cardSource).toContain("ml-auto");
     expect(cardSource).toContain("VisitForm");
     expect(cardSource).toContain("Zapis posete");
     expect(cardSource).toContain("openVisitDialog");
-    expect(cardSource).toContain('status: "completed"');
+    expect(cardSource).toContain("onComplete={onComplete}");
+    expect(cardSource).toContain("onClick={onComplete}");
+    expect(cardSource).toContain("completeOnSave={visitTarget.status === \"scheduled\"}");
+    expect(cardSource).toContain("status: visitTarget.status");
     expect(cardSource).toContain("visit={null}");
     expect(cardSource).toContain("embedded");
+    expect(cardSource).toContain("onSaved={() => setVisitTarget(null)}");
+    expect(formSource).toContain("completeOnSave");
+    expect(formSource).toContain("onSaved");
+    expect(formSource).toContain("result?.ok");
 
     const completeGate = cardSource.indexOf("{canComplete ? (");
     expect(completeGate).toBeGreaterThan(-1);
@@ -61,15 +68,7 @@ describe("appointment card status actions", () => {
     expect(completeBlock).toContain("Završen");
     expect(completeBlock).toContain("ml-auto");
     expect(completeBlock).toContain('variant="default"');
-    expect(completeBlock).toContain('setConfirmStatus("completed")');
-    expect(completeBlock).toContain(": null");
-
-    const completeFormStart = cardSource.indexOf('value="completed"');
-    const completeFormSlice = cardSource.slice(
-      cardSource.lastIndexOf("<form", completeFormStart),
-      cardSource.indexOf("</form>", completeFormStart) + "</form>".length,
-    );
-    expect(completeFormSlice).toContain('value="completed"');
-    expect(completeFormSlice).toContain("Potvrdi");
+    expect(completeBlock).toContain("onClick={onComplete}");
+    expect(completeBlock).not.toContain("Završavam…");
   });
 });
