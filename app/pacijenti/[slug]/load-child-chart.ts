@@ -3,7 +3,10 @@ import { z } from "zod";
 import { ALERT_CODES } from "@/lib/labels";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+import { normalizeAnamnesis, type ChartAnamnesis } from "./anamnesis";
 import type { ChartHeaderAlert, ChartHeaderPatient } from "./chart-header";
+import type { VisitHistoryItem } from "./history";
+import { loadVisitHistory } from "./load-visit-history";
 import { CHILD_SLUG } from "./schema";
 
 export type ChildChartMemberRole = "owner" | "dentist" | "reception";
@@ -23,9 +26,12 @@ export type ChildChartLoad =
   | { status: "unavailable" }
   | {
       status: "ready";
+      patientId: string;
       patient: ChartHeaderPatient & { slug: string };
       alerts: ChartHeaderAlert[] | null;
+      anamnesis: ChartAnamnesis | null;
       connect: ChildChartConnect;
+      visits: VisitHistoryItem[];
     };
 
 const contactEmail = z.email();
@@ -78,6 +84,7 @@ export async function loadChildChart(
 
     let jmbg: string | null = null;
     let alerts: ChartHeaderAlert[] | null = null;
+    let anamnesis: ChartAnamnesis | null = null;
 
     if (clinical) {
       const jmbgResult = await supabase.rpc("patient_jmbg", { target_patient_id: patient.id });
@@ -98,10 +105,29 @@ export async function loadChildChart(
         return { status: "unavailable" };
       }
       alerts = chartAlerts(alertsResult.data);
+
+      const anamnesisResult = await supabase
+        .from("patient_anamnesis")
+        .select("chronic_conditions, medications, allergies, pregnancy")
+        .eq("clinic_id", clinicId)
+        .eq("patient_id", patient.id)
+        .maybeSingle();
+
+      if (anamnesisResult.error) {
+        console.error("load_child_chart anamnesis rejected:", anamnesisResult.error.code ?? "rejected");
+        return { status: "unavailable" };
+      }
+      anamnesis = anamnesisFrom(anamnesisResult.data);
+    }
+
+    const visits = await loadVisitHistory(clinicId, patient.id, { includeNotes: clinical });
+    if (!visits) {
+      return { status: "unavailable" };
     }
 
     return {
       status: "ready",
+      patientId: patient.id,
       patient: {
         slug: patient.slug,
         firstName: patient.firstName,
@@ -115,10 +141,15 @@ export async function loadChildChart(
         jmbg,
       },
       alerts,
+      anamnesis,
       connect: connectState(patient, contactOptions(contactResult.data)),
+      visits,
     };
   } catch (error) {
-    console.error("load_child_chart failed:", error instanceof Error ? error.name : "unknown");
+    console.error(
+      "load_child_chart failed:",
+      error instanceof Error ? `${error.name}: ${error.message}` : "unknown",
+    );
     return { status: "unavailable" };
   }
 }
@@ -242,4 +273,17 @@ function connectState(patient: ChartRow, contacts: ParentContactOption[]): Child
     return { kind: "needsBirthDate" };
   }
   return { kind: "ready", contacts };
+}
+
+function anamnesisFrom(row: unknown): ChartAnamnesis {
+  if (!row || typeof row !== "object") {
+    return normalizeAnamnesis(null);
+  }
+  const record = row as Record<string, unknown>;
+  return normalizeAnamnesis({
+    chronicConditions: typeof record.chronic_conditions === "string" ? record.chronic_conditions : "",
+    medications: typeof record.medications === "string" ? record.medications : "",
+    allergies: typeof record.allergies === "string" ? record.allergies : "",
+    pregnancy: typeof record.pregnancy === "string" ? record.pregnancy : "",
+  });
 }

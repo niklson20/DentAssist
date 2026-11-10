@@ -39,10 +39,17 @@ describe("chart header", () => {
       <ChartHeader
         patient={patient}
         patientSlug="mika-mikic"
+        patientId="30000000-0000-4000-8000-000000000003"
         clinical
         today="2026-11-05"
         visits={[]}
         alerts={[{ code: "drug_allergy", note: "Penicilin" }]}
+        anamnesis={{
+          chronicConditions: "Astma",
+          medications: "",
+          allergies: "",
+          pregnancy: "",
+        }}
       />,
     );
     expect(html).toContain("Mika Mikić");
@@ -50,13 +57,15 @@ describe("chart header", () => {
     expect(html).toContain("+381611112222");
     expect(html).toContain("Penicilin");
     expect(html).toContain("Alergija na lek");
-    expect(html).toContain("Pregled");
+    expect(html).toContain("Informacije");
     expect(html).toContain("Istorija");
     expect(html).toContain("Anamneza");
     expect(html).toContain("Zubi");
     expect(html).toContain('aria-label="Izmeni"');
     expect(html).not.toContain(">Izmeni<");
     expect(html).not.toContain("Sačuvaj");
+    expect(headerSource).toContain("AnamnesisForm");
+    expect(headerSource).toContain("AnamnesisView");
     expect(html).toContain("Datum rođenja");
     expect(html).toContain("1. 6. 2015.");
     expect(html).toContain("JMBG");
@@ -67,7 +76,7 @@ describe("chart header", () => {
     expect(html).toContain("Redovne kontrole.");
   });
 
-  it("shows Pregled and Istorija only to reception, without warning or JMBG", () => {
+  it("shows Informacije and Istorija only to reception, without warning or JMBG", () => {
     const html = renderToStaticMarkup(
       <ChartHeader
         patient={{ ...patient, jmbg: null }}
@@ -78,7 +87,7 @@ describe("chart header", () => {
         alerts={null}
       />,
     );
-    expect(html).toContain("Pregled");
+    expect(html).toContain("Informacije");
     expect(html).toContain("Istorija");
     expect(html).not.toContain("Anamneza");
     expect(html).not.toContain("Zubi");

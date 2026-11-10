@@ -19,6 +19,7 @@ import Page from "./page";
 
 const chart = {
   status: "ready" as const,
+  patientId: "30000000-0000-4000-8000-000000000003",
   patient: {
     slug: "mika-mikic",
     firstName: "Mika",
@@ -32,10 +33,17 @@ const chart = {
     jmbg: null,
   },
   alerts: null,
+  anamnesis: {
+    chronicConditions: "",
+    medications: "",
+    allergies: "",
+    pregnancy: "",
+  },
   connect: {
     kind: "ready" as const,
     contacts: [{ id: "40000000-0000-4000-8000-000000000004", label: "Ana Anić · roditelj@example.com" }],
   },
+  visits: [],
 };
 
 beforeEach(() => {
@@ -57,6 +65,8 @@ describe("child chart link button", () => {
       "utf8",
     );
     expect(pageSource.toLowerCase()).not.toContain("supabase");
+    expect(pageSource).toContain("visits={chart.visits}");
+    expect(pageSource).not.toContain("visits={[]}");
     expect(buttonSource.toLowerCase()).not.toContain("supabase");
 
     const dentistHtml = renderToStaticMarkup(

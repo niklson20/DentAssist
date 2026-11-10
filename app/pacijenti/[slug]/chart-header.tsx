@@ -8,6 +8,8 @@ import { alertCodeLabel, sexLabel, type AlertCode, type Sex } from "@/lib/labels
 import { formatPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 
+import { normalizeAnamnesis, type ChartAnamnesis } from "./anamnesis";
+import { AnamnesisForm, AnamnesisView } from "./anamnesis-form";
 import { ChartDetailsForm, chartBirthDateLabel } from "./chart-details-form";
 import { VisitHistory, type VisitHistoryItem } from "./history";
 
@@ -60,13 +62,24 @@ export function chartAgeYears(dateOfBirth: string | null, today = new Date()): n
 type ChartHeaderProps = {
   patient: ChartHeaderPatient;
   patientSlug: string;
+  patientId?: string;
   alerts: ChartHeaderAlert[] | null;
+  anamnesis?: ChartAnamnesis | null;
   clinical: boolean;
   today: string;
   visits: readonly VisitHistoryItem[];
 };
 
-export function ChartHeader({ patient, patientSlug, alerts, clinical, today, visits }: ChartHeaderProps) {
+export function ChartHeader({
+  patient,
+  patientSlug,
+  patientId,
+  alerts,
+  anamnesis = null,
+  clinical,
+  today,
+  visits,
+}: ChartHeaderProps) {
   const tabs: ChartTab[] = clinical ? ["pregled", "istorija", "anamneza", "zubi"] : ["pregled", "istorija"];
   const [activeTab, setActiveTab] = useState<ChartTab>("pregled");
   const [editing, setEditing] = useState(false);
@@ -74,15 +87,20 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today, vis
   const age = chartAgeYears(patient.dateOfBirth);
   const fullName = `${patient.firstName} ${patient.lastName}`;
   const birthDate = chartBirthDateLabel(patient.dateOfBirth);
-  const showForm = editing && activeTab === "pregled";
+  const showDetailsForm = editing && activeTab === "pregled";
+  const showAnamnesisForm = editing && activeTab === "anamneza" && Boolean(patientId);
+  const canEdit = activeTab === "pregled" || (activeTab === "anamneza" && Boolean(patientId));
+  const anamnesisValues = normalizeAnamnesis(anamnesis);
 
   function selectTab(tab: ChartTab) {
     setActiveTab(tab);
-    if (tab !== "pregled") setEditing(false);
+    setEditing(false);
   }
 
   function openEditor() {
-    setActiveTab("pregled");
+    if (activeTab !== "pregled" && activeTab !== "anamneza") {
+      setActiveTab("pregled");
+    }
     setEditing(true);
   }
 
@@ -91,11 +109,11 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today, vis
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-1">
           <h1 className="text-2xl font-semibold text-foreground">{fullName}</h1>
-          {showForm ? null : (
+          {canEdit && !showDetailsForm && !showAnamnesisForm ? (
             <Button type="button" variant="ghost" size="icon-sm" aria-label="Izmeni" onClick={openEditor}>
               <PencilSimple />
             </Button>
-          )}
+          ) : null}
         </div>
         <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <div className="flex gap-1">
@@ -157,7 +175,7 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today, vis
             aria-labelledby="chart-tab-pregled"
             className="rounded-lg border border-border bg-card p-4 text-card-foreground"
           >
-            {showForm ? (
+            {showDetailsForm ? (
               <ChartDetailsForm
                 patient={patient}
                 patientSlug={patientSlug}
@@ -195,7 +213,18 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today, vis
             id="chart-panel-anamneza"
             aria-labelledby="chart-tab-anamneza"
             className="rounded-lg border border-border bg-card p-4 text-card-foreground"
-          />
+          >
+            {showAnamnesisForm && patientId ? (
+              <AnamnesisForm
+                patientId={patientId}
+                anamnesis={anamnesisValues}
+                onCancel={closeEditor}
+                onSaved={closeEditor}
+              />
+            ) : (
+              <AnamnesisView anamnesis={anamnesisValues} />
+            )}
+          </section>
         ) : null}
 
         {clinical && activeTab === "zubi" ? (
@@ -214,7 +243,7 @@ export function ChartHeader({ patient, patientSlug, alerts, clinical, today, vis
 function tabLabel(tab: ChartTab): string {
   switch (tab) {
     case "pregled":
-      return "Pregled";
+      return "Informacije";
     case "istorija":
       return "Istorija";
     case "anamneza":

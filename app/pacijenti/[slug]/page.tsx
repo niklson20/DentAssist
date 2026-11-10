@@ -51,10 +51,12 @@ export default async function Page({ params }: PageProps) {
       <ChartHeader
         patient={chart.patient}
         patientSlug={chart.patient.slug}
+        patientId={chart.patientId}
         alerts={chart.alerts}
+        anamnesis={chart.anamnesis}
         clinical={clinical}
         today={onDate}
-        visits={[]}
+        visits={chart.visits}
       />
       {emailTasks.map((patient) => (
         <PatientEmailTask
