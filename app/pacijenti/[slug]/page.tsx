@@ -1,20 +1,22 @@
 import type { Metadata } from "next";
 
+import { listPatientFiles, type PatientDocument } from "@/app/actions/files";
 import { loadPatientEmailCharts } from "@/app/actions/patients";
 import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
-import { memberRoleLabels } from "@/lib/labels";
+import { staffBrowserTitle } from "@/lib/staff-browser-title";
 
 import { ChartHeader } from "./chart-header";
 import { ConnectParentButton } from "./connect-parent-button";
 import { PatientEmailTask } from "./email-task";
 import { loadChildChart } from "./load-child-chart";
+import { loadCurrentMemberActor } from "./load-tooth-chart";
 import { Odontogram } from "./odontogram";
 import { BIRTH_DATE_MISSING, CHART_MISSING } from "./schema";
 
-export const metadata: Metadata = {
-  title: "Karton — DentAssist",
-};
+export function generateMetadata(): Promise<Metadata> {
+  return staffBrowserTitle("Karton");
+}
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -43,8 +45,11 @@ export default async function Page({ params }: PageProps) {
     );
   }
 
-  const onDate = formatBelgradeDate(new Date());
+  const now = new Date();
+  const onDate = formatBelgradeDate(now);
   const emailTasks = await loadPatientEmailCharts(onDate, chart.patient.slug);
+  const documents = clinical ? await loadChartDocuments(chart.patientId) : [];
+  const actor = clinical ? await loadCurrentMemberActor(member.clinicId, member.userId) : "—";
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-4 py-8">
@@ -57,6 +62,9 @@ export default async function Page({ params }: PageProps) {
         clinical={clinical}
         today={onDate}
         visits={chart.visits}
+        role={member.role}
+        documents={documents}
+        documentsNow={clinical ? now.toISOString() : undefined}
       />
       {emailTasks.map((patient) => (
         <PatientEmailTask
@@ -71,8 +79,13 @@ export default async function Page({ params }: PageProps) {
         />
       ))}
 
-      {clinical ? (
-        <Odontogram actor={memberRoleLabels[member.role]} panelId="chart-panel-zubi" />
+      {clinical && chart.toothChart ? (
+        <Odontogram
+          actor={actor}
+          patientId={chart.patientId}
+          chart={chart.toothChart}
+          panelId="chart-panel-zubi"
+        />
       ) : null}
 
       {canSend && chart.connect.kind === "needsBirthDate" ? (
@@ -84,4 +97,9 @@ export default async function Page({ params }: PageProps) {
       ) : null}
     </main>
   );
+}
+
+async function loadChartDocuments(patientId: string): Promise<PatientDocument[]> {
+  const result = await listPatientFiles(patientId);
+  return result.ok ? result.data.documents : [];
 }

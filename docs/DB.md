@@ -303,7 +303,13 @@ Najviše jedan red po pacijentu. `chronic_conditions`, `medications`, `allergies
 
 `tooth_state_changes`: `tooth_state_id`, `clinic_id`, `old_status`, `new_status`,
 `old_surfaces`, `new_surfaces`, `visit_id` null, `changed_by`, `changed_at`.
-Okidač na `tooth_states` piše ovu istoriju. Aplikacija ne piše istoriju ručno.
+Okidač na `tooth_states` piše ovu istoriju. Aplikacija ne insertuje istoriju ručno
+pri čuvanju statusa/površina. Brisanje poslednje izmene ide kroz
+`revert_tooth_change(p_change_id)`: vraća `tooth_states` na `old_status` /
+`old_surfaces` (ako je `old_status` null → `healthy` i surfaces null), briše taj
+history red, i ne dodaje novi (`app.skip_tooth_history`). Samo najnoviji red po
+zubu; vlasnik/stomatolog. `authenticated` nema direktan `DELETE` na
+`tooth_state_changes`.
 
 ### 4.7 `patient_files`
 

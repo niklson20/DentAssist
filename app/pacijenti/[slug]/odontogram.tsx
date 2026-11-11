@@ -1,71 +1,41 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { TrashSimple } from "@phosphor-icons/react";
 
+import { saveToothStatus, saveToothSurfaces, undoToothChange } from "@/app/actions/teeth";
 import {
   TOOTH_STATUSES,
   TOOTH_SURFACES,
+  toothStatusAllowsSurfaces,
   toothStatusLabels,
   toothSurfaceLabels,
   type ToothStatus,
   type ToothSurface,
 } from "@/lib/labels";
 
-const ARCHES = [
-  {
-    id: "permanent-upper",
-    label: "Stalni gornji",
-    patientRight: ["18", "17", "16", "15", "14", "13", "12", "11"],
-    patientLeft: ["21", "22", "23", "24", "25", "26", "27", "28"],
-  },
-  {
-    id: "primary-upper",
-    label: "Mlečni gornji",
-    patientRight: ["55", "54", "53", "52", "51"],
-    patientLeft: ["61", "62", "63", "64", "65"],
-  },
-  {
-    id: "primary-lower",
-    label: "Mlečni donji",
-    patientRight: ["85", "84", "83", "82", "81"],
-    patientLeft: ["71", "72", "73", "74", "75"],
-  },
-  {
-    id: "permanent-lower",
-    label: "Stalni donji",
-    patientRight: ["48", "47", "46", "45", "44", "43", "42", "41"],
-    patientLeft: ["31", "32", "33", "34", "35", "36", "37", "38"],
-  },
-] as const;
+import {
+  ARCHES,
+  applyStatusChange,
+  createToothChart,
+  nextSelectedTooth,
+  removeChange,
+  toggleSurface,
+  type FdiTooth,
+  type ToothChart,
+  type ToothChange,
+  type ToothRecord,
+} from "./tooth-chart";
 
-type Arch = (typeof ARCHES)[number];
-export type FdiTooth = Arch["patientRight"][number] | Arch["patientLeft"][number];
-
-export type ToothRecord = {
-  status: ToothStatus;
-  surfaces: ToothSurface[];
+export type { FdiTooth, ToothChart, ToothChange, ToothRecord };
+export {
+  applyStatusChange,
+  createToothChart,
+  nextSelectedTooth,
+  removeChange,
+  toggleSurface,
 };
-
-export type ToothChange = {
-  at: string;
-  actor: string;
-  tooth: FdiTooth;
-  from: ToothStatus;
-  to: ToothStatus;
-};
-
-export type ToothChart = {
-  teeth: Record<FdiTooth, ToothRecord>;
-  changes: ToothChange[];
-};
-
-const SURFACE_STATUSES = new Set<ToothStatus>(["caries", "filling"]);
-
-function statusHasSurfaces(status: ToothStatus): boolean {
-  return SURFACE_STATUSES.has(status);
-}
 
 function isPatientRight(tooth: FdiTooth): boolean {
   const quadrant = Number(tooth[0]);
@@ -100,94 +70,11 @@ function formatWhen(iso: string): string {
   }).format(date);
 }
 
-export function createToothChart(): ToothChart {
-  const teeth = {} as Record<FdiTooth, ToothRecord>;
-  for (const arch of ARCHES) {
-    for (const tooth of [...arch.patientRight, ...arch.patientLeft]) {
-      teeth[tooth] = { status: "healthy", surfaces: [] };
-    }
-  }
-  return { teeth, changes: [] };
-}
-
-export function applyStatusChange(
-  chart: ToothChart,
-  change: { tooth: FdiTooth; status: ToothStatus; actor: string; at: string },
-): ToothChart {
-  const current = chart.teeth[change.tooth];
-  if (current.status === change.status) {
-    return chart;
-  }
-  return {
-    teeth: {
-      ...chart.teeth,
-      [change.tooth]: { status: change.status, surfaces: [] },
-    },
-    changes: [
-      {
-        at: change.at,
-        actor: change.actor,
-        tooth: change.tooth,
-        from: current.status,
-        to: change.status,
-      },
-      ...chart.changes,
-    ],
-  };
-}
-
-/** Removes a history row. If it is the newest change for that tooth, restores the previous status. */
-export function removeChange(chart: ToothChart, index: number): ToothChart {
-  const change = chart.changes[index];
-  if (!change) {
-    return chart;
-  }
-
-  const latestForTooth = chart.changes.findIndex((entry) => entry.tooth === change.tooth);
-  const changes = chart.changes.filter((_, entryIndex) => entryIndex !== index);
-  if (latestForTooth !== index) {
-    return { ...chart, changes };
-  }
-
-  return {
-    teeth: {
-      ...chart.teeth,
-      [change.tooth]: { status: change.from, surfaces: [] },
-    },
-    changes,
-  };
-}
-
-export function nextSelectedTooth(current: FdiTooth | null, clicked: FdiTooth): FdiTooth | null {
-  return current === clicked ? null : clicked;
-}
-
-export function toggleSurface(chart: ToothChart, tooth: FdiTooth, surface: ToothSurface): ToothChart {
-  const current = chart.teeth[tooth];
-  if (!statusHasSurfaces(current.status)) {
-    return chart;
-  }
-  const next = new Set(current.surfaces);
-  if (next.has(surface)) {
-    next.delete(surface);
-  } else {
-    next.add(surface);
-  }
-  return {
-    ...chart,
-    teeth: {
-      ...chart.teeth,
-      [tooth]: {
-        ...current,
-        surfaces: TOOTH_SURFACES.filter((item) => next.has(item)),
-      },
-    },
-  };
-}
-
 type OdontogramMapProps = {
   chart: ToothChart;
   selectedTooth: FdiTooth | null;
+  busy: boolean;
+  error: string | null;
   onSelect: (tooth: FdiTooth) => void;
   onStatus: (status: ToothStatus) => void;
   onSurface: (surface: ToothSurface) => void;
@@ -197,15 +84,23 @@ type OdontogramMapProps = {
 function OdontogramMap({
   chart,
   selectedTooth,
+  busy,
+  error,
   onSelect,
   onStatus,
   onSurface,
   onRemoveChange,
 }: OdontogramMapProps) {
   const selected = selectedTooth ? chart.teeth[selectedTooth] : null;
+  const latestIndexByTooth = new Map<FdiTooth, number>();
+  chart.changes.forEach((change, index) => {
+    if (!latestIndexByTooth.has(change.tooth)) {
+      latestIndexByTooth.set(change.tooth, index);
+    }
+  });
 
   return (
-    <div className="odontogram">
+    <div className="odontogram" aria-busy={busy}>
       <div className="odontogram__arches" role="group" aria-label="Zubna mapa">
         {ARCHES.map((arch) => (
           <div key={arch.id} className="odontogram__arch" data-arch={arch.id}>
@@ -248,13 +143,14 @@ function OdontogramMap({
                 className="odontogram__status odontogram__mark"
                 data-status={status}
                 aria-pressed={selected.status === status}
+                disabled={busy}
                 onClick={() => onStatus(status)}
               >
                 {toothStatusLabels[status]}
               </button>
             ))}
           </div>
-          {statusHasSurfaces(selected.status) ? (
+          {toothStatusAllowsSurfaces(selected.status) ? (
             <div className="odontogram__surfaces" role="group" aria-label="Površine">
               {TOOTH_SURFACES.map((surface) => (
                 <button
@@ -264,6 +160,7 @@ function OdontogramMap({
                   data-surface={surface}
                   data-area={surfaceArea(selectedTooth, surface)}
                   aria-pressed={selected.surfaces.includes(surface)}
+                  disabled={busy}
                   onClick={() => onSurface(surface)}
                 >
                   {toothSurfaceLabels[surface]}
@@ -274,6 +171,8 @@ function OdontogramMap({
         </div>
       ) : null}
 
+      {error ? <p className="odontogram__error text-sm text-destructive">{error}</p> : null}
+
       <section className="odontogram__log" aria-labelledby="odontogram-log-title">
         <h3 id="odontogram-log-title" className="odontogram__log-title">
           Spisak izmena
@@ -281,26 +180,48 @@ function OdontogramMap({
         {chart.changes.length === 0 ? (
           <p className="odontogram__empty">Nema izmena.</p>
         ) : (
-          <ul className="odontogram__changes">
-            {chart.changes.map((change, index) => (
-              <li key={`${change.at}-${change.tooth}-${change.to}-${index}`} className="odontogram__change">
-                <time dateTime={change.at}>{formatWhen(change.at)}</time>
-                <span>{change.actor}</span>
-                <span>zub {change.tooth}</span>
-                <span data-previous-status={change.from}>{toothStatusLabels[change.from]}</span>
-                <span aria-hidden="true">→</span>
-                <span data-next-status={change.to}>{toothStatusLabels[change.to]}</span>
-                <button
-                  type="button"
-                  className="odontogram__change-delete"
-                  aria-label={`Obriši izmenu zuba ${change.tooth}`}
-                  onClick={() => onRemoveChange(index)}
-                >
-                  <TrashSimple aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="odontogram__changes-wrap">
+            <div className="odontogram__change odontogram__change-head" role="row">
+              <span className="odontogram__change-label">Datum</span>
+              <span className="odontogram__change-label">Ko</span>
+              <span className="odontogram__change-label">Zub</span>
+              <span className="odontogram__change-label">Izmena</span>
+              <span className="odontogram__change-actions" aria-hidden="true" />
+            </div>
+            <ul className="odontogram__changes">
+              {chart.changes.map((change, index) => {
+                const canUndo = latestIndexByTooth.get(change.tooth) === index;
+                return (
+                  <li
+                    key={change.id ?? `${change.at}-${change.tooth}-${change.to}-${index}`}
+                    className="odontogram__change"
+                  >
+                    <time dateTime={change.at}>{formatWhen(change.at)}</time>
+                    <span>{change.actor}</span>
+                    <span>{change.tooth}</span>
+                    <span className="odontogram__change-status">
+                      <span data-previous-status={change.from}>{toothStatusLabels[change.from]}</span>
+                      <span aria-hidden="true"> → </span>
+                      <span data-next-status={change.to}>{toothStatusLabels[change.to]}</span>
+                    </span>
+                    <span className="odontogram__change-actions">
+                      {canUndo ? (
+                        <button
+                          type="button"
+                          className="odontogram__change-delete"
+                          aria-label={`Obriši izmenu zuba ${change.tooth}`}
+                          disabled={busy}
+                          onClick={() => onRemoveChange(index)}
+                        >
+                          <TrashSimple aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
       </section>
     </div>
@@ -336,6 +257,7 @@ function ToothButton({
 
 type OdontogramProps = {
   actor: string;
+  patientId?: string;
   chart?: ToothChart;
   selectedTooth?: FdiTooth | null;
   panelId?: string;
@@ -363,18 +285,27 @@ function serverPanel(): HTMLElement | null {
 
 export function Odontogram({
   actor,
+  patientId,
   chart: chartProp,
   selectedTooth: selectedProp = null,
   panelId,
 }: OdontogramProps) {
   const [chart, setChart] = useState<ToothChart>(() => chartProp ?? createToothChart());
   const [selectedTooth, setSelectedTooth] = useState<FdiTooth | null>(selectedProp);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
   const subscribe = useCallback(
     (onStoreChange: () => void) => subscribeToPanel(panelId, onStoreChange),
     [panelId],
   );
   const getSnapshot = useCallback(() => readPanel(panelId), [panelId]);
   const panel = useSyncExternalStore(subscribe, getSnapshot, serverPanel);
+
+  useEffect(() => {
+    if (chartProp) {
+      setChart(chartProp);
+    }
+  }, [chartProp]);
 
   useEffect(() => {
     if (!selectedTooth) {
@@ -402,25 +333,93 @@ export function Odontogram({
     if (!selectedTooth) {
       return;
     }
-    setChart((current) =>
-      applyStatusChange(current, {
-        tooth: selectedTooth,
-        status,
-        actor,
-        at: new Date().toISOString(),
-      }),
-    );
+    const tooth = selectedTooth;
+    const previous = chart;
+    const next = applyStatusChange(previous, {
+      tooth,
+      status,
+      actor,
+      at: new Date().toISOString(),
+    });
+    if (next === previous) {
+      return;
+    }
+    setChart(next);
+    setError(null);
+    if (!patientId) {
+      return;
+    }
+    startTransition(async () => {
+      const result = await saveToothStatus({ patientId, fdiCode: tooth, status });
+      if (!result.ok) {
+        setChart(previous);
+        setError(result.error);
+        return;
+      }
+      setChart(result.data.chart);
+    });
   }
 
   function changeSurface(surface: ToothSurface) {
     if (!selectedTooth) {
       return;
     }
-    setChart((current) => toggleSurface(current, selectedTooth, surface));
+    const tooth = selectedTooth;
+    const previous = chart;
+    const next = toggleSurface(previous, tooth, surface);
+    if (next === previous) {
+      return;
+    }
+    setChart(next);
+    setError(null);
+    if (!patientId) {
+      return;
+    }
+    startTransition(async () => {
+      const result = await saveToothSurfaces({
+        patientId,
+        fdiCode: tooth,
+        surfaces: next.teeth[tooth].surfaces,
+      });
+      if (!result.ok) {
+        setChart(previous);
+        setError(result.error);
+        return;
+      }
+      setChart(result.data.chart);
+    });
   }
 
   function deleteChange(index: number) {
-    setChart((current) => removeChange(current, index));
+    const change = chart.changes[index];
+    if (!change) {
+      return;
+    }
+    const previous = chart;
+    const next = removeChange(previous, index);
+    setChart(next);
+    setError(null);
+    if (!patientId) {
+      return;
+    }
+    if (!change.id) {
+      setChart(previous);
+      setError("Izmena nije pronađena.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await undoToothChange({
+        patientId,
+        fdiCode: change.tooth,
+        changeId: change.id,
+      });
+      if (!result.ok) {
+        setChart(previous);
+        setError(result.error);
+        return;
+      }
+      setChart(result.data.chart);
+    });
   }
 
   if (panelId && !panel) {
@@ -431,6 +430,8 @@ export function Odontogram({
     <OdontogramMap
       chart={chart}
       selectedTooth={selectedTooth}
+      busy={pending}
+      error={error}
       onSelect={selectTooth}
       onStatus={changeStatus}
       onSurface={changeSurface}

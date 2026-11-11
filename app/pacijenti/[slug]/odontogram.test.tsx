@@ -9,6 +9,12 @@ vi.mock("@phosphor-icons/react", () => ({
   TrashSimple: () => <span data-icon="trash" />,
 }));
 
+vi.mock("@/app/actions/teeth", () => ({
+  saveToothStatus: vi.fn(),
+  saveToothSurfaces: vi.fn(),
+  undoToothChange: vi.fn(),
+}));
+
 import {
   Odontogram,
   applyStatusChange,
@@ -219,8 +225,13 @@ describe("odontogram", () => {
     expect(pageSource.toLowerCase()).not.toContain("supabase");
     expect(pageSource.match(/<Odontogram/g)).toHaveLength(1);
     expect(pageSource).toContain('panelId="chart-panel-zubi"');
-    expect(pageSource).toContain("memberRoleLabels[member.role]");
-    expect(pageSource.indexOf("{clinical ? (")).toBeLessThan(pageSource.indexOf("<Odontogram"));
+    expect(pageSource).toContain("actor={actor}");
+    expect(pageSource).toContain("loadCurrentMemberActor");
+    expect(pageSource).toContain("patientId={chart.patientId}");
+    expect(pageSource).toContain("chart={chart.toothChart}");
+    expect(pageSource.indexOf("{clinical && chart.toothChart ? (")).toBeLessThan(
+      pageSource.indexOf("<Odontogram"),
+    );
 
     const blockStart = cssSource.indexOf("/* odontogram */");
     expect(blockStart).toBeGreaterThanOrEqual(0);

@@ -149,7 +149,10 @@ Pravila:
 - Boje idu iz tokena teme, ne kao heks u komponenti.
 - Kalendarska mreža i zubna mapa ostaju poseban CSS. Nijedna gotova komponenta ne pokriva
   kolone stomatologa ni odontogram. Oba su u `globals.css`, uz komentar zašto. Raspored
-  mape je u [`PRD.md`](./PRD.md#85-zubna-mapa).
+  mape je u [`PRD.md`](./PRD.md#85-zubna-mapa). Stanje i istorija idu u `tooth_states` /
+  `tooth_state_changes` (okidač piše istoriju). Dugme za brisanje u spisku poziva
+  `revert_tooth_change`: vraća `tooth_states` na prethodno stanje i briše taj history
+  red, bez novog unosa. Samo poslednja izmena po zubu; stariji redovi se ne diraju.
 - Javne stranice moraju da se završe na uskom ekranu. Ordinacija je složena za širok
   ekran; na telefonu prvi završen put je lista zahteva i odgovor na jedan zahtev.
 - Imenik i stranica ordinacije nemaju meni osoblja. Meni iz PRD odeljka 11.2 pripada

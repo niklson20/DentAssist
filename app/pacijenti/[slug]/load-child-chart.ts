@@ -7,7 +7,9 @@ import { normalizeAnamnesis, type ChartAnamnesis } from "./anamnesis";
 import type { ChartHeaderAlert, ChartHeaderPatient } from "./chart-header";
 import type { VisitHistoryItem } from "./history";
 import { loadVisitHistory } from "./load-visit-history";
+import { readToothChart } from "./load-tooth-chart";
 import { CHILD_SLUG } from "./schema";
+import type { ToothChart } from "./tooth-chart";
 
 export type ChildChartMemberRole = "owner" | "dentist" | "reception";
 
@@ -30,6 +32,7 @@ export type ChildChartLoad =
       patient: ChartHeaderPatient & { slug: string };
       alerts: ChartHeaderAlert[] | null;
       anamnesis: ChartAnamnesis | null;
+      toothChart: ToothChart | null;
       connect: ChildChartConnect;
       visits: VisitHistoryItem[];
     };
@@ -85,6 +88,7 @@ export async function loadChildChart(
     let jmbg: string | null = null;
     let alerts: ChartHeaderAlert[] | null = null;
     let anamnesis: ChartAnamnesis | null = null;
+    let toothChart: ToothChart | null = null;
 
     if (clinical) {
       const jmbgResult = await supabase.rpc("patient_jmbg", { target_patient_id: patient.id });
@@ -118,6 +122,11 @@ export async function loadChildChart(
         return { status: "unavailable" };
       }
       anamnesis = anamnesisFrom(anamnesisResult.data);
+
+      toothChart = await readToothChart(supabase, clinicId, patient.id);
+      if (!toothChart) {
+        return { status: "unavailable" };
+      }
     }
 
     const visits = await loadVisitHistory(clinicId, patient.id, { includeNotes: clinical });
@@ -142,6 +151,7 @@ export async function loadChildChart(
       },
       alerts,
       anamnesis,
+      toothChart,
       connect: connectState(patient, contactOptions(contactResult.data)),
       visits,
     };
