@@ -8,7 +8,7 @@ import { AppointmentTypesPage } from "./appointment-types-page";
 import { loadAppointmentTypesPage } from "./load-appointment-types";
 
 export const metadata: Metadata = {
-  title: "Tipovi — DentAssist",
+  title: "Tipovi",
 };
 
 export default async function Page() {

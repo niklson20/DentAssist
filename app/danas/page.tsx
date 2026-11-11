@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate, type CalendarParams } from "@/lib/calendar-dates";
+import { staffBrowserTitle } from "@/lib/staff-browser-title";
 
 import { CalendarShell } from "./calendar-shell";
 import { DayGrid } from "./day-grid";
@@ -15,9 +16,9 @@ import { PhoneDayList } from "./phone-day-list";
 import { calendarPath, hasCanonicalCalendarParams, readCalendarQuery } from "./schema";
 import { WeekView } from "./week-view";
 
-export const metadata: Metadata = {
-  title: "Kalendar — DentAssist",
-};
+export function generateMetadata(): Promise<Metadata> {
+  return staffBrowserTitle("Kalendar");
+}
 
 type PageProps = {
   searchParams: Promise<CalendarParams>;

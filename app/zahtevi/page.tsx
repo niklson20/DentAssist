@@ -20,11 +20,12 @@ import {
   requestListPath,
   type RequestSection,
 } from "@/lib/request-section";
+import { staffBrowserTitle } from "@/lib/staff-browser-title";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = {
-  title: "Zahtevi — DentAssist",
-};
+export function generateMetadata(): Promise<Metadata> {
+  return staffBrowserTitle("Termini");
+}
 
 type PageProps = {
   searchParams: Promise<{
@@ -57,7 +58,7 @@ export default async function Page({ searchParams }: PageProps) {
 
   return (
     <main className="mx-auto flex w-full max-w-xl flex-col gap-4 p-4 pb-24 md:pb-4">
-      <h1 className="text-2xl font-semibold text-foreground">Zahtevi</h1>
+      <h1 className="text-2xl font-semibold text-foreground">Termini</h1>
       <nav aria-label="Sekcije zahteva" className="flex flex-wrap gap-2">
         {REQUEST_SECTIONS.map((item) => (
           <Link

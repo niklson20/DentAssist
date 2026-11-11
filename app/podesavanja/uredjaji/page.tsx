@@ -8,7 +8,7 @@ import { DevicesPage } from "./devices-page";
 import { loadDevicesPage } from "./load-devices";
 
 export const metadata: Metadata = {
-  title: "Uređaji — DentAssist",
+  title: "Uređaji",
 };
 
 export default async function Page() {

@@ -8,7 +8,7 @@ import { LegalDataForm } from "./legal-data-form";
 import { loadLegalDataPage } from "./load-legal-data";
 
 export const metadata: Metadata = {
-  title: "Pravni podaci — DentAssist",
+  title: "Pravni podaci",
 };
 
 export default async function Page() {

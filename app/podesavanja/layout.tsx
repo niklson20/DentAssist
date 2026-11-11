@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 
 import { requireMember } from "@/lib/auth";
+import { staffBrowserTitleTemplate } from "@/lib/staff-browser-title";
 
-export const metadata: Metadata = {
-  title: "Podešavanja — DentAssist",
-};
+export function generateMetadata(): Promise<Metadata> {
+  return staffBrowserTitleTemplate("Podešavanja");
+}
 
 export default async function SettingsLayout({
   children,

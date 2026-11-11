@@ -4,20 +4,21 @@ import { StatisticsMonthField } from "@/app/statistika/month-field";
 import { RatingBadge } from "@/app/ordinacije/rating-badge";
 import { RatingStars } from "@/app/ordinacije/rating-stars";
 import { requireOwner } from "@/lib/auth";
-import { formatRatingAverage, formatRatingCount } from "@/lib/ratings";
 import {
   loadClinicStatistics,
   resolveStatisticsMonth,
   type DentistMonthStatistics,
 } from "@/lib/queries/statistics";
+import { formatRatingAverage, formatRatingCount } from "@/lib/ratings";
+import { staffBrowserTitle } from "@/lib/staff-browser-title";
 
 import { loadClinicRatingDetails } from "./actions";
 import { RatingDetailsButton } from "./rating-details-button";
 import { RatingReviewList } from "./rating-review-list";
 
-export const metadata: Metadata = {
-  title: "Statistika — DentAssist",
-};
+export function generateMetadata(): Promise<Metadata> {
+  return staffBrowserTitle("Statistika");
+}
 
 type PageProps = {
   searchParams: Promise<{

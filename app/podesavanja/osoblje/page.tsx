@@ -8,7 +8,7 @@ import { loadStaffPage } from "./load-staff";
 import { StaffPage } from "./staff-page";
 
 export const metadata: Metadata = {
-  title: "Osoblje — DentAssist",
+  title: "Osoblje",
 };
 
 export default async function Page() {

@@ -9,7 +9,7 @@ import { loadWorkingHoursPage } from "./load-working-hours";
 import { WorkingHoursForm } from "./working-hours-form";
 
 export const metadata: Metadata = {
-  title: "Radno vreme — DentAssist",
+  title: "Radno vreme",
 };
 
 type PageProps = {

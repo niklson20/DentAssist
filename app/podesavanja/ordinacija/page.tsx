@@ -8,7 +8,7 @@ import { ClinicProfileForm } from "./clinic-profile-form";
 import { loadClinicProfile } from "./load-clinic";
 
 export const metadata: Metadata = {
-  title: "Ordinacija — DentAssist",
+  title: "Ordinacija",
 };
 
 export default async function Page() {

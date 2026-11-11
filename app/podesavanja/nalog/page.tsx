@@ -6,7 +6,7 @@ import { AccountForms } from "./account-forms";
 import { loadOwnPinState } from "./load-account";
 
 export const metadata: Metadata = {
-  title: "Nalog — DentAssist",
+  title: "Nalog",
 };
 
 export default async function Page() {

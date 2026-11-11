@@ -8,17 +8,18 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { requireMember } from "@/lib/auth";
 import { formatBelgradeDate } from "@/lib/calendar-dates";
-import { cn } from "@/lib/utils";
 import {
   createPatientFromList,
   PATIENT_PAGE_SIZE,
   searchClinicPatients,
   type PatientListItem,
 } from "@/lib/queries/patients";
+import { staffBrowserTitle } from "@/lib/staff-browser-title";
+import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = {
-  title: "Pacijenti — DentAssist",
-};
+export function generateMetadata(): Promise<Metadata> {
+  return staffBrowserTitle("Pacijenti");
+}
 
 type PageProps = {
   searchParams: Promise<{
