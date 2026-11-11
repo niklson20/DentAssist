@@ -7,10 +7,10 @@ import {
   deletePatientFile,
   openPatientFile,
   preparePatientFileUpload,
-  updatePatientFile,
   type PatientDocument,
 } from "@/app/actions/files";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import type { ActionResult } from "@/lib/action-result";
 import { formatBelgrade, formatBelgradeDate, isDocumentLocked, isIsoDate, startOfBelgradeDay } from "@/lib/calendar-dates";
@@ -34,15 +34,12 @@ const SAVED = "Dokument je sačuvan.";
 const controlClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-2.5 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
-const shellClass =
-  "flex w-full max-w-lg flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground";
-
 export type DocumentsDialogProps = {
   patientId: string;
   role: "owner" | "dentist" | "reception";
   documents: readonly PatientDocument[];
   now: Date;
-  open?: boolean;
+  addOpen?: boolean;
 };
 
 export function DocumentsDialog({ role, ...props }: DocumentsDialogProps) {
@@ -54,55 +51,50 @@ function ClinicalDocuments({
   patientId,
   documents,
   now,
-  open = false,
+  addOpen = false,
 }: Omit<DocumentsDialogProps, "role">) {
-  const [isOpen, setOpen] = useState(open);
   const [items, setItems] = useState(documents);
+  const [creating, setCreating] = useState(addOpen);
   const today = formatBelgradeDate(now);
   const visible = [...items].sort(byNewest);
 
   return (
-    <div className="flex flex-col gap-3">
-      <Button type="button" aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setOpen(true)}>
-        Dokumenti
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">Sadržaj fajla se ne zamenjuje.</p>
+      {visible.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nema dokumenata.</p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {visible.map((document) => (
+            <li key={document.id} className="rounded-md border border-border p-3">
+              <DocumentRow
+                document={document}
+                now={now}
+                onRemoved={(id) => setItems((current) => current.filter((item) => item.id !== id))}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button type="button" aria-haspopup="dialog" aria-expanded={creating} onClick={() => setCreating(true)}>
+        Dodaj dokument
       </Button>
-      {isOpen ? (
-        <dialog open aria-labelledby="documents-title" className={shellClass}>
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <div className="flex items-start justify-between gap-3">
-            <h2 id="documents-title" className="text-lg font-semibold text-foreground">
-              Dokumenti
-            </h2>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Zatvori
-            </Button>
+            <DialogTitle>Novi dokument</DialogTitle>
+            <DialogClose render={<Button type="button" variant="outline" />}>Zatvori</DialogClose>
           </div>
-          <p className="text-sm text-muted-foreground">Sadržaj fajla se ne zamenjuje.</p>
-          {visible.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nema dokumenata.</p>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {visible.map((document) => (
-                <li key={document.id} className="rounded-md border border-border p-3">
-                  <DocumentRow
-                    document={document}
-                    now={now}
-                    today={today}
-                    onRemoved={(id) => setItems((current) => current.filter((item) => item.id !== id))}
-                    onUpdated={(id, next) =>
-                      setItems((current) => current.map((item) => (item.id === id ? { ...item, ...next } : item)))
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
           <NewDocumentForm
             patientId={patientId}
             today={today}
-            onCreated={(document) => setItems((current) => [...current, document])}
+            onCreated={(document) => {
+              setItems((current) => [...current, document]);
+              setCreating(false);
+            }}
           />
-        </dialog>
-      ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -110,33 +102,14 @@ function ClinicalDocuments({
 function DocumentRow({
   document,
   now,
-  today,
   onRemoved,
-  onUpdated,
 }: {
   document: PatientDocument;
   now: Date;
-  today: string;
   onRemoved: (id: string) => void;
-  onUpdated: (id: string, next: Pick<PatientDocument, "title" | "category" | "capturedOn">) => void;
 }) {
   const createdAt = new Date(document.createdAt);
   const locked = Number.isNaN(createdAt.getTime()) || isDocumentLocked(createdAt, now);
-  const [updateResult, updateAction, updatePending] = useActionState<ActionResult<{ id: string }> | null, FormData>(
-    async (previous, formData) => {
-      const result = await updatePatientFile(previous, formData);
-      const category = text(formData.get("category"));
-      if (result.ok && isFileCategory(category)) {
-        onUpdated(document.id, {
-          title: text(formData.get("title")).trim(),
-          category,
-          capturedOn: text(formData.get("capturedOn")),
-        });
-      }
-      return result;
-    },
-    null,
-  );
   const [deleteResult, deleteAction, deletePending] = useActionState<ActionResult<{ id: string }> | null, FormData>(
     async (previous, formData) => {
       const result = await deletePatientFile(previous, formData);
@@ -147,7 +120,6 @@ function DocumentRow({
   );
   const [accessError, setAccessError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ url: string } | null>(null);
-  const formError = updateResult && !updateResult.ok ? updateResult.error : null;
   const deleteError = deleteResult && !deleteResult.ok ? deleteResult.error : null;
 
   async function openFile(intent: "preview" | "download") {
@@ -181,17 +153,30 @@ function DocumentRow({
           <time dateTime={document.capturedOn}>{captureLabel(document.capturedOn)}</time>
         </p>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={() => void openFile("preview")}>
           Pregled
         </Button>
         <Button type="button" variant="outline" onClick={() => void openFile("download")}>
           Preuzmi
         </Button>
+        {!locked ? (
+          <form action={deleteAction} className="ml-auto">
+            <input type="hidden" name="fileId" value={document.id} />
+            <Button type="submit" variant="destructive" disabled={deletePending}>
+              Obriši
+            </Button>
+          </form>
+        ) : null}
       </div>
       {accessError ? (
         <p role="alert" className="text-sm text-destructive">
           {accessError}
+        </p>
+      ) : null}
+      {deleteError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {deleteError}
         </p>
       ) : null}
       {preview ? (
@@ -204,73 +189,7 @@ function DocumentRow({
           {document.title}
         </object>
       ) : null}
-      {locked ? (
-        <p className="text-sm text-muted-foreground">{LOCKED}</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <form id={`izmena-dokumenta-${document.id}`} action={updateAction} className="flex flex-col gap-3">
-            <input type="hidden" name="fileId" value={document.id} />
-            <Field id={`edit-title-${document.id}`} label="Naslov" message={message(updateResult, "title")}>
-              <Input
-                id={`edit-title-${document.id}`}
-                name="title"
-                defaultValue={document.title}
-                maxLength={200}
-                required
-                aria-invalid={message(updateResult, "title") ? true : undefined}
-              />
-            </Field>
-            <Field id={`edit-category-${document.id}`} label="Kategorija" message={message(updateResult, "category")}>
-              <select
-                id={`edit-category-${document.id}`}
-                name="category"
-                defaultValue={document.category}
-                required
-                className={controlClass}
-              >
-                {FILE_CATEGORIES.map((category) => (
-                  <option key={category} value={category}>
-                    {fileCategoryLabel(category)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field
-              id={`edit-captured-${document.id}`}
-              label="Datum snimanja"
-              message={message(updateResult, "capturedOn")}
-            >
-              <Input
-                id={`edit-captured-${document.id}`}
-                name="capturedOn"
-                type="date"
-                defaultValue={document.capturedOn}
-                max={today}
-                required
-              />
-            </Field>
-            {formError ? (
-              <p role="alert" className="text-sm text-destructive">
-                {formError}
-              </p>
-            ) : null}
-            <Button type="submit" disabled={updatePending} className="self-start">
-              Sačuvaj
-            </Button>
-          </form>
-          <form action={deleteAction}>
-            <input type="hidden" name="fileId" value={document.id} />
-            {deleteError ? (
-              <p role="alert" className="mb-2 text-sm text-destructive">
-                {deleteError}
-              </p>
-            ) : null}
-            <Button type="submit" variant="destructive" disabled={deletePending}>
-              Obriši
-            </Button>
-          </form>
-        </div>
-      )}
+      {locked ? <p className="text-sm text-muted-foreground">{LOCKED}</p> : null}
     </article>
   );
 }
@@ -287,11 +206,11 @@ function NewDocumentForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [chosen, setChosen] = useState(false);
+  const [chosenName, setChosenName] = useState<string | null>(null);
 
   function onFileChange(event: FormEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
-    setChosen(Boolean(file));
+    setChosenName(file?.name.trim() || null);
     setSaved(false);
     if (!file) {
       setError(null);
@@ -410,7 +329,7 @@ function NewDocumentForm({
         sizeBytes: file.size,
       });
       form.reset();
-      setChosen(false);
+      setChosenName(null);
       setSaved(true);
     } finally {
       setPending(false);
@@ -419,7 +338,6 @@ function NewDocumentForm({
 
   return (
     <form id="novi-dokument" onSubmit={(event) => void onSubmit(event)} className="flex flex-col gap-3">
-      <h3 className="text-sm font-medium text-foreground">Novi dokument</h3>
       <Field id="document-title" label="Naslov">
         <Input id="document-title" name="title" maxLength={200} required />
       </Field>
@@ -454,7 +372,9 @@ function NewDocumentForm({
         >
           Izaberite fajl
         </label>
-        {chosen ? <p className="text-sm text-muted-foreground">Fajl je izabran.</p> : null}
+        {chosenName ? (
+          <p className="text-sm text-muted-foreground">Fajl je izabran: {chosenName}</p>
+        ) : null}
       </div>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
@@ -497,11 +417,6 @@ function Field({
       ) : null}
     </div>
   );
-}
-
-function message(result: ActionResult<{ id: string }> | null, field: string): string | undefined {
-  if (!result || result.ok) return undefined;
-  return result.fieldErrors?.[field]?.[0];
 }
 
 function firstFieldMessage(result: ActionResult<unknown>): string | null {

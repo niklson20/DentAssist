@@ -8,6 +8,13 @@ vi.mock("@phosphor-icons/react", () => {
   return { PencilSimple: Icon };
 });
 
+vi.mock("@/app/actions/files", () => ({
+  preparePatientFileUpload: vi.fn(),
+  confirmPatientFile: vi.fn(),
+  deletePatientFile: vi.fn(),
+  openPatientFile: vi.fn(),
+}));
+
 import { ChartHeader } from "./chart-header";
 
 const headerSource = readFileSync(
@@ -43,6 +50,9 @@ describe("chart header", () => {
         clinical
         today="2026-11-05"
         visits={[]}
+        role="dentist"
+        documents={[]}
+        documentsNow="2026-11-05T10:00:00.000Z"
         alerts={[{ code: "drug_allergy", note: "Penicilin" }]}
         anamnesis={{
           chronicConditions: "Astma",
@@ -61,11 +71,16 @@ describe("chart header", () => {
     expect(html).toContain("Istorija");
     expect(html).toContain("Anamneza");
     expect(html).toContain("Zubi");
+    expect(html).toContain("Dokumenti");
+    expect(html).toContain('id="chart-tab-dokumenti"');
+    expect(html).toContain('aria-controls="chart-panel-dokumenti"');
+    expect(html).not.toContain('id="chart-panel-dokumenti"');
     expect(html).toContain('aria-label="Izmeni"');
     expect(html).not.toContain(">Izmeni<");
     expect(html).not.toContain("Sačuvaj");
     expect(headerSource).toContain("AnamnesisForm");
     expect(headerSource).toContain("AnamnesisView");
+    expect(headerSource).toContain("DocumentsDialog");
     expect(html).toContain("Datum rođenja");
     expect(html).toContain("1. 6. 2015.");
     expect(html).toContain("JMBG");
@@ -84,6 +99,7 @@ describe("chart header", () => {
         clinical={false}
         today="2026-11-05"
         visits={[]}
+        role="reception"
         alerts={null}
       />,
     );
@@ -91,6 +107,7 @@ describe("chart header", () => {
     expect(html).toContain("Istorija");
     expect(html).not.toContain("Anamneza");
     expect(html).not.toContain("Zubi");
+    expect(html).not.toContain("Dokumenti");
     expect(html).not.toContain("JMBG");
     expect(html).not.toContain("Alergija na lek");
     expect(html).not.toContain("Penicilin");

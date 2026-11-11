@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { PencilSimple } from "@phosphor-icons/react";
 
+import type { PatientDocument } from "@/app/actions/files";
 import { Button } from "@/components/ui/button";
 import { alertCodeLabel, sexLabel, type AlertCode, type Sex } from "@/lib/labels";
 import { formatPhone } from "@/lib/phone";
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { normalizeAnamnesis, type ChartAnamnesis } from "./anamnesis";
 import { AnamnesisForm, AnamnesisView } from "./anamnesis-form";
 import { ChartDetailsForm, chartBirthDateLabel } from "./chart-details-form";
+import { DocumentsDialog } from "./documents-dialog";
 import { VisitHistory, type VisitHistoryItem } from "./history";
 
 export type ChartHeaderPatient = {
@@ -30,7 +32,7 @@ export type ChartHeaderAlert = {
   note: string;
 };
 
-type ChartTab = "pregled" | "istorija" | "anamneza" | "zubi";
+type ChartTab = "pregled" | "istorija" | "anamneza" | "zubi" | "dokumenti";
 
 const tabClass =
   "rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground aria-selected:border aria-selected:border-primary aria-selected:bg-primary aria-selected:text-primary-foreground";
@@ -68,6 +70,9 @@ type ChartHeaderProps = {
   clinical: boolean;
   today: string;
   visits: readonly VisitHistoryItem[];
+  role?: "owner" | "dentist" | "reception";
+  documents?: readonly PatientDocument[];
+  documentsNow?: string;
 };
 
 export function ChartHeader({
@@ -79,8 +84,19 @@ export function ChartHeader({
   clinical,
   today,
   visits,
+  role,
+  documents = [],
+  documentsNow,
 }: ChartHeaderProps) {
-  const tabs: ChartTab[] = clinical ? ["pregled", "istorija", "anamneza", "zubi"] : ["pregled", "istorija"];
+  const showDocuments =
+    Boolean(patientId) &&
+    Boolean(documentsNow) &&
+    (role === "owner" || role === "dentist");
+  const tabs: ChartTab[] = clinical
+    ? showDocuments
+      ? ["pregled", "istorija", "anamneza", "zubi", "dokumenti"]
+      : ["pregled", "istorija", "anamneza", "zubi"]
+    : ["pregled", "istorija"];
   const [activeTab, setActiveTab] = useState<ChartTab>("pregled");
   const [editing, setEditing] = useState(false);
   const closeEditor = useCallback(() => setEditing(false), []);
@@ -235,6 +251,22 @@ export function ChartHeader({
             className="rounded-lg border border-border bg-card p-4 text-card-foreground"
           />
         ) : null}
+
+        {showDocuments && patientId && documentsNow && role && activeTab === "dokumenti" ? (
+          <section
+            role="tabpanel"
+            id="chart-panel-dokumenti"
+            aria-labelledby="chart-tab-dokumenti"
+            className="rounded-lg border border-border bg-card p-4 text-card-foreground"
+          >
+            <DocumentsDialog
+              patientId={patientId}
+              role={role}
+              documents={documents}
+              now={new Date(documentsNow)}
+            />
+          </section>
+        ) : null}
       </div>
     </div>
   );
@@ -250,6 +282,8 @@ function tabLabel(tab: ChartTab): string {
       return "Anamneza";
     case "zubi":
       return "Zubi";
+    case "dokumenti":
+      return "Dokumenti";
   }
 }
 
