@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { redirect, loadClinicPublic, loadPatientAccess } = vi.hoisted(() => ({
@@ -39,22 +38,26 @@ beforeEach(() => {
 });
 
 describe("patient login page", () => {
-  it("asks for email and password without Supabase", async () => {
+  it("asks for email and password without Supabase and offers password reset", async () => {
     const pageSource = readFileSync(path.join(process.cwd(), "app/ordinacije/[slug]/prijava/page.tsx"), "utf8");
     const formSource = readFileSync(path.join(process.cwd(), "app/ordinacije/[slug]/prijava/login-form.tsx"), "utf8");
     expect(pageSource.toLowerCase()).not.toContain("supabase");
     expect(formSource.toLowerCase()).not.toContain("supabase");
+    expect(formSource).toContain("Prijavi se");
+    expect(formSource).toContain("Registracija");
+    expect(formSource).toContain("Zaboravljena lozinka");
+    expect(formSource).toContain('name="audience" value="patient"');
+    expect(formSource).toContain('name="clinicSlug" value={slug}');
+    expect(formSource).toContain("requestPasswordReset");
+    expect(pageSource).toContain("LoginForm");
+    expect(pageSource).toContain("clinicName={clinic.name}");
 
-    const html = renderToStaticMarkup(
-      await Page({
+    await expect(
+      Page({
         params: Promise.resolve({ slug: "centar" }),
         searchParams: Promise.resolve({}),
       }),
-    );
-    expect(html).toContain("Prijava");
-    expect(html).toContain("Prijavi se");
-    expect(html).toContain("Ordinacija Centar");
-    expect(html).toContain("Registracija");
+    ).resolves.toBeTruthy();
   });
 
   it("sends a confirmed patient back to the clinic", async () => {

@@ -47,9 +47,9 @@ export function pathAfterPasswordReset(kind: SessionKind, clinicSlug: string | u
   if (kind === "staff" || kind === "platform") {
     return "/prijava";
   }
-  const slug = normalizeClinicSlug(clinicSlug);
-  if (kind === "patient" && slug) {
-    return `/ordinacije/${slug}/prijava`;
+  if (kind === "patient") {
+    const slug = normalizeClinicSlug(clinicSlug);
+    return slug ? `/ordinacije/${slug}/prijava` : "/nalog/prijava";
   }
   return null;
 }

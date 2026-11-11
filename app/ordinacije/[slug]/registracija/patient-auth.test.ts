@@ -474,6 +474,9 @@ describe("patient auth files", () => {
     expect(registerPage.toLowerCase()).not.toContain("supabase");
     expect(registerForm.toLowerCase()).not.toContain("supabase");
     expect(loginForm).toContain("Prijavi se");
+    expect(loginForm).toContain("Zaboravljena lozinka");
+    expect(loginForm).toContain('name="audience" value="patient"');
+    expect(loginForm).toContain("requestPasswordReset");
     expect(registerForm).toContain("Registruj se");
     expect(registerForm).toContain("Potvrdi");
   });

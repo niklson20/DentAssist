@@ -374,12 +374,12 @@ describe("setNewPassword", () => {
     expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
   });
 
-  it("confirms the save when a patient has no clinic slug", async () => {
+  it("sends a patient without a clinic slug to the global login", async () => {
     mocks.getSessionKind.mockResolvedValue("patient");
-    const result = await setNewPassword(null, form({ token: "token-1", password: "nova-lozinka" }));
-    expect(result).toEqual({ ok: true, data: { saved: true } });
+    await expect(setNewPassword(null, form({ token: "token-1", password: "nova-lozinka" }))).rejects.toThrow(
+      "REDIRECT:/nalog/prijava",
+    );
     expect(mocks.signOut).toHaveBeenCalledWith({ scope: "local" });
-    expect(mocks.redirect).not.toHaveBeenCalled();
   });
 
   it("keeps the recovery session when Supabase rejects the password", async () => {
